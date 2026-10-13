@@ -125,6 +125,9 @@ class Project:
     grade: str = "eq=contrast=1.04:saturation=1.03"
     fps: int = 30
     caption_fixes: dict[str, str] = field(default_factory=dict)
+    # one-off fixes for a single word (a global caption_fixes entry would also change every other
+    # "del" etc.): {(take, word start in source seconds ±0.02): "text"}
+    caption_word_fixes: dict[tuple[str, float], str] = field(default_factory=dict)
     caption_style: dict = field(default_factory=dict)
     # "remotion": progressive serif captions (Captions component, top overlay layer)
     # "ass":      legacy karaoke ASS burned in ffmpeg
@@ -412,7 +415,9 @@ class Project:
         out = []
         for (take, j), (_, i) in best.items():
             w, s = W[take][j], self.segments[i]
-            out.append({"text": w["text"], "seg": i, "take": take, "src": w["start"],
+            text = next((v for (t, x), v in self.caption_word_fixes.items()
+                         if t == take and abs(w["start"] - x) <= 0.02), w["text"])
+            out.append({"text": text, "seg": i, "take": take, "src": w["start"],
                         "start": max(w["start"], s.t_in) - s.t_in + offs[i],
                         "end": min(w["end"], s.t_out) - s.t_in + offs[i]})
         out.sort(key=lambda w: w["start"])

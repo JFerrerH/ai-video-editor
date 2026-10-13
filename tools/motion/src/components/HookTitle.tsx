@@ -21,8 +21,10 @@ export const HookTitle: React.FC<{ durationInFrames: number; lines: Line[] }> = 
       <div
         style={{
           background: colors.bg,
-          borderRadius: 40,
-          padding: "34px 56px 40px",
+          borderRadius: 34,
+          padding: "28px 44px 32px",
+          maxWidth: 1080 - 2 * SAFE.side,
+          boxSizing: "border-box",
           boxShadow: "0 24px 60px rgba(31,35,40,0.22)",
           textAlign: "center",
           opacity: Math.min(s * 1.4, 1) * out,
@@ -38,7 +40,7 @@ export const HookTitle: React.FC<{ durationInFrames: number; lines: Line[] }> = 
               key={i}
               style={{
                 fontFamily: fonts.serif,
-                fontSize: 82,
+                fontSize: 64,
                 lineHeight: 1.08,
                 color: colors.ink,
                 letterSpacing: -1.5,

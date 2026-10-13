@@ -158,6 +158,8 @@ from `useBrand()`, respect `SAFE` zones, and add a row to this table.
 
 - Top ~290 px (≈15%): Instagram blurs/overlays its header ("Reels" title, camera, back button) here. Measured on a real
   Reels preview: the blur reaches ~270–300 px of the source (Meta's guides say "top 14%"). Nothing readable above `SAFE.top` = 290.
+- Sides: cards and pills keep ≥ `SAFE.side` = 130 px from both edges (max width 820). Edge-to-edge cards read as "too big" on a phone,
+  where IG also crops ~30 px a side.
 - Above-the-head band (y 290–680): pop-in cards (hook, progress, ring, polaroids, waitlist, handle).
 - Side pop-ins go on the **left** (x 56–360). The right ~15% belongs to the platform buttons.
 - Caption band y≈1170–1300 (`margin_v=640`). Cutaway content ends by ~1270.

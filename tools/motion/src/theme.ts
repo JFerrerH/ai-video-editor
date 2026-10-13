@@ -49,4 +49,5 @@ export const SAFE = {
   topBandBottom: 640, // overlays that sit above the speaker's head
   captionTop: 1170, // caption band ~1170–1300
   right: 160,
+  side: 130, // min margin from the left/right edges for cards and pills (IG crops ~30 px a side on phones)
 };

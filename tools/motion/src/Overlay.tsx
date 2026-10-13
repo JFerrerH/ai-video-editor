@@ -24,6 +24,12 @@ import { ProgressCard } from "./components/ProgressCard";
 import { Receipt } from "./components/Receipt";
 import { RingStat } from "./components/RingStat";
 import { Waitlist } from "./components/Waitlist";
+import { IdCard } from "./components/IdCard";
+import { BoardingPass } from "./components/BoardingPass";
+import { PostPile } from "./components/PostPile";
+import { Milestones } from "./components/Milestones";
+import { AgeBars } from "./components/AgeBars";
+import { AiWorkflow } from "./components/AiWorkflow";
 
 /**
  * One transparent layer for the whole edit. Each event:
@@ -47,6 +53,12 @@ const REGISTRY: Record<string, React.FC<any>> = {
   CodeEditor,
   Waitlist,
   HandleCard,
+  IdCard,
+  BoardingPass,
+  PostPile,
+  Milestones,
+  AgeBars,
+  AiWorkflow,
 };
 
 export type OverlayEvent = {

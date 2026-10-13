@@ -132,6 +132,9 @@ class Project:
     # key phrases rendered heavier/larger in the brand's emphColor: (take, "phrase words", after_source_seconds)
     emphasis: list[tuple[str, str, float]] = field(default_factory=list)
     caption_props: dict = field(default_factory=dict)  # overrides for the Captions component
+    # words cut out of the audio whose (drifted) Whisper stamps still overlap a segment, e.g. a
+    # drawn-out "y" dropped at an in-point: (take, word start in source seconds ±0.02)
+    caption_skip: list[tuple[str, float]] = field(default_factory=list)
     lufs: float = -14.0
 
     def __post_init__(self) -> None:
@@ -352,7 +355,7 @@ class Project:
         out_dir.mkdir(parents=True, exist_ok=True)
         paths = []
         for t in times:
-            p = out_dir / f"ov_{t:06.2f}.png"
+            p = (out_dir / f"ov_{t:06.2f}.png").resolve()  # remotion runs with cwd=tools/motion
             run(["npx", "remotion", "still", "Overlay", str(p), f"--props={pj}", f"--public-dir={pub}",
                  f"--frame={round(t * self.fps)}", "--scale=0.5", "--log=error"], cwd=MOTION)
             paths.append(p)
@@ -401,6 +404,8 @@ class Project:
         W = {k: self._words(k) for k in self.sources}
         for i, s in enumerate(self.segments):
             for j, w in enumerate(W[s.take]):
+                if any(t == s.take and abs(w["start"] - x) <= 0.02 for t, x in self.caption_skip):
+                    continue
                 ov = min(w["end"], s.t_out) - max(w["start"], s.t_in)
                 if ov > min(0.06, 0.5 * (w["end"] - w["start"])) and ov > best.get((s.take, j), (0, -1))[0]:
                     best[(s.take, j)] = (ov, i)

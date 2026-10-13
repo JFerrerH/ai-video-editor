@@ -19,18 +19,18 @@ export const Polaroids: React.FC<{
   const chipIn = enter(frame, fps, sec(chipAt, fps), 12);
   return (
     <AbsoluteFill style={{ opacity: out }}>
-      <div style={{ position: "absolute", top: SAFE.top + 20, width: "100%", display: "flex", justifyContent: "center", gap: 30 }}>
+      <div style={{ position: "absolute", top: SAFE.top + 10, width: "100%", display: "flex", justifyContent: "center", gap: 30 }}>
         {photos.map((p, i) => {
           const s = enter(frame, fps, sec(p.at, fps), 13);
           const flash = interpolate(frame - sec(p.at, fps), [0, 2, 8], [0, 1, 0], clamp);
-          if (frame < sec(p.at, fps)) return <div key={i} style={{ width: 330 }} />;
+          if (frame < sec(p.at, fps)) return <div key={i} style={{ width: 280 }} />;
           return (
             <div
               key={i}
               style={{
-                width: 330,
+                width: 280,
                 background: "white",
-                padding: "18px 18px 22px",
+                padding: "16px 16px 18px",
                 borderRadius: 6,
                 boxShadow: "0 24px 50px rgba(0,0,0,0.35)",
                 rotate: `${interpolate(s, [0, 1], [(p.rotate ?? 0) * 3, p.rotate ?? 0])}deg`,
@@ -40,9 +40,9 @@ export const Polaroids: React.FC<{
                 position: "relative",
               }}
             >
-              <Img src={staticFile(p.src)} style={{ width: 294, height: 330, objectFit: "cover", display: "block" }} />
-              <div style={{ position: "absolute", left: 18, top: 18, width: 294, height: 330, background: "white", opacity: flash }} />
-              <div style={{ fontFamily: fonts.serif, fontStyle: "italic", fontSize: 40, color: colors.ink, textAlign: "center", marginTop: 12 }}>
+              <Img src={staticFile(p.src)} style={{ width: 248, height: 260, objectFit: "cover", display: "block" }} />
+              <div style={{ position: "absolute", left: 16, top: 16, width: 248, height: 260, background: "white", opacity: flash }} />
+              <div style={{ fontFamily: fonts.serif, fontStyle: "italic", fontSize: 34, color: colors.ink, textAlign: "center", marginTop: 8 }}>
                 {p.label}
               </div>
             </div>
@@ -50,7 +50,7 @@ export const Polaroids: React.FC<{
         })}
       </div>
       {chip ? (
-        <div style={{ position: "absolute", top: SAFE.top + 470, width: "100%", display: "flex", justifyContent: "center" }}>
+        <div style={{ position: "absolute", top: SAFE.top + 345, width: "100%", display: "flex", justifyContent: "center" }}>
           <div
             style={{
               fontFamily: fonts.mono,

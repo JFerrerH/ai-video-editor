@@ -42,8 +42,10 @@ export const useBrand = () => useContext(BrandContext);
 
 // Safe zones for 1080x1920 Reels/TikTok: keep content out of the top tabs,
 // the bottom ~20% UI, the right-side buttons, and the caption band.
+// top: Instagram blurs/overlays its header over the top ~14–15% (measured on a real Reels
+// preview: the blur reaches ~270–300 px of the source), so nothing readable starts above 290.
 export const SAFE = {
-  top: 150,
+  top: 290,
   topBandBottom: 640, // overlays that sit above the speaker's head
   captionTop: 1170, // caption band ~1170–1300
   right: 160,

@@ -17,7 +17,7 @@ export const HookTitle: React.FC<{ durationInFrames: number; lines: Line[] }> = 
   const s = enter(frame, fps, 0, 14);
   const out = exit(frame, durationInFrames, 6);
   return (
-    <AbsoluteFill style={{ alignItems: "center", paddingTop: SAFE.top + 70 }}>
+    <AbsoluteFill style={{ alignItems: "center", paddingTop: SAFE.top + 20 }}>
       <div
         style={{
           background: colors.bg,

@@ -43,7 +43,7 @@ Examples below are illustrative. They show the technique, not a style to copy.
 4b. **Cutaway vs floating.** Only graphics that fill the screen get a full backdrop (`full: true`):
    phone/product montages, website scrolls, code editors. Cards, receipts, drawers, stats and photos
    **float over the footage** with no backdrop, shrunk into the band above the head with
-   `frame: {scale, y}` (keep y ≈ 190–560 at the segment's tightest zoom) and `enterFrom: "above"`
+   `frame: {scale, y}` (keep the scaled top ≥ 290 and the bottom above the head at the segment's tightest zoom) and `enterFrom: "above"`
    so the entrance never crosses the face. **On a light backdrop captions turn plain ink**, key
    phrases included (no accent colour on a background).
 5. **Cutaways ≤ 3 s, product montages ≤ 7 s.** The voice continues underneath; swipe
@@ -99,7 +99,10 @@ Examples below are illustrative. They show the technique, not a style to copy.
    envelope plot (±0.6 s, words overlaid, current vs refined edge: plot the RMS envelope with
    matplotlib, mark word starts/ends and both edges, save a PNG and Read it). If a word can't be cut cleanly because the next word
    follows with no gap, **keep the longer phrase**. Clean audio beats hitting 60 s.
-   Use `lock_in`/`lock_out` only for edges you verified by eye.
+   Use `lock_in`/`lock_out` only for edges you verified by eye. Watch for widened edges that **overlap the next segment** on continuous
+   boundaries (duplicated audio): check `S[i].t_out <= S[i+1].t_in` after refining and lock both at the dip.
+   A drawn-out filler ("y…") you drop at an in-point can still get captioned from Whisper's stretched
+   stamp: list it in `Project.caption_skip`.
 6. Dry-run: `uv run python -c "import build"` and print the events → check the order, gaps and total.
 7. `p.overlay_stills([t…], dir)` → contact sheet → fix layout before any full render.
 8. `uv run <edit>/build.py --preview` (~1 min for 60 s). Then verify (below), iterate,
@@ -136,8 +139,14 @@ the event start**.
 | `Drawer` | shelving / giving up | `docTitle, closeAt` (pair with `full, mono`) |
 | `Polaroids` | people in the story | `photos[{src, label, at, rotate}], chip, chipAt` |
 | `CodeEditor` | building / hustle montage | `file, lines, dayFrom, dayTo, countStart, countEnd` (pair with `full, dark`) |
+| `IdCard` | who / role / where, floating above the head | `kicker, title, subtitle, rows[{icon: pin\|swap\|dot, text, at}]` |
+| `BoardingPass` | travel, conferences, remote work | `from, to, fromCity, toCity, details[{k, v}], flyStart, flyEnd` |
+| `AiWorkflow` | AI tools / workflows: robot hub wires up emoji nodes, optional content pile at `pileAt` (pair with `full`) | `hub, nodes[{emoji, at}], pileAt, pileCount` |
+| `PostPile` | "too much content" / noise (pair with `full`) | `count, pileStart, pileEnd, seed` |
+| `Milestones` | life/career steps as icons (no numbers) | `items[{icon: cap\|diploma\|briefcase\|star, at, label?}]` |
+| `AgeBars` | ratios / multiples (×1 ×2 ×3) | `bars[{value, label, at, highlight}], caption` |
 | `Waitlist` | sign-up CTA | `title, placeholder, email, button, success, submitAt` |
-| `HandleCard` | end card | `kicker, handle` |
+| `HandleCard` | end card | `kicker?, handle` (handle can be a CTA, e.g. "Comment below 👇") |
 | `Flash` | the turn / comeback | `color` |
 | `Captions` | added automatically by `Project` as the LAST event | `words[{t, text, emph(group id), chunk}]`, `chunks[{start, end}]`, `lightRanges`, `top`, `size`, `emphSize`, `emphColor` (defaults from `brand.json` `captions`; override via `Project.caption_props`) |
 
@@ -147,11 +156,14 @@ from `useBrand()`, respect `SAFE` zones, and add a row to this table.
 
 ## Layout rules (1080×1920)
 
-- Top 150 px: platform tabs. Keep it clear.
-- Above-the-head band (y 150–640): pop-in cards (hook, progress, ring, polaroids, waitlist, handle).
+- Top ~290 px (≈15%): Instagram blurs/overlays its header ("Reels" title, camera, back button) here. Measured on a real
+  Reels preview: the blur reaches ~270–300 px of the source (Meta's guides say "top 14%"). Nothing readable above `SAFE.top` = 290.
+- Above-the-head band (y 290–680): pop-in cards (hook, progress, ring, polaroids, waitlist, handle).
 - Side pop-ins go on the **left** (x 56–360). The right ~15% belongs to the platform buttons.
 - Caption band y≈1170–1300 (`margin_v=640`). Cutaway content ends by ~1270.
-- Bottom ~20%: platform UI. Nothing important goes there.
+- Bottom: username + caption start at y ≈ 1750; the right button rail covers x > ~930 from y ≈ 1235 down. Captions at
+  ~1300–1400 stay clear of both and inside the profile-grid 3:4 crop (y 240–1680).
+- Check a real phone preview (IG Edits → Preview) when in doubt; scale = 0.732 of source on a 1600-px-tall screenshot.
 
 ## Hard-won gotchas
 

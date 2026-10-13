@@ -3,8 +3,8 @@ import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remo
 import { enter, exit } from "../anim";
 import { SAFE, useBrand } from "../theme";
 
-/** Persistent end card: kicker + @handle pill. */
-export const HandleCard: React.FC<{ durationInFrames: number; kicker: string; handle: string; logo?: string }> = ({
+/** Persistent end card: optional kicker + a big pill (@handle, or a CTA such as "Cuéntame abajo 👇"). */
+export const HandleCard: React.FC<{ durationInFrames: number; kicker?: string; handle: string; logo?: string }> = ({
   durationInFrames,
   kicker,
   handle,
@@ -15,7 +15,7 @@ export const HandleCard: React.FC<{ durationInFrames: number; kicker: string; ha
   const s = enter(frame, fps, 0, 13);
   const out = exit(frame, durationInFrames, 5);
   return (
-    <AbsoluteFill style={{ alignItems: "center", paddingTop: SAFE.top + 60 }}>
+    <AbsoluteFill style={{ alignItems: "center", paddingTop: SAFE.top + 30 }}>
       <div
         style={{
           display: "flex",
@@ -26,6 +26,7 @@ export const HandleCard: React.FC<{ durationInFrames: number; kicker: string; ha
           scale: interpolate(s, [0, 1], [0.7, 1]),
         }}
       >
+        {kicker ? (
         <div
           style={{
             fontFamily: fonts.mono,
@@ -39,6 +40,7 @@ export const HandleCard: React.FC<{ durationInFrames: number; kicker: string; ha
         >
           {kicker}
         </div>
+        ) : null}
         <div
           style={{
             fontFamily: fonts.sans,

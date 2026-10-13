@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { clamp, enter, exit, sec } from "../anim";
-import { useBrand } from "../theme";
+import { SAFE, useBrand } from "../theme";
 
 /** Quote / receipt: items tick in one by one, total, then a rubber stamp. */
 export const Receipt: React.FC<{
@@ -24,7 +24,7 @@ export const Receipt: React.FC<{
       <div
         style={{
           position: "absolute",
-          top: 220,
+          top: SAFE.top + 10,
           width: 680,
           background: "white",
           padding: "48px 52px 60px",

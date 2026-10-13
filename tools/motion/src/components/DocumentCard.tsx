@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { enter, exit, sec } from "../anim";
-import { useBrand } from "../theme";
+import { SAFE, useBrand } from "../theme";
 
 /** Big year stamp + a paper document card (thesis, contract, report…). */
 export const DocumentCard: React.FC<{
@@ -27,7 +27,7 @@ export const DocumentCard: React.FC<{
       <div
         style={{
           position: "absolute",
-          top: 190,
+          top: SAFE.top + 40,
           fontFamily: fonts.serif,
           fontSize: 300,
           lineHeight: 1,
@@ -43,7 +43,7 @@ export const DocumentCard: React.FC<{
       <div
         style={{
           position: "absolute",
-          top: year ? 560 : 330,
+          top: year ? SAFE.top + 410 : SAFE.top + 40,
           width: 700,
           background: "white",
           borderRadius: 18,

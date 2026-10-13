@@ -66,7 +66,7 @@ Run video-use helpers from the repo root: `uv run vendor/video-use/helpers/<help
 | Platform | Frame | Loudness | Encode |
 |---|---|---|---|
 | YouTube | 1920x1080 or 3840x2160, 16:9 | -14 LUFS, -1 dBTP | H.264 `-crf 18 -preset slow -pix_fmt yuv420p`, AAC 320k, `-movflags +faststart` |
-| Shorts / Reels / TikTok | 1080x1920, 9:16, ≤ 60–90s | -14 LUFS | same; keep captions and text inside the center safe zone (avoid bottom ~20% and right ~15% UI) |
+| Shorts / Reels / TikTok | 1080x1920, 9:16, ≤ 60–90s | -14 LUFS | same; keep captions and text inside the center safe zone (avoid the top ~15% / 290 px where IG blurs its header, the bottom ~20% and the right ~15% UI) |
 | LinkedIn / X feed | 1080x1080 or 1080x1350 | -14 LUFS | same |
 | Master / archive | source res | -16 to -23 LUFS | ProRes 422 HQ (`-c:v prores_ks -profile:v 3`) |
 

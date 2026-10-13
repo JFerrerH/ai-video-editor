@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ffmpeg:*)",
+      "Bash(ffprobe:*)",
+      "Bash(auto-editor:*)",
+      "Bash(yt-dlp:*)",
+      "Bash(uv run:*)",
+      "Bash(npx remotion:*)",
+      "Bash(mediainfo:*)"
+    ]
+  }
+}

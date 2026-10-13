@@ -1,0 +1,30 @@
+# media is big and personal — never commit it
+footage/**
+!footage/.gitkeep
+exports/**
+!exports/.gitkeep
+assets/**/*
+!assets/**/
+!assets/**/.gitkeep
+# brand kits are client data: private by default, only the template is public
+brands/*
+!brands/_template/
+*.mp4
+*.mov
+*.mkv
+*.wav
+*.aiff
+*.mp3
+
+# python bytecode
+__pycache__/
+
+# environments
+.venv/
+node_modules/
+.env
+
+# cloned by scripts/setup.sh
+vendor/
+
+.DS_Store

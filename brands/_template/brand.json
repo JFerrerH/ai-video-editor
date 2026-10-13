@@ -1,0 +1,15 @@
+{
+  "name": "Brand name",
+  "colors": {
+    "bg": "#F4F4F2",
+    "tint1": "#E4E4E0",
+    "tint2": "#D9DEE4",
+    "ink": "#1A1A1A",
+    "muted": "#6B6B6B",
+    "accent": "#D64545",
+    "success": "#2F7D5B"
+  },
+  "fonts": { "serif": "Georgia", "sans": "Helvetica Neue", "mono": "Menlo" },
+  "fontFiles": [],
+  "captions": {}
+}

@@ -1,0 +1,21 @@
+[project]
+name = "ai-video-editor"
+version = "0.1.0"
+description = "Claude Code video editing workspace"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    # video-use helper deps
+    "requests",
+    "librosa",
+    "matplotlib",
+    "pillow",
+    "numpy",
+    # local, offline transcription on Apple Silicon
+    "mlx-whisper",
+    # subtitle tooling
+    "pysrt",
+    "playwright>=1.63.0",
+]
+
+[tool.uv]
+package = false

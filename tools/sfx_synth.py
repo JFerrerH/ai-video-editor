@@ -194,11 +194,75 @@ def swell():  # soft reverse-cymbal style build for a flash / reveal
     return norm(fade(x, 0.01, 0.008)), d - 0.008
 
 
+def pluck(freq: float = 659.3):  # warm plucked string (Karplus-Strong): a card landing, a slot filling
+    d = 0.6
+    n, period = int(d * SR), int(SR / freq)
+    buf = onepole_lp(rng.uniform(-1, 1, period), 3500)
+    y = np.empty(n)
+    for i in range(n):
+        y[i] = buf[i % period]
+        buf[i % period] = 0.996 * 0.5 * (buf[i % period] + buf[(i + 1) % period])
+    return norm(fade(onepole_lp(y, 4000), 0.001, 0.08)), 0.002
+
+
+def bubble():  # chat message: short upward "bloop"
+    d = 0.12
+    t = t_axis(d)
+    f = 380 + 900 * (t / d) ** 0.6
+    x = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.sin(np.pi * np.clip(t / d, 0, 1)) ** 0.7
+    return norm(fade(x, 0.002, 0.01)), 0.02
+
+
+def swipe():  # airy paper-like slide for a cutaway (softer and shorter than whoosh)
+    d = 0.30
+    t = t_axis(d)
+    env = np.sin(np.pi * t / d) ** 2
+    x = hp(onepole_lp(noise(d), 2500 + 3500 * np.sin(np.pi * t / d)), 900) * env
+    return norm(fade(x), -4), 0.15
+
+
+def tap():  # soft glassy UI tap
+    d = 0.18
+    t = t_axis(d)
+    x = (0.6 * np.sin(2 * np.pi * 1760 * t) + 0.3 * np.sin(2 * np.pi * 2640 * t)) * np.exp(-t * 38)
+    x += hp(noise(d), 4000) * np.exp(-t * 400) * 0.25
+    return norm(fade(x, 0.0005, 0.02), -5), 0.001
+
+
+def sparkle():  # an idea / creativity: a few quick high pings
+    d = 0.6
+    t = t_axis(d)
+    x = np.zeros_like(t)
+    for k, f in enumerate((2093, 2637, 3136, 3951, 3520)):
+        at = k * 0.055
+        tt = np.clip(t - at, 0, None)
+        x += np.where(t >= at, np.sin(2 * np.pi * f * tt) * np.exp(-tt * 14) * (0.9 - 0.12 * k), 0)
+    return norm(fade(x, 0.001, 0.05), -5), 0.002
+
+
+def sub():  # soft low drop under a big punch line (saturated so phone speakers still hear it)
+    d = 0.7
+    t = t_axis(d)
+    f = 48 + 60 * np.exp(-t * 9)
+    x = np.tanh(2.2 * np.sin(2 * np.pi * np.cumsum(f) / SR)) * np.exp(-t * 5)
+    x *= np.clip(t / 0.006, 0, 1)
+    return norm(fade(x, 0.001, 0.08)), 0.006
+
+
+def tick():  # tiny woody tick: counters, step trackers
+    d = 0.06
+    t = t_axis(d)
+    x = np.sin(2 * np.pi * 1250 * t) * np.exp(-t * 110) + onepole_lp(noise(d), 3000) * np.exp(-t * 300) * 0.3
+    return norm(fade(x, 0.0005, 0.01), -6), 0.001
+
+
 EFFECTS = {
     "whoosh": whoosh, "whoosh_short": whoosh_short, "riser": riser, "impact": impact,
     "stamp": stamp, "thud": thud, "pop": pop, "click": click, "shutter": shutter,
     "typing": typing, "chime": chime, "success": success, "error": error,
     "scratch": scratch, "swell": swell,
+    "pluck": pluck, "bubble": bubble, "swipe": swipe, "tap": tap, "sparkle": sparkle,
+    "sub": sub, "tick": tick,
 }
 
 

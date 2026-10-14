@@ -28,6 +28,13 @@ export const Captions: React.FC<{
   size?: number;
   emphSize?: number;
   emphColor?: string;
+  /** "phrase": a short phrase builds word by word; "word": one word at a time (key phrases stay together) */
+  mode?: "phrase" | "word";
+  /** key phrases in uppercase (they may then wrap onto a second line instead of overflowing) */
+  emphCaps?: boolean;
+  emphWeight?: number;
+  /** darkness (0–1) of the soft radial shade behind the line over footage (light clothes/walls need more) */
+  shade?: number;
 }> = ({
   words,
   chunks,
@@ -36,6 +43,10 @@ export const Captions: React.FC<{
   size = 58,
   emphSize = 68,
   emphColor = "white",
+  mode = "phrase",
+  emphCaps = false,
+  emphWeight = 600,
+  shade = 0.32,
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -57,7 +68,15 @@ export const Captions: React.FC<{
   const startFrame = (w: CapWord) => Math.round(w.t * fps) - 1; // land on the syllable
   const reveal = (w: CapWord) =>
     interpolate(frame, [startFrame(w), startFrame(w) + 5], [0, 1], { ...clamp, easing: Easing.out(Easing.cubic) });
-  const shadow = light ? "none" : "0 1px 2px rgba(0,0,0,0.7), 0 3px 18px rgba(0,0,0,0.55)";
+  // word mode: each chunk pops in as it replaces the previous one
+  const chunkPop = mode === "word"
+    ? interpolate(frame, [Math.round(chunks[ci].start * fps), Math.round(chunks[ci].start * fps) + 4], [0.86, 1], {
+        ...clamp,
+        easing: Easing.out(Easing.back(2)),
+      })
+    : 1;
+  // tight dark edge + wide glow: keeps a thin serif (and pale accent colours) legible over light footage
+  const shadow = light ? "none" : "0 1px 2px rgba(0,0,0,0.85), 0 2px 6px rgba(0,0,0,0.55), 0 4px 26px rgba(0,0,0,0.6)";
 
   const word = (w: CapWord, emph: boolean, key: React.Key) => {
     const p = reveal(w);
@@ -65,7 +84,7 @@ export const Captions: React.FC<{
       <span
         key={key}
         style={{
-          ...wordStyle(fonts.serif, emph && !light, size, emphSize),
+          ...wordStyle(fonts.serif, emph && (!light || emphCaps), size, emphSize, emphWeight, emphCaps),
           // light cutaway backdrops: everything plain ink, no accent colour on a background
           color: light ? colors.ink : emph ? emphColor : "white",
           textShadow: shadow,
@@ -89,7 +108,7 @@ export const Captions: React.FC<{
             left: 90,
             right: 90,
             height: 260,
-            background: "radial-gradient(ellipse at center, rgba(0,0,0,0.32) 0%, rgba(0,0,0,0) 70%)",
+            background: `radial-gradient(ellipse at center, rgba(0,0,0,${shade}) 0%, rgba(0,0,0,0) 70%)`,
           }}
         />
       )}
@@ -103,12 +122,21 @@ export const Captions: React.FC<{
             columnGap: 14,
             rowGap: 2,
             maxWidth: "100%",
+            scale: String(chunkPop),
           }}
         >
           {items.map((it, i) =>
             it[0].emph ? (
               // one unbreakable group so a key phrase never wraps mid-way
-              <span key={i} style={{ whiteSpace: "nowrap", display: "inline-flex", columnGap: 14 }}>
+              // (caps phrases are wider: they may wrap, but as one centred block)
+              <span
+                key={i}
+                style={
+                  emphCaps
+                    ? { display: "flex", flexWrap: "wrap", justifyContent: "center", columnGap: 16, rowGap: 0, maxWidth: 1080 - 2 * 130 }
+                    : { whiteSpace: "nowrap", display: "inline-flex", columnGap: 14 }
+                }
+              >
                 {it.map((w, j) => word(w, true, j))}
               </span>
             ) : (
@@ -121,12 +149,20 @@ export const Captions: React.FC<{
   );
 };
 
-const wordStyle = (serif: string, emph: boolean, size: number, emphSize: number): React.CSSProperties => ({
+const wordStyle = (
+  serif: string,
+  emph: boolean,
+  size: number,
+  emphSize: number,
+  emphWeight: number,
+  emphCaps: boolean,
+): React.CSSProperties => ({
   fontFamily: serif,
   fontSize: emph ? emphSize : size,
-  fontWeight: emph ? 600 : 460,
-  lineHeight: 1.15,
-  letterSpacing: emph ? -0.5 : -0.3,
+  fontWeight: emph ? emphWeight : 460,
+  textTransform: emph && emphCaps ? "uppercase" : undefined,
+  lineHeight: emph && emphCaps ? 1.05 : 1.15,
+  letterSpacing: emph ? (emphCaps ? 0.5 : -0.5) : -0.3,
   whiteSpace: "nowrap",
   display: "inline-block",
 });

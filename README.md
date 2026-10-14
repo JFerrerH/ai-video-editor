@@ -4,7 +4,50 @@ A workspace where you edit video by talking to [Claude Code](https://claude.com/
 
 It serves any number of unrelated projects and brands: talking heads, vertical shorts, tutorials, interviews, podcasts, montages, captions-only jobs, and format conversions. Each brand's taste lives in its own folder, so one client's style never leaks into another's.
 
-## Setup (Apple Silicon Mac)
+## Requirements
+
+### Machine
+
+| | Minimum | Recommended |
+|---|---|---|
+| Computer | Mac with Apple Silicon (M1 or later) | M1 Pro / M2 or later |
+| macOS | 13 Ventura | 14 Sonoma or later |
+| RAM (unified memory) | 8 GB | 16 GB or more |
+| Free disk | 15 GB | 50 GB or more, on an SSD |
+| Network | Needed for setup and the first transcription | |
+
+Why these numbers:
+
+- **Apple Silicon is required.** Local transcription uses `mlx-whisper`, which only runs on Apple Silicon, and the person matte (`tools/person_matte.py`, text behind the speaker) uses Apple's Vision framework through `swift`. Intel Macs, Linux and Windows aren't supported as-is.
+- **RAM.** Whisper large-v3-turbo needs about 3–4 GB while it runs. A Remotion overlay render opens several headless Chrome tabs (by default one per two CPU threads), each taking a few hundred MB. 8 GB works if you close other apps and expect slower renders; 16 GB is comfortable; 4K sources or long-form projects want 32 GB.
+- **Disk.** The toolchain takes about 6 GB once installed:
+
+  | Item | Size |
+  |---|---|
+  | Homebrew packages (ffmpeg-full and its ~100 libraries, yt-dlp, uv, auto-editor, Node) | ~1–2 GB |
+  | Python env (`.venv`) | ~1.3 GB |
+  | video-use env (`vendor/video-use/.venv`) | ~0.3 GB |
+  | Whisper model (`~/.cache/huggingface`) | ~1.6 GB |
+  | Remotion (`tools/motion/node_modules`, includes Chrome Headless Shell) | ~0.9 GB |
+  | Xcode Command Line Tools | ~1–2 GB if not already installed |
+
+  On top of that, each project needs room for its sources plus working files. Intermediates such as ProRes 4444 overlay layers and mattes are large: a 60 s vertical short typically uses 1–2 GB in `footage/<project>/`, and long-form or 4K projects can use tens of GB. Delete `footage/<project>/edit/` intermediates once the export is final.
+
+### Software
+
+Install these before running the setup script:
+
+- [Homebrew](https://brew.sh)
+- Xcode Command Line Tools: `xcode-select --install` (provides `git` and `swift`)
+- Node.js 18 or later: `brew install node` (for Remotion)
+- [Claude Code](https://claude.com/claude-code)
+- Optional: Google Chrome. `tools/site_capture.py` uses it if present; otherwise run `uv run playwright install chromium` (~150 MB more).
+
+The setup script installs everything else. Python 3.12 is provisioned by `uv`, so you don't need a system Python.
+
+Optional: an ElevenLabs API key for Scribe transcription with speaker labels (see below).
+
+## Setup
 
 ```sh
 scripts/setup.sh

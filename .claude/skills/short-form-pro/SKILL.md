@@ -61,6 +61,10 @@ Examples below are illustrative. They show the technique, not a style to copy.
    **Placement:** just under the chin (top ≈ 1300 px), inside the Instagram profile-grid crop
    (centre 3:4 = y 240–1680), above the bottom UI (y > ~1530) and clear of the right buttons. Check at
    the tightest zoom. Over a face is the other allowed spot. Graphics stay out of the caption band.
+   **One word at a time:** `captions.mode: "word"` in `brand.json` (or `caption_props`) shows each plain word
+   alone, replaced by the next, while key phrases stay together as one block; pair it with `emphCaps: true`
+   + `emphWeight` (~760) for bold uppercase punch lines, and a bigger base `size` (~68 px). Over light clothes
+   or walls raise `shade` (radial darkness, default 0.32) to ~0.5.
    The legacy uppercase karaoke ASS is still available as `caption_engine="ass"`.
 6b. **Graphics complement, never echo.** An overlay must not print words the captions are saying
    at the same time (a ring labelled "half" while the speaker says "half"). It shows what the speaker
@@ -70,7 +74,10 @@ Examples below are illustrative. They show the technique, not a style to copy.
 7. **CTA on screen.** Show the action as a UI (`Waitlist` typing → success), then a persistent
    `HandleCard` (@handle) to the end.
 7b. **SFX vocabulary (default; a brand kit can override):** floating graphics land with a soft `click`
-   (−15/−16 dB), and so do a few key phrases that have no other sound nearby (~3 per minute). Cutaways
+   (−15/−16 dB), and so do a few key phrases that have no other sound nearby (~3 per minute). **Vary the
+   vocabulary** so it doesn't read as one click on loop: match the sound to the object (`bubble` chat,
+   `pluck`/`tap` cards, `tick` counters/steps, `sparkle` an idea, `shutter` a screenshot, `pop` tiles,
+   `error` a miss, a soft `sub` (≈ −22 dB) under one or two big punch lines). Cutaways
    and transitions get ONE simple `whoosh`; avoid stacking hits. No two effects within 0.3 s
    (`p.sfx_check()`). Prefer swapping an effect over adding one.
 8. **Sound = picture.** Every SFX is tied to a visible event, sits 12–20 dB under speech,
@@ -118,7 +125,8 @@ Examples below are illustrative. They show the technique, not a style to copy.
 | `tools/shortform.py` | `Seg(take, in, out, zoom, look, freeze_after)`, `Project(..., brand="<slug>").build(preview)`. Zooms: `("static", s)`, `("push", a, b)`, `("punch", base, peak, src_t)`, `("outpunch", a, b, peak, src_t)`. Looks: `None`, `"bw"`. `p.word()` / `p.at()` map source times → output timeline. Karaoke ASS, attack-aligned SFX mix, two-pass loudnorm, overlay composite, captions LAST. |
 | `tools/brand.py` | `load_brand(slug)` → Remotion theme, font `public_files`, caption props from `brands/<slug>/brand.json`; `None` → neutral. |
 | `tools/motion/` | Remotion project. Composition `Overlay` reads `{durationInSeconds, brand, events[]}` and renders one transparent ProRes 4444 layer. Studio: `cd tools/motion && npx remotion studio --props=<edit>/overlay_props.json --public-dir=<edit>/motion_public`. |
-| `tools/sfx_synth.py` | Builds `assets/sfx/synth/*.wav` + `attack.json`: whoosh, whoosh_short, riser, impact, stamp, thud, pop, click, shutter, typing, chime, success, error, scratch, swell. Licence-free (synthesized). |
+| `tools/sfx_synth.py` | Builds `assets/sfx/synth/*.wav` + `attack.json`: whoosh, whoosh_short, riser, impact, stamp, thud, pop, click, shutter, typing, chime, success, error, scratch, swell, pluck, bubble, swipe, tap, sparkle, sub, tick. Licence-free (synthesized). File RMS differs a lot (bubble/sub are hot): measure each effect against speech in the mix, not just the gain you typed. |
+| `tools/person_matte.py` | Grey person matte (white = person) for a window of a clip, via `person_matte.swift` (Apple Vision `.accurate`). Used automatically for `behind` events. |
 | `tools/site_capture.py` | Phone-sized viewport + full-page PNG of a URL (system Chrome via Playwright). It scrolls first so reveal animations render. |
 
 ### Overlay components (`tools/motion/src/components/`)
@@ -146,9 +154,23 @@ the event start**.
 | `Milestones` | life/career steps as icons (no numbers) | `items[{icon: cap\|diploma\|briefcase\|star, at, label?}]` |
 | `AgeBars` | ratios / multiples (×1 ×2 ×3) | `bars[{value, label, at, highlight}], caption` |
 | `Waitlist` | sign-up CTA | `title, placeholder, email, button, success, submitAt` |
+| `SkillSlots` | "N things" tracker: numbered slots that fill with line icons on cue; reuse it per item and for the recap | `slots[{icon, at?}], active?` |
+| `TopicCards` | "AI for X, Y, Z": small topic cards (line icon + kicker + title), one per cue, face stays visible | `cards[{icon, kicker?, title, at}]` |
+| `NameTitle` | big serif name or punch line with no card; pair with `behind: true` to tuck it behind the speaker's head (for a punch line, `caption_skip` its words so the caption doesn't double it) | `text` or `lines[{text, at}], color?, size, weight, top` |
+| `RoomDots` | "the only one in the room": a row of people, one lights up | `count, highlight, highlightAt` |
+| `ContentGrid` | vague brief → bad deliverable: typing bubble → empty profile grid → clashing tiles → wobble | `gridAt, fillAt, missAt` |
+| `FrameworkCard` | a framework/checklist to screenshot: `layout: "list"` full-screen (pair with `full`), or `"grid"` = compact 2×2 floating above the head; a short hold (~3 s) makes viewers pause/rewatch to screenshot (engagement) | `kicker, steps[{title, lines}], layout, stepsAt, stepGap, flashAt, top` |
+| `SearchBar` | "searching the internet for answers": typing pill + spinner + skeleton results | `query, typeEnd, resultsAt` |
+| `ChatThread` | asking your AI: abstract question bubbles, answers = icon + check; cutaway (`full`) or `floating` above the head | `messages[{from: me\|ai, at, icon?, lines?}], floating, bottom` |
+| `DotTrack` | `steps` (circles checked on cue) or `days` (habit grid, e.g. 14 days) | `variant, stops[] / count, value, unit, fillStart, fillEnd` |
 | `HandleCard` | end card | `kicker?, handle` (handle can be a CTA, e.g. "Comment below 👇") |
 | `Flash` | the turn / comeback | `color` |
 | `Captions` | added automatically by `Project` as the LAST event | `words[{t, text, emph(group id), chunk}]`, `chunks[{start, end}]`, `lightRanges`, `top`, `size`, `emphSize`, `emphColor` (defaults from `brand.json` `captions`; override via `Project.caption_props`) |
+
+**Behind the speaker:** any event with `props.behind: true` is rendered UNDER a person-matted copy of the
+footage (Apple Vision segmentation via `tools/person_matte.py`, macOS only, ~30 s per window): text appears
+behind the head/hair. Set the text's `top` so its lower part overlaps the top of the head (find the head top on
+a frame of that segment at its zoom) and keep it within `SAFE.side`. Captions and normal events stay on top.
 
 To add a component: create it in `components/`, register it in `REGISTRY` in `Overlay.tsx`, drive all
 motion with `useCurrentFrame()` + `interpolate`/`spring` (no CSS transitions), read colours and fonts
@@ -175,6 +197,10 @@ from `useBrand()`, respect `SAFE` zones, and add a row to this table.
   Set in-points from RMS silence (−40 dB, 10 ms windows), not from word starts. `p.at()` snaps
   times up to 0.4 s before an in-point to that segment's start, and captions assign each word to the
   segment it overlaps most.
+- **Very low noise floors** (iPhone voice isolation, floor ≈ −77 dB): the default `above_floor=9` counts breaths
+  and room tone as speech → WARNs everywhere and edges widened into the next segment (duplicated audio).
+  Use `refine_edges(above_floor=28)` (≈ −49 dB, still > 25 dB under speech) and verify cuts on the base.
+- **Line icons over emoji** in graphics (`components/icons.tsx` → `LineIcon`): emoji everywhere reads cheap.
 - **Whisper word ends are early and its starts are early too.** Padding from word times (50/80 ms)
   clipped word tails and onsets in practice. `refine_edges()` fixes this from the envelope (silence = noise floor + 9 dB, 100 ms
   pre-roll, 120 ms tail, widen-only, never into the next sound). A higher threshold misses soft

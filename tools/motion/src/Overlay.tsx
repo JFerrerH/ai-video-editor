@@ -30,6 +30,15 @@ import { PostPile } from "./components/PostPile";
 import { Milestones } from "./components/Milestones";
 import { AgeBars } from "./components/AgeBars";
 import { AiWorkflow } from "./components/AiWorkflow";
+import { SkillSlots } from "./components/SkillSlots";
+import { RoomDots } from "./components/RoomDots";
+import { ContentGrid } from "./components/ContentGrid";
+import { FrameworkCard } from "./components/FrameworkCard";
+import { SearchBar } from "./components/SearchBar";
+import { ChatThread } from "./components/ChatThread";
+import { DotTrack } from "./components/DotTrack";
+import { TopicCards } from "./components/TopicCards";
+import { NameTitle } from "./components/NameTitle";
 
 /**
  * One transparent layer for the whole edit. Each event:
@@ -59,6 +68,15 @@ const REGISTRY: Record<string, React.FC<any>> = {
   Milestones,
   AgeBars,
   AiWorkflow,
+  SkillSlots,
+  RoomDots,
+  ContentGrid,
+  FrameworkCard,
+  SearchBar,
+  ChatThread,
+  DotTrack,
+  TopicCards,
+  NameTitle,
 };
 
 export type OverlayEvent = {

@@ -6,6 +6,10 @@ This renders the transparent graphics layer (cards, phone mockups, captions, fla
 npm i --loglevel=error          # once
 ```
 
+Needs Node.js 18 or later. `node_modules` takes about 0.9 GB, most of it the Chrome Headless Shell that Remotion downloads to render. Remotion renders several frames in parallel (by default one Chrome tab per two CPU threads, a few hundred MB each). On an 8 GB machine, add `--concurrency=2` to manual `npx remotion` commands if renders run out of memory. The full machine requirements are in the [root README](../../README.md#requirements).
+
+ProRes 4444 with alpha is large, roughly 0.5–1 GB per minute at 1080x1920, so keep free disk space in mind when you render long overlays.
+
 ## Input
 
 `shortform.py` writes `<edit>/overlay_props.json` and stages assets into `<edit>/motion_public/`:

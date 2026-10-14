@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from brand import load_brand
+from person_matte import make_matte
 
 REPO = Path(__file__).resolve().parent.parent
 MOTION = REPO / "tools" / "motion"
@@ -343,7 +344,7 @@ class Project:
             dst.parent.mkdir(parents=True, exist_ok=True)
             if not dst.exists() or dst.stat().st_mtime < Path(src).stat().st_mtime:
                 shutil.copy2(src, dst)
-        events = list(self.events)
+        events = [e for e in self.events if not e.get("props", {}).get("behind")]
         if self.caption_engine == "remotion":
             events.append(self.caption_event())  # LAST = top layer (captions above every overlay)
         props = {"durationInSeconds": round(self.offsets()[-1], 3), "brand": self.brand,
@@ -370,6 +371,31 @@ class Project:
                f"--public-dir={pub}", "--codec=prores", "--prores-profile=4444",
                "--pixel-format=yuva444p10le", "--image-format=png", "--log=error"]
         run(cmd, cwd=MOTION)  # always 1080x1920; ffmpeg scales it to the base for previews
+
+    def render_behind(self, base: Path, tag: str, reuse_layer: bool, reuse_matte: bool) -> list[tuple[float, float, Path, Path]]:
+        """Events with `props.behind: true` go UNDER the speaker: each is rendered on its own
+        (only its frames) plus a person matte of the base for the same window. build() stacks
+        base → this layer → matted speaker → the main overlay."""
+        out = []
+        pub, _ = self.stage_overlay()
+        total = round(self.offsets()[-1], 3)
+        for k, e in enumerate(e for e in self.events if e.get("props", {}).get("behind")):
+            f0 = round(e["start"] * self.fps)
+            f1 = f0 + round(e["duration"] * self.fps) - 1
+            t0, dur = f0 / self.fps, (f1 - f0 + 1) / self.fps
+            layer = self.edit_dir / f"overlay_behind_{k}.mov"
+            matte = self.edit_dir / f"matte_{tag}_{k}.mov"
+            if not (reuse_layer and layer.exists()):
+                pj = self.edit_dir / f"overlay_behind_{k}.json"
+                pj.write_text(json.dumps({"durationInSeconds": total, "brand": self.brand, "events": [e]},
+                                         ensure_ascii=False))
+                run(["npx", "remotion", "render", "Overlay", str(layer), f"--props={pj}", f"--public-dir={pub}",
+                     f"--frames={f0}-{f1}", "--codec=prores", "--prores-profile=4444",
+                     "--pixel-format=yuva444p10le", "--image-format=png", "--log=error"], cwd=MOTION)
+            if not (reuse_matte and matte.exists()):  # the matte only changes with the cut
+                make_matte(base, t0, dur, matte, fps=self.fps)
+            out.append((t0, t0 + dur, layer, matte))
+        return out
 
     # ── 4. audio ──────────────────────────────────────────────────────────
     def mix_audio(self, base: Path, out: Path) -> None:
@@ -480,23 +506,35 @@ class Project:
         return flags
 
     def caption_event(self) -> dict:
-        """Progressive captions for the Remotion `Captions` component."""
+        """Progressive captions for the Remotion `Captions` component.
+
+        caption_props["mode"]: "phrase" (default) = short phrases that build word by word;
+        "word" = one word on screen at a time (each replaces the last), except key phrases,
+        which stay together as one chunk."""
         words = self.output_words()
         flags = self._emph_flags(words)
         for w, f in zip(words, flags):
             w["emph"] = f
-        chunks = self.chunks(words, max_words=6, max_chars=30)
-        # isolating key phrases can strand a lone "en" / "a la" right before one:
-        # fold function-word-only chunks into the previous plain chunk of the same segment
-        merged: list[list[dict]] = []
-        for c in chunks:
-            prev = merged[-1] if merged else None
-            if (prev and not c[0].get("emph") and not prev[0].get("emph") and prev[-1]["seg"] == c[0]["seg"]
-                    and all(self.clean(w["text"]).lower() in FUNCTION_WORDS for w in c)):
-                prev.extend(c)
-            else:
-                merged.append(list(c))
-        chunks = merged
+        if self.caption_props.get("mode") == "word":
+            chunks: list[list[dict]] = []
+            for w in words:
+                if w["emph"] and chunks and chunks[-1][-1]["emph"] == w["emph"]:
+                    chunks[-1].append(w)
+                else:
+                    chunks.append([w])
+        else:
+            chunks = self.chunks(words, max_words=6, max_chars=30)
+            # isolating key phrases can strand a lone "en" / "a la" right before one:
+            # fold function-word-only chunks into the previous plain chunk of the same segment
+            merged: list[list[dict]] = []
+            for c in chunks:
+                prev = merged[-1] if merged else None
+                if (prev and not c[0].get("emph") and not prev[0].get("emph") and prev[-1]["seg"] == c[0]["seg"]
+                        and all(self.clean(w["text"]).lower() in FUNCTION_WORDS for w in c)):
+                    prev.extend(c)
+                else:
+                    merged.append(list(c))
+            chunks = merged
         cap_words, cap_chunks = [], []
         for k, c in enumerate(chunks):
             for w in c:
@@ -595,18 +633,34 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         if not (skip_overlay and overlay.exists()):
             print("  rendering Remotion overlay…")
             self.render_overlay(preview, overlay)
+        behind = self.render_behind(base, tag, reuse_layer=skip_overlay, reuse_matte=skip_extract)
         mix = self.edit_dir / f"mix_{tag}.wav"
         self.mix_audio(base, mix)
         out = self.edit_dir / f"{tag}.mp4"
         w, h = (720, 1280) if preview else (1080, 1920)
-        fc = f"[1:v]scale={w}:{h}:flags=lanczos[ov];[0:v][ov]overlay=0:0:format=auto"
+        # behind-the-speaker layers: base → layer → base cut out by the person matte (same window)
+        extra, parts, cur = [], [], "[0:v]"
+        if behind:
+            parts.append("[0:v]split=" + str(len(behind) + 1) + "[bg]" + "".join(f"[sp{k}]" for k in range(len(behind))))
+            cur = "[bg]"
+        for k, (t0, t1, layer, matte) in enumerate(behind):
+            li, mi = 3 + 2 * k, 4 + 2 * k
+            extra += ["-i", str(layer), "-i", str(matte)]
+            parts += [f"[{li}:v]scale={w}:{h}:flags=lanczos,setpts=PTS-STARTPTS+{t0:.4f}/TB[bl{k}]",
+                      f"{cur}[bl{k}]overlay=0:0:eof_action=pass:format=auto[bb{k}]",
+                      f"[sp{k}]trim=start={t0:.4f}:end={t1:.4f},setpts=PTS-STARTPTS,format=yuva420p[pp{k}]",
+                      f"[{mi}:v]scale={w}:{h},format=gray,setpts=PTS-STARTPTS[m{k}]",
+                      f"[pp{k}][m{k}]alphamerge,setpts=PTS-STARTPTS+{t0:.4f}/TB[pm{k}]",
+                      f"[bb{k}][pm{k}]overlay=0:0:eof_action=pass:format=auto[cb{k}]"]
+            cur = f"[cb{k}]"
+        fc = ";".join(parts + [f"[1:v]scale={w}:{h}:flags=lanczos[ov]"]) + f";{cur}[ov]overlay=0:0:format=auto"
         if self.caption_engine == "ass":  # legacy: burn karaoke ASS after the overlay (captions LAST)
             ass = self.edit_dir / "captions.ass"
             self.build_ass(ass)
             ass_arg = str(ass).replace(":", r"\:").replace("'", r"\'")
             fc += f",ass='{ass_arg}'"
         fc += "[v]"  # remotion engine: captions are already the top layer of the overlay
-        run(["ffmpeg", "-y", "-i", str(base), "-i", str(overlay), "-i", str(mix),
+        run(["ffmpeg", "-y", "-i", str(base), "-i", str(overlay), "-i", str(mix), *extra,
              "-filter_complex", fc, "-map", "[v]", "-map", "2:a",
              *(["-c:v", "libx264", "-preset", "veryfast", "-crf", "22"] if preview else DELIVERY_X264),
              "-pix_fmt", "yuv420p", "-r", str(self.fps),

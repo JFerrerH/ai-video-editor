@@ -37,8 +37,9 @@ Examples below are illustrative. They show the technique, not a style to copy.
    4. **Metaphors:** "put it in a drawer" → `Drawer`; "we went all in building it" → `CodeEditor`.
    5. Stock footage, but only if a free licensed source with an API is available. Never scrape.
 4. **Emotional arc in the picture.** Low point → `look="bw"` **only on the exact line that is
-   the low point**, not on the build-up. Graphics around it stay in colour. Turn → `freeze_after` on the
-   last low beat, then a `Flash` and the colour snaps back on the comeback line, with one transition
+   the low point**, not on the build-up. Graphics around it stay in colour. Turn → hold the low beat on
+   real footage (extend the out-point through the pause; a `freeze_after` frame can read as a glitch, so use it
+   only if the brand asks), then a `Flash` and the colour snaps back on the comeback line, with one transition
    sound (whoosh by default; heavier hits only if the brand wants them).
 4b. **Cutaway vs floating.** Only graphics that fill the screen get a full backdrop (`full: true`):
    phone/product montages, website scrolls, code editors. Cards, receipts, drawers, stats and photos

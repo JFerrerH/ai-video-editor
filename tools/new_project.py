@@ -3,6 +3,9 @@
     uv run tools/new_project.py acme-product-demo --brand acme --type tutorial --platforms youtube --language en
     uv run tools/new_project.py wedding-teaser --type montage --platforms reels,youtube --language es
     uv run tools/new_project.py ... --shortform     # also copy templates/shortform_build.py → edit/build.py
+    uv run tools/new_project.py acme-explainer --type generated --platforms reels --language en
+        # from scratch, no footage: copies templates/storyboard.json → edit/storyboard.json
+        # (aspect from the first platform, brand filled in); render with tools/storyboard.py
 
 Without --brand the project is unbranded (neutral look; no brand's taste applies).
 Raw takes go in footage/<name>/ (rename to plain ASCII first); never modify them.
@@ -11,6 +14,7 @@ Raw takes go in footage/<name>/ (rename to plain ASCII first); never modify them
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import shutil
 import sys
@@ -19,7 +23,10 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 TYPES = ["talking-head", "short-form", "tutorial", "interview", "podcast", "montage",
-         "music-video", "motion-graphics", "captions-only", "reformat", "other"]
+         "music-video", "motion-graphics", "generated", "captions-only", "reformat", "other"]
+STORYBOARD_TYPES = {"generated", "motion-graphics"}  # made from scratch → start from a storyboard
+ASPECT_FOR = {"reels": "9:16", "tiktok": "9:16", "shorts": "9:16", "youtube": "16:9", "master": "16:9",
+              "linkedin": "4:5", "x": "1:1"}
 
 
 def main() -> None:
@@ -54,7 +61,16 @@ def main() -> None:
         shutil.copy2(REPO / "templates" / "shortform_build.py", dst)
         if a.brand != "none":
             dst.write_text(dst.read_text().replace("    brand=None,", f'    brand="{a.brand}",'))
-    print(f"created {proj.relative_to(REPO)}/ → drop raw takes there; notes in {md.relative_to(REPO)}")
+    if a.type in STORYBOARD_TYPES:
+        sb = json.loads((REPO / "templates" / "storyboard.json").read_text())
+        sb["brand"] = a.brand
+        sb["aspect"] = ASPECT_FOR.get(a.platforms.split(",")[0].strip(), "9:16")
+        (edit / "storyboard.json").write_text(json.dumps(sb, indent=2, ensure_ascii=False) + "\n")
+        (edit / "images").mkdir(exist_ok=True)
+        print(f"storyboard: {(edit / 'storyboard.json').relative_to(REPO)} ({sb['aspect']}); "
+              f"uv run tools/storyboard.py {edit.relative_to(REPO)} check")
+    what = "storyboard-driven, no footage needed" if a.type in STORYBOARD_TYPES else "drop raw takes there"
+    print(f"created {proj.relative_to(REPO)}/ → {what}; notes in {md.relative_to(REPO)}")
 
 
 if __name__ == "__main__":

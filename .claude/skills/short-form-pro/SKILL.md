@@ -14,6 +14,11 @@ spoken. Everything here runs locally and costs nothing.
 **Template:** `templates/shortform_build.py`. Past projects' `footage/<project>/edit/build.py` files are good
 worked examples when they exist on this machine; they are never committed.
 
+**Motion craft** (timing, easing, choreography, transitions, type sizes) lives in the `motion-graphics`
+skill and applies to every overlay here. A full-screen cutaway that needs to be a whole designed scene can
+use its aspect-aware primitives (`TitleCard`, `KineticType`, `StatScene`, `BarChart`, `ListScene`, `ImageScene`)
+as overlay events with `full: true`.
+
 **Brand first.** Each project's `edit/project.md` names its brand. When it has one, read
 `brands/<slug>/brand.md` before planning: the brand's taste **overrides the defaults below** (caption
 colour, hook rules, looks, SFX vocabulary, CTA). Without a brand (`Brand: none`), use the neutral defaults

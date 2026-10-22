@@ -1,6 +1,9 @@
-# Motion overlay (Remotion)
+# Motion (Remotion)
 
-This renders the transparent graphics layer (cards, phone mockups, captions, flashes) that `tools/shortform.py` composites over the cut. One composition, `Overlay`, is 1080x1920 at 30 fps, rendered as ProRes 4444 with alpha.
+Two compositions:
+
+- **`Overlay`**: the transparent graphics layer (cards, phone mockups, captions, flashes) that `tools/shortform.py` composites over a cut. It's 1080x1920 at 30 fps, rendered as ProRes 4444 with alpha.
+- **`Story`**: a full-frame video made from scratch. Scenes joined by transitions (`@remotion/transitions`), with global overlay events on top. Size, fps and length come from the props, written by `tools/storyboard.py` from `edit/storyboard.json`. Aspects: 9:16, 16:9, 1:1, 4:5 (`src/layout.ts`). Scene primitives live in `src/scenes/`. The craft rules and the props table are in `.claude/skills/motion-graphics/SKILL.md`.
 
 ```sh
 npm i --loglevel=error          # once
@@ -44,6 +47,6 @@ They live in `src/components/` and are registered in `REGISTRY` in `src/Overlay.
 - Respect `SAFE` in `src/theme.ts`.
 - Add a row to the skill's table.
 
-Known gap: layouts and safe zones assume vertical 9:16. 16:9 and 1:1 need their own compositions.
+The overlay components in `src/components/` assume vertical 9:16. The scene primitives in `src/scenes/` work in every aspect.
 
 Remotion licensing: free for teams of up to 3; larger companies need a [company license](https://github.com/remotion-dev/remotion/blob/main/LICENSE.md).

@@ -12,7 +12,7 @@ footage/<project>/edit/   all working files for that project (video-use conventi
 brands/<slug>/            one brand/client: brand.md (taste + rules), brand.json (colors, fonts, captions), fonts/, logos/, broll/
 brands/_template/         copy this to add a brand
 assets/                   shared, brand-neutral: sfx/ (synth), luts/, music/ (licensed), fonts/
-templates/                starting points: project.md, shortform_build.py
+templates/                starting points: project.md, shortform_build.py, storyboard.json
 exports/                  final deliverables: <project>_<platform>_<YYYYMMDD>.mp4
 tools/                    our own helpers
 vendor/video-use/         third-party skill (cloned by scripts/setup.sh, don't edit)
@@ -20,7 +20,7 @@ vendor/video-use/         third-party skill (cloned by scripts/setup.sh, don't e
 
 ## Projects and brands
 
-- **Start every new request with a project:** `uv run tools/new_project.py <name> --brand <slug|none> --type <type> --platforms <list> --language <code> [--shortform]`. Name it `<brand-or-client>-<what>` in kebab-case ASCII. If a request continues earlier work, open that project's `edit/project.md` instead.
+- **Start every new request with a project:** `uv run tools/new_project.py <name> --brand <slug|none> --type <type> --platforms <list> --language <code> [--shortform]`. `--type generated` (no footage) starts from a storyboard instead of raw takes. Name it `<brand-or-client>-<what>` in kebab-case ASCII. If a request continues earlier work, open that project's `edit/project.md` instead.
 - **The brand comes from `project.md`, never from habit.** If it names a brand, read `brands/<slug>/brand.md` before planning and pass `brand="<slug>"` to the engine. If it says `none`, use neutral defaults and ask the user about style. Don't apply one brand's taste, examples or rejected ideas to another project. If you can't tell which brand a request belongs to, ask.
 - **New brand:** copy `brands/_template/`, then fill in `brand.md` and `brand.json` from the user's site, deck or answers. Fonts go in its `fonts/`. This repo is public: every kit except `_template` is gitignored and lives only on the machine that has it. Never name a client, brand, person or private project in a tracked file (skills, tools, templates, docs); use neutral examples. A missing kit means asking the user, not falling back to another brand.
 - Skills hold general technique and neutral defaults. Feedback that is only taste ("I don't like yellow") goes into that brand's `brand.md`. Feedback that is about craft ("never clip a word") goes into the skill or tool.
@@ -41,7 +41,9 @@ vendor/video-use/         third-party skill (cloned by scripts/setup.sh, don't e
 | Transcribe | `uv run tools/transcribe_local.py <video...> --language <es\|en…>` (offline, free, see below) |
 | B-roll from the brand's own website / app | `uv run tools/site_capture.py <url> -o <edit>/downloads/site` (phone viewport + full-page PNG) |
 | Sound effects (license-free) | `uv run tools/sfx_synth.py` → `assets/sfx/synth/*.wav` + `attack.json` |
-| Motion graphics, titles, animated captions, explainers, intros | **Remotion skills** (`remotion-best-practices` covers all of them) |
+| **Video from scratch, no footage** (explainer, kinetic type, data story, promo, intro/outro) | **`motion-graphics` skill**: `new_project.py --type generated` → `edit/storyboard.json` → `tools/storyboard.py check / stills / render`. Any aspect (9:16, 16:9, 1:1, 4:5) |
+| Motion craft (timing, easing, transitions, typography) for any graphics, including overlays on footage | **`motion-graphics` skill** (craft rules); Remotion API questions → `remotion-best-practices` |
+| Animated captions, Remotion API details | **Remotion skills** (`remotion-best-practices` covers all of them) |
 | Download reference or source clips | `yt-dlp` (only content the user has rights to) |
 | Anything else (reframe, speed, grade, LUTs, concat, overlays) | `ffmpeg` directly (full build with libass + freetype) |
 
@@ -54,7 +56,7 @@ Run video-use helpers from the repo root: `uv run vendor/video-use/helpers/<help
 ## Workflow rules
 
 0. **Project first.** Every request gets a `footage/<project>/` with `project.md` stating its brand, type, platforms and language (`tools/new_project.py`).
-1. **Inventory first.** `ffprobe` every source (codec, fps, resolution, audio tracks, duration) before planning.
+1. **Inventory first.** `ffprobe` every source (codec, fps, resolution, audio tracks, duration) before planning. (From-scratch projects: brief and beat sheet first.)
 2. **Plan, then cut.** Propose the edit in plain English and wait for approval before rendering. This rule comes from video-use.
 3. **Never touch originals.** Write to `footage/<project>/edit/`, and copy finals to `exports/`.
 4. **Preview at 720p** (`render.py --preview`) and render full quality only after approval.

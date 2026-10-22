@@ -154,7 +154,7 @@ the event start**.
 | `Polaroids` | people in the story | `photos[{src, label, at, rotate}], chip, chipAt` |
 | `CodeEditor` | building / hustle montage | `file, lines, dayFrom, dayTo, countStart, countEnd` (pair with `full, dark`) |
 | `IdCard` | who / role / where, floating above the head | `kicker, title, subtitle, rows[{icon: pin\|swap\|dot, text, at}]` |
-| `BoardingPass` | travel, conferences, remote work | `from, to, fromCity, toCity, details[{k, v}], flyStart, flyEnd` |
+| `BoardingPass` | travel, conferences, remote work | `from, to, fromCity, toCity, carrier, details[{k, v}], flyStart, flyEnd` |
 | `AiWorkflow` | AI tools / workflows: robot hub wires up emoji nodes, optional content pile at `pileAt` (pair with `full`) | `hub, nodes[{emoji, at}], pileAt, pileCount` |
 | `PostPile` | "too much content" / noise (pair with `full`) | `count, pileStart, pileEnd, seed` |
 | `Milestones` | life/career steps as icons (no numbers) | `items[{icon: cap\|diploma\|briefcase\|star, at, label?}]` |

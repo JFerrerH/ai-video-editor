@@ -27,7 +27,7 @@
       "props": {
         "figure": { "poses": [{ "pose": "think" }, { "pose": "point", "at": "@skip" }] },
         "widgets": [
-          { "type": "Checklist", "title": "Launch plan", "items": [
+          { "type": "Checklist", "items": [
             { "text": "Weekly sync", "state": "struck", "at": "@meetings" },
             { "text": "Status report", "state": "struck", "at": "@meetings+0.3" },
             { "text": "Ship it" }] },

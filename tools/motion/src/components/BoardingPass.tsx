@@ -3,10 +3,12 @@ import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remo
 import { clamp, easeInOut, enter, exit, sec } from "../anim";
 import { SAFE, useBrand } from "../theme";
 
-/** Boarding pass (travel, conferences, remote work). The plane flies from → to between `flyStart` and `flyEnd` (s). */
+/** Boarding pass (travel, conferences, remote work). The plane flies from → to between `flyStart` and `flyEnd` (s).
+ *  `carrier` is the airline label top-right (none by default). */
 export const BoardingPass: React.FC<{
   durationInFrames: number;
   kicker?: string;
+  carrier?: string;
   from: string;
   to: string;
   fromCity?: string;
@@ -18,6 +20,7 @@ export const BoardingPass: React.FC<{
 }> = ({
   durationInFrames,
   kicker = "BOARDING PASS",
+  carrier,
   from,
   to,
   fromCity,
@@ -52,7 +55,7 @@ export const BoardingPass: React.FC<{
         <div style={{ padding: "30px 46px 26px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontFamily: fonts.mono, fontSize: 22, letterSpacing: 5, color: colors.muted }}>
             <span>{kicker}</span>
-            <span>LUCCE AIR</span>
+            {carrier ? <span>{carrier}</span> : null}
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 18 }}>
             <div>

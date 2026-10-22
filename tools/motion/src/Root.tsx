@@ -2,6 +2,8 @@ import { CalculateMetadataFunction, Composition } from "remotion";
 import { Overlay, OverlayProps } from "./Overlay";
 import { Story, StoryProps, storyFrames } from "./Story";
 import { ASPECTS } from "./layout";
+import { POSE_SHEET, PoseSheet, SheetProps, WIDGET_SAMPLES, WIDGET_SEG, WidgetSheet } from "./explainer/sheets";
+import { Aspect } from "./layout";
 import { defaultBrand } from "./theme";
 
 const calculateMetadata: CalculateMetadataFunction<OverlayProps> = ({ props }) => ({
@@ -53,6 +55,25 @@ export const RemotionRoot: React.FC = () => {
         height={1920}
         defaultProps={demoStory}
         calculateMetadata={storyMetadata}
+      />
+      <Composition
+        id="PoseSheet"
+        component={PoseSheet}
+        durationInFrames={1}
+        fps={30}
+        width={POSE_SHEET.width}
+        height={POSE_SHEET.height}
+        defaultProps={{ brand: defaultBrand, bg: "light" } satisfies SheetProps}
+      />
+      <Composition
+        id="WidgetSheet"
+        component={WidgetSheet}
+        durationInFrames={(WIDGET_SAMPLES.length + 1) * WIDGET_SEG}
+        fps={30}
+        width={1080}
+        height={1920}
+        defaultProps={{ brand: defaultBrand, bg: "light", aspect: "9:16" as Aspect }}
+        calculateMetadata={({ props }) => ASPECTS[props.aspect] ?? ASPECTS["9:16"]}
       />
     </>
   );

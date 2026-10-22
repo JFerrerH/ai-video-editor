@@ -50,6 +50,10 @@ const SceneView: React.FC<{ scene: StoryScene; grain: number; durationInFrames: 
     throw new Error(`${scene.type} is a 9:16 overlay component; use a scene primitive in ${width}x${height}`);
   }
   const bg = scene.bg ?? (scene.type === "ImageScene" ? "none" : "light");
+  if (scene.type === "BeatScene") {
+    // draws its own grid background (and grain)
+    return <C durationInFrames={durationInFrames} bg={bg} grain={scene.grain ?? grain} {...(scene.props ?? {})} />;
+  }
   return (
     <AbsoluteFill>
       <Bg kind={bg} grain={scene.type === "ImageScene" ? 0 : (scene.grain ?? grain)} />
@@ -61,7 +65,8 @@ const SceneView: React.FC<{ scene: StoryScene; grain: number; durationInFrames: 
 
 export const Story: React.FC<StoryProps> = ({ brand, scenes, events = [], grain = 0 }) => {
   const { fps, width, height } = useVideoConfig();
-  useBrandFonts(brand);
+  const ready = useBrandFonts(brand);
+  if (!ready) return <AbsoluteFill style={{ background: brand.colors.ink }} />;
   return (
     <BrandContext.Provider value={brand}>
       <AbsoluteFill style={{ fontFamily: brand.fonts.sans, background: brand.colors.ink }}>

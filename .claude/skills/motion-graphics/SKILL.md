@@ -1,6 +1,6 @@
 ---
 name: motion-graphics
-description: Craft rules and workflow for motion graphics, and for videos made from scratch with no footage (explainers, kinetic typography, animated titles, data stories, promos, intros/outros, chapter cards), in 9:16, 16:9, 1:1 or 4:5. Use whenever the user wants a video without a camera, an animated explainer or title sequence, "make this move", or wants graphics/transitions/typography to look more professional. Covers timing, easing, choreography, typography, colour, transitions, pacing and sound, plus the storyboard engine (tools/storyboard.py) and its Remotion scene primitives. For Remotion API questions use the remotion-* skills; for talking-head shorts use short-form-pro (whose overlays follow the craft rules here).
+description: Craft rules and workflow for motion graphics, and for videos made from scratch with no footage (explainers, kinetic typography, animated titles, data stories, promos, intros/outros, chapter cards), in 9:16, 16:9, 1:1 or 4:5. Use whenever the user wants a video without a camera, an animated explainer or title sequence, "make this move", or wants graphics/transitions/typography to look more professional. Covers timing, easing, choreography, typography, colour, transitions, pacing and sound, plus the storyboard engine (tools/storyboard.py) and its Remotion scene primitives, including narrated explainers (local text-to-speech, a headline that builds with the voice, a posable stick figure and cue-driven UI widgets). For Remotion API questions use the remotion-* skills; for talking-head shorts use short-form-pro (whose overlays follow the craft rules here).
 ---
 
 # Motion graphics
@@ -11,7 +11,8 @@ an idea alone. Everything here runs locally and costs nothing.
 
 **Engine:** `tools/storyboard.py` (check → stills → render → mix → loudness), with the Remotion
 `Story` composition and scene primitives in `tools/motion/src/scenes/`.
-**Template:** `templates/storyboard.json`. `tools/new_project.py --type generated` copies it in.
+**Templates:** `templates/storyboard.json` (`tools/new_project.py --type generated` copies it in) and
+`templates/storyboard_explainer.json` for a narrated explainer (add `--explainer`; see below).
 
 **Brand first.** The storyboard's `"brand"` loads `brands/<slug>/brand.json` (colours, fonts).
 Read that brand's `brand.md` before planning. Its taste overrides the defaults below. With
@@ -42,6 +43,88 @@ Read that brand's `brand.md` before planning. Its taste overrides the defaults b
 Another aspect from the same storyboard: copy `storyboard.json` to `storyboard_<x>.json`, change
 `aspect`, and point the tool at that file. The primitives re-lay themselves out. Always check the
 stills, because line breaks change.
+
+## Narrated explainer
+
+A voice tells a short story; each spoken phrase builds on screen as a headline in time with it; a
+stick figure reacts in every beat; UI-style cards show what the words say. Vector only: no photos,
+no human likeness. One scene type does it all: `BeatScene`.
+
+**Setup, once:** `uv sync --group gen` (Kokoro-82M through `mlx-audio`, Apache-2.0 weights, fully
+local; ~0.37 GB: 330 MB weights + ~0.5 MB per voice used, the spaCy English model and the bundled
+`espeak-ng` phonemiser). Word times use the local Whisper that's already cached.
+
+**Workflow:** `new_project.py <name> --type generated --explainer --platforms <p> --language <code>` →
+write the beat sheet (one row per beat: narration, pose, widget, cue word) and get it approved →
+`storyboard.py <edit> voice` (synthesises each scene's clip, times its words) → `check` (durations
+now come from the clips; the `vo@` column is where each voice starts, `words` how many aligned) →
+`sheet poses` / `sheet widgets --aspect <a>` when you change the rig or a widget → `stills` → `render --preview`.
+Edit a line and `check` errors with "run `voice`"; only changed lines are re-synthesised.
+
+Measured on an M5 (warm): Kokoro 0.1–0.4 s per 2–5 s clip (the first clip of a run takes 1–3 s
+while the pipeline loads); Whisper ~0.7 s per clip after a ~4 s model load; a 13 s preview renders in ~8 s.
+
+### Writing
+- **One idea per beat, beats of 2–4 s.** A beat that needs two sentences is two beats.
+- **Mix sentence lengths.** Three long lines in a row sound like a reading; a two-word line lands.
+- **`*emphasis*` at most once per phrase** (`check` warns on more): the word the viewer must keep.
+- **`|` forces a phrase break** ("One page, one goal, | *one afternoon.*"). Phrases also break after
+  `.?!`, and a run over 7 words splits evenly (8 → 4 + 4).
+- **`voice.pronounce`** respells names the voice gets wrong (`{"SaaS": "sass"}`); the headline keeps
+  the script's spelling. List every substitution in `project.md`.
+- Numbers: write them the way they should be said ("twelve hundred"); the widget shows the digits.
+
+### Picture
+- **The figure reacts to every beat.** Change pose on the beat's key word (`{"pose": "cheer", "at": "@done"}`).
+- **Numbers move while they're said:** a `Counter` from `"@first-word"` to `"@last-word"` of the number.
+- **A stamp for a negation** ("we *skip it*", "not this"): `Stamp` on the cue, over the thing negated.
+- **Light/dark switch when the mood flips** (problem → answer, before → after). One dark beat per
+  4–6 is plenty.
+- **Hard cuts by default** between beats; a transition only for a real change of chapter.
+- **`"progress": true`** for anything over ~20 s.
+- Cue an element on its word; the engine resolves `"@word"` to the moment it's spoken (`@word#2`
+  for the 2nd time, `@word+0.2` / `@word-0.1` to nudge). A cue that matches no word is an ERROR.
+
+### Reference
+`BeatScene` props: `bg: light|dark`, `figure`, `widgets[]`, `headline` (default true), `headlineSize`.
+Words come from the narration automatically. Slots: `main` (widgets' default), `side`, `figure`.
+9:16, 1:1 and 4:5 stack them (headline, `main`, figure band; a `side` widget takes the left of the band);
+16:9 puts `main` on the left two-thirds and the figure on the right.
+
+Poses (`tools/motion/src/explainer/poses.ts`; check them with `sheet poses`):
+
+| pose | reads as | default prop |
+|---|---|---|
+| `stand` | neutral, listening | |
+| `wave` | hello, goodbye, "you" | |
+| `cheer` | win, done, launch | |
+| `point` | "this", "here", look at the widget | |
+| `shrug` | "who knows", a question | |
+| `slump` | the problem, a loss, tired | |
+| `think` | wondering, planning | |
+| `type` | working, building | `desk` (desk + laptop) |
+| `push` | effort, shipping, moving something | `box` |
+| `shout` | announcing, marketing | `megaphone` |
+
+Figure: `{pose}` or `{poses: [{pose, at, prop?}]}`, `facing: right|left`, `slot`, `scale`. Pose
+changes spring in within 0.4 s; it sways and breathes while it holds. `prop: null` drops a default prop.
+
+Widgets (`tools/motion/src/explainer/widgets/`; check them with `sheet widgets --aspect <a>`). All
+take `at` (entrance), `out` (exit), `slot`; times accept cues:
+
+| widget | for | key props |
+|---|---|---|
+| `Terminal` | a command, a build, "it just runs" | `title, lines[{text, at, kind: cmd\|out\|ok}]` (cmd types at 22 chars/s) |
+| `Checklist` | steps, a plan, what's done / dropped | `title, items[{text, at, state: todo\|done\|struck}]` |
+| `Stamp` | a negation, a verdict | `text, at, color, rotate` |
+| `Counter` | a number said aloud | `label, from, to, start, end, prefix, suffix, decimals, spark` |
+| `Gauge` | a share, a score | `value` (0–100), `label, fillAt` |
+| `Stopwatch` | time passing, "in 2 minutes" | `seconds, start, end, label` |
+| `FunnelBars` | a funnel, a ranking | `title, rows[{label, value}], drop` (shows % lost) |
+| `TileGrid` | "12 of 100" | `count, cols, highlight, colors, label` |
+| `Badge` | a status, a result | `text, tone: ok\|alert\|neutral, icon` |
+
+Widget text is never under 28 px; each card fits its slot in every aspect.
 
 ## Craft rules
 
@@ -158,6 +241,8 @@ every cut is the clearest amateur tell. A transition lasts 0.4–0.65 s and over
              "transition": {"type": "slide", "direction": "from-bottom", "duration": 0.45},
              "props": {...}, "narration": "spoken line (planning + checks)",
              "sfx": [["tap", 0.0, -16]]}],
+ "voice": {"lang": "en", "preset": "af_heart", "speed": 1.0, "pronounce": {}},   // optional: narrate
+ "progress": true,
  "events": [{"type": "Flash", "start": 12.0, "duration": 0.3, "props": {}}],
  "audio": {"voice": "audio/vo.wav", "voice_start": 0, "music": {"file": "assets/music/…", "db": -6, "duck": true},
            "sfx": [["whoosh", 4.2, -18]]}}
@@ -169,6 +254,10 @@ every cut is the clearest amateur tell. A transition lasts 0.4–0.65 s and over
 - `events` sit on top of every scene on the global timeline: `Flash`, `Captions`, or any scene primitive
   (it draws no background there; for a lower third, use a transparent `TitleCard` or `KineticType`).
 - `ImageScene` defaults to `bg: "none"`. Every other scene defaults to `light`.
+- With a `voice` block, each scene's `narration` is spoken (or `narration_audio` is used as a recorded
+  clip), and `duration` may be omitted or `"auto"`: transition-in + clip + `tail` (0.3 s). `speed`
+  per scene overrides the voice's. Without it, `narration` is a planning note, as before.
+  Use one voice source: `audio.voice` or narrated scenes, not both.
 
 ## Scene primitives (`tools/motion/src/scenes/`)
 
@@ -183,6 +272,7 @@ All of them work in 9:16, 16:9, 1:1 and 4:5. They lay out inside the aspect's sa
 | `BarChart` | compare ≤ 6 values | `kicker, title, bars[{label, value, highlight}], unit, prefix, decimals, max, start, stagger, grow` |
 | `ListScene` | steps, reasons, features | `kicker, title, items[{text, icon?, at?}], marker: number\|check\|icon\|dot, dimPrevious` |
 | `ImageScene` | any still: captures, photos, generated art | `src, move: in\|out\|left\|right\|up\|down\|none, amount, focus{x,y}, kicker, title, darken, mono` |
+| `BeatScene` | a narrated explainer beat (see "Narrated explainer") | `bg, figure, widgets[], headline, headlineSize` |
 
 `KineticType` styles: `rise` is masked word-by-word, typeset and editorial (the default). `pop`
 springs words in, playful and social. `blur` is soft and premium. `fade` is calm and documentary.
@@ -217,3 +307,11 @@ Add a row to the table above, then check stills in 9:16 **and** 16:9.
 - The intermediate ProRes for a final is large: about 1 GB per minute at 1080x1920.
 - A transition must be shorter than both of its neighbouring scenes (`check` errors otherwise).
 - Remotion is free for teams of up to 3; larger companies need a licence.
+- `voice` needs `uv sync --group gen`; a plain `uv sync` removes the group again. `check`, `stills`
+  and `render` work without it once the clips exist.
+- Kokoro's `speed` isn't linear: 1.2 is only ~8–10% shorter, 1.5 ~30–40%. Prefer shorter lines to speed.
+- Clips live in `edit/audio/narration/<scene>.wav`, shared by every storyboard in that edit dir. An
+  aspect copy (`storyboard_16x9.json`) reuses them; a **language copy needs its own project**.
+  Set `locale` on `Counter`/`FunnelBars` to match (`"es-ES"`: 12.000, and no separator under 10 000).
+- Languages: en (US), en-gb, es, fr, it, pt-br, hi (`uv run tools/gen/voice.py --list`). Spanish has
+  three voices (`em_alex`, the default, `ef_dora`, and `em_santa`, a novelty voice); for a better Spanish read, record and use `narration_audio`.

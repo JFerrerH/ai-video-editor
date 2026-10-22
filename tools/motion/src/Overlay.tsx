@@ -39,6 +39,7 @@ import { ChatThread } from "./components/ChatThread";
 import { DotTrack } from "./components/DotTrack";
 import { TopicCards } from "./components/TopicCards";
 import { NameTitle } from "./components/NameTitle";
+import { ProgressBar } from "./explainer/ProgressBar";
 import { SCENES } from "./scenes";
 
 /**
@@ -49,6 +50,7 @@ import { SCENES } from "./scenes";
  * float a big graphic over the footage, above the head, instead of a full cutaway.
  * Components receive `durationInFrames` so they can animate their own exit.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- props come from storyboard JSON
 export const REGISTRY: Record<string, React.FC<any>> = {
   Captions,
   HookTitle,
@@ -78,6 +80,7 @@ export const REGISTRY: Record<string, React.FC<any>> = {
   DotTrack,
   TopicCards,
   NameTitle,
+  ProgressBar,
 };
 
 export type OverlayEvent = {
@@ -94,8 +97,11 @@ export type OverlayProps = {
   events: OverlayEvent[];
 };
 
+/** Loads the brand's font files; true once they're in. Render text only after that, so anything
+ *  measured (headline wrapping) is measured in the real face, not a fallback. */
 export const useBrandFonts = (brand: Brand) => {
   const [handle] = useState(() => delayRender("Loading brand fonts"));
+  const [ready, setReady] = useState(false);
   useEffect(() => {
     Promise.all(
       brand.fontFiles.map((f) =>
@@ -116,10 +122,12 @@ export const useBrandFonts = (brand: Brand) => {
             throw new Error(`Font did not load: ${desc}`);
           }
         }
+        setReady(true);
         continueRender(handle);
       })
       .catch((e) => cancelRender(e));
   }, [brand, handle]);
+  return ready;
 };
 
 /** The events on their own (no brand provider, no font loading): shared by `Overlay` and `Story`.
@@ -166,11 +174,11 @@ export const OverlayLayer: React.FC<{ events: OverlayEvent[] }> = ({ events }) =
 };
 
 export const Overlay: React.FC<OverlayProps> = ({ brand, events }) => {
-  useBrandFonts(brand);
+  const ready = useBrandFonts(brand);
   return (
     <BrandContext.Provider value={brand}>
       <AbsoluteFill style={{ fontFamily: brand.fonts.sans }}>
-        <OverlayLayer events={events} />
+        {ready ? <OverlayLayer events={events} /> : null}
       </AbsoluteFill>
     </BrandContext.Provider>
   );

@@ -1,5 +1,6 @@
 import React from "react";
 import { BarChart } from "./BarChart";
+import { BeatScene } from "./BeatScene";
 import { ImageScene } from "./ImageScene";
 import { KineticType } from "./KineticType";
 import { ListScene } from "./ListScene";
@@ -16,4 +17,5 @@ export const SCENES: Record<string, React.FC<any>> = {
   BarChart,
   ListScene,
   ImageScene,
+  BeatScene,
 };

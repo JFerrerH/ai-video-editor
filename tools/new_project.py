@@ -6,6 +6,9 @@
     uv run tools/new_project.py acme-explainer --type generated --platforms reels --language en
         # from scratch, no footage: copies templates/storyboard.json → edit/storyboard.json
         # (aspect from the first platform, brand filled in); render with tools/storyboard.py
+    uv run tools/new_project.py acme-explainer --type generated --explainer --platforms reels --language es
+        # narrated explainer: copies templates/storyboard_explainer.json instead (voice block in
+        # --language; BeatScenes with headline, figure and widgets); `storyboard.py <edit> voice` first
 
 Without --brand the project is unbranded (neutral look; no brand's taste applies).
 Raw takes go in footage/<name>/ (rename to plain ASCII first); never modify them.
@@ -20,6 +23,8 @@ import shutil
 import sys
 from datetime import date
 from pathlib import Path
+
+from gen import voice  # standard library only: language/preset tables
 
 REPO = Path(__file__).resolve().parent.parent
 TYPES = ["talking-head", "short-form", "tutorial", "interview", "podcast", "montage",
@@ -37,6 +42,8 @@ def main() -> None:
     ap.add_argument("--platforms", default="tbd", help="comma list: youtube, reels, tiktok, shorts, linkedin, x, master")
     ap.add_argument("--language", default="tbd", help="spoken language code for transcription (es, en…)")
     ap.add_argument("--shortform", action="store_true", help="copy the short-form build.py template")
+    ap.add_argument("--explainer", action="store_true",
+                    help="with --type generated: start from the narrated-explainer storyboard")
     a = ap.parse_args()
 
     if not re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", a.name):
@@ -62,13 +69,22 @@ def main() -> None:
         if a.brand != "none":
             dst.write_text(dst.read_text().replace("    brand=None,", f'    brand="{a.brand}",'))
     if a.type in STORYBOARD_TYPES:
-        sb = json.loads((REPO / "templates" / "storyboard.json").read_text())
+        tpl = "storyboard_explainer.json" if a.explainer else "storyboard.json"
+        sb = json.loads((REPO / "templates" / tpl).read_text())
         sb["brand"] = a.brand
         sb["aspect"] = ASPECT_FOR.get(a.platforms.split(",")[0].strip(), "9:16")
+        if a.explainer:
+            lang = a.language.lower()
+            if err := voice.validate(lang, None):
+                sys.exit(f"--explainer: {err}")
+            sb["voice"] = {**sb["voice"], "lang": lang, "preset": voice.default_preset(lang)}
         (edit / "storyboard.json").write_text(json.dumps(sb, indent=2, ensure_ascii=False) + "\n")
         (edit / "images").mkdir(exist_ok=True)
         print(f"storyboard: {(edit / 'storyboard.json').relative_to(REPO)} ({sb['aspect']}); "
-              f"uv run tools/storyboard.py {edit.relative_to(REPO)} check")
+              f"uv run tools/storyboard.py {edit.relative_to(REPO)} {'voice' if a.explainer else 'check'}")
+        if not a.explainer:
+            print("  narrated explainer (voice, headline, figure, widgets)? start from "
+                  "templates/storyboard_explainer.json instead: add --explainer")
     what = "storyboard-driven, no footage needed" if a.type in STORYBOARD_TYPES else "drop raw takes there"
     print(f"created {proj.relative_to(REPO)}/ → {what}; notes in {md.relative_to(REPO)}")
 

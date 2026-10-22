@@ -42,6 +42,8 @@ vendor/video-use/         third-party skill (cloned by scripts/setup.sh, don't e
 | B-roll from the brand's own website / app | `uv run tools/site_capture.py <url> -o <edit>/downloads/site` (phone viewport + full-page PNG) |
 | Sound effects (license-free) | `uv run tools/sfx_synth.py` → `assets/sfx/synth/*.wav` + `attack.json` |
 | **Video from scratch, no footage** (explainer, kinetic type, data story, promo, intro/outro) | **`motion-graphics` skill**: `new_project.py --type generated` → `edit/storyboard.json` → `tools/storyboard.py check / stills / render`. Any aspect (9:16, 16:9, 1:1, 4:5) |
+| **Narrated explainer** (a voice tells it; headline builds with the voice; stick figure + UI cards) | **`motion-graphics` skill**, "Narrated explainer": `new_project.py --type generated --explainer` → `storyboard.py voice` (local TTS + word times) → `check / sheet / stills / render` |
+| Voiceover for a script line (local, free) | `uv run tools/gen/voice.py "<line>" -o out.wav --lang <code>` (Kokoro-82M, Apache-2.0; `--list` for voices) |
 | Motion craft (timing, easing, transitions, typography) for any graphics, including overlays on footage | **`motion-graphics` skill** (craft rules); Remotion API questions → `remotion-best-practices` |
 | Animated captions, Remotion API details | **Remotion skills** (`remotion-best-practices` covers all of them) |
 | Download reference or source clips | `yt-dlp` (only content the user has rights to) |
@@ -52,6 +54,8 @@ vendor/video-use/         third-party skill (cloned by scripts/setup.sh, don't e
 video-use expects ElevenLabs Scribe (`ELEVENLABS_API_KEY` in `vendor/video-use/.env`). **If no key is set, use `tools/transcribe_local.py` instead.** It writes the same JSON to `<edit>/transcripts/<stem>.json`, so `pack_transcripts.py` and `render.py` work unchanged. Always pass `--language`: without it Whisper can mis-detect, and an English prompt on non-English audio makes it translate instead of transcribe. Local transcription has no speaker labels and no `(laughs)` tags. When diarization matters (interviews, podcasts), recommend Scribe.
 
 Run video-use helpers from the repo root: `uv run vendor/video-use/helpers/<helper>.py ...`
+
+`storyboard.py voice` reuses the same local Whisper to time each narration clip's words, then aligns them to the script, so the headline shows the script's exact words.
 
 ## Workflow rules
 
@@ -87,6 +91,7 @@ Use `h264_videotoolbox` / `hevc_videotoolbox` for fast hardware previews. Use li
 
 - `ffmpeg` on PATH is Homebrew's **ffmpeg-full** (needed for the `subtitles`/`ass`/`drawtext` filters). If those filters go missing after a `brew upgrade`, run `brew unlink ffmpeg && brew link --force ffmpeg-full`.
 - The first `transcribe_local.py` run downloads Whisper large-v3-turbo (about 1.6 GB, then cached).
+- Local voice (`tools/gen/voice.py`, `storyboard.py voice`) needs the optional group: `uv sync --group gen` (~0.37 GB on first use, then offline). A plain `uv sync` removes it again; the phonemiser (`espeak-ng`) comes bundled, no Homebrew install.
 - Vertical reframes of 16:9 talking heads: crop around the face (check a frame first) rather than center-cropping blindly.
 - Only use music, fonts and footage that the user has rights to.
 - iPhone exports can have a U+202F (narrow no-break space) before "am/pm" in the filename. Rename sources to plain ASCII before scripting.

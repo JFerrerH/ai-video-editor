@@ -1,0 +1,38 @@
+schema: spec-driven
+
+# OpenSpec covers changes to the WORKSPACE itself (tools/, tools/motion/, .claude/skills/,
+# templates/, CLAUDE.md). Editing a client video is not a change here: that lives in
+# footage/<project>/edit/project.md.
+context: |
+  Claude edits and generates video with CLI tools (ffmpeg, Remotion, local Whisper) and never
+  watches video: everything must be verifiable from transcripts, ffprobe, still frames, contact
+  sheets and loudness numbers.
+  The repo is PUBLIC and serves many unrelated brands: never name a client, brand, person or
+  private project in specs, proposals, designs or tasks. Use neutral examples.
+  Everything must stay free and local (Apple Silicon, MLX/Metal). No paid APIs or per-use keys.
+  Any new model must have weights licensed for commercial use (Apache-2.0/MIT or similar);
+  non-commercial models are out unless the proposal flags it and the user accepts.
+  Craft rules belong in skills or tools; per-brand taste belongs in brands/<slug>/ (gitignored).
+
+rules:
+  proposal:
+    - State what is out of scope.
+    - Name which skill(s) and tools change, and which existing workflows (short-form-pro, video-use, motion-graphics) are affected.
+    - For new models or dependencies, state the licence, the disk/RAM cost and the expected speed on a 32 GB M-series Mac.
+  design:
+    - Heavy ML dependencies go in an optional uv dependency group, never the default install.
+    - Prefer extending existing engines (tools/storyboard.py, tools/shortform.py, tools/motion/) over parallel new ones.
+  specs:
+    - Scenarios must be checkable without watching video (files written, durations, frame/still checks, CLI output, loudness).
+  tasks:
+    - End with a verification task that renders a pilot under footage/ (gitignored) and inspects stills/frames and loudness.
+    - Include updating the relevant SKILL.md and CLAUDE.md routing when behaviour or tools change.
+
+operations:
+  apply:
+    guidance:
+      - Typecheck tools/motion (npx tsc --noEmit) after any Remotion change.
+      - Read rendered stills (PNG) before claiming a visual task is done.
+  archive:
+    guidance:
+      - Confirm SKILL.md and CLAUDE.md reflect the shipped behaviour before archiving.

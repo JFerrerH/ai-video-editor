@@ -63,6 +63,15 @@ Run video-use helpers from the repo root: `uv run vendor/video-use/helpers/<help
 5. **Verify before presenting.** Pull frames at each cut (`ffmpeg -ss T -i out.mp4 -frames:v 1 f.png`, then Read the PNG). Measure loudness and report the numbers.
 6. Keep `edit/project.md` up to date so later sessions can pick up where the last one stopped.
 
+## Developing the workspace (OpenSpec)
+
+Changes to the workspace itself (`tools/`, `tools/motion/`, `.claude/skills/`, `templates/`, this file) go through OpenSpec spec-driven development. Specs live in `openspec/specs/`, and repo-wide rules for proposals, designs and tasks live in `openspec/config.yaml`.
+
+- New capability or behaviour change: `/opsx:explore` (optional) → `/opsx:propose "<idea>"` → **user approves** → `/opsx:apply` → `/opsx:verify` → `/opsx:archive`.
+- Small fixes (a typo, a one-line bug) don't need a change. If one alters behaviour a spec describes, update that spec.
+- Editing a project's video is **not** an OpenSpec change. That work is tracked in `footage/<project>/edit/project.md`.
+- Work on a branch, never directly on `main`.
+
 ## Delivery specs
 
 | Platform | Frame | Loudness | Encode |

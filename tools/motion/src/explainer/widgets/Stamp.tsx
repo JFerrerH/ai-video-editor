@@ -2,7 +2,7 @@ import React from "react";
 import { interpolate, spring } from "remotion";
 import { clamp } from "../../anim";
 import { LineIcon, IconKind } from "../../components/icons";
-import { useBrand } from "../../theme";
+import { textOn, useBrand } from "../../theme";
 import { Card, f, MIN_TEXT, useCardColors, useEntrance, WidgetBase } from "./Card";
 
 /**
@@ -48,7 +48,7 @@ export const Stamp: React.FC<WidgetBase & { text: string; color?: string; rotate
 /** A status pill that pops in at `at`: `ok` (success colour + tick), `alert` (accent), `neutral`. */
 export const Badge: React.FC<WidgetBase & { text: string; icon?: IconKind; tone?: "ok" | "alert" | "neutral" }> = ({ text, icon, tone = "neutral", ...base }) => {
   const { frame, fps } = useEntrance(base.at, base.out);
-  const { fonts } = useBrand();
+  const { fonts, colors } = useBrand();
   const c = useCardColors(base.bg);
   const a = f(base.at, fps);
   const pop = spring({ frame: frame - a, fps, config: { damping: 10, stiffness: 220, mass: 0.55 } });
@@ -75,7 +75,7 @@ export const Badge: React.FC<WidgetBase & { text: string; icon?: IconKind; tone?
         }}
       >
         <div style={{ width: 60, height: 60, borderRadius: 30, background: col, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <LineIcon kind={icon ?? (tone === "alert" ? "spark" : "check")} size={38} color={tone === "neutral" ? c.card : "#FFFFFF"} stroke={2.4} />
+          <LineIcon kind={icon ?? (tone === "alert" ? "spark" : "check")} size={38} color={tone === "neutral" ? c.card : textOn(col, colors.ink)} stroke={2.4} />
         </div>
         {text}
       </div>

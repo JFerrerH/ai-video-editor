@@ -37,6 +37,18 @@ export const defaultBrand: Brand = {
   fontFiles: [],
 };
 
+/** Text colour that reads on a solid `hex` fill: white on a dark/saturated fill, `ink` on a light one
+ *  (a lime or pale-yellow accent). Uses WCAG relative luminance. */
+export const textOn = (hex: string, ink: string) => {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h.slice(0, 6);
+  const [r, g, b] = [0, 2, 4].map((i) => {
+    const c = parseInt(full.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? ink : "#FFFFFF";
+};
+
 export const BrandContext = createContext<Brand>(defaultBrand);
 export const useBrand = () => useContext(BrandContext);
 

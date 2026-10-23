@@ -88,6 +88,10 @@ WIDGET_TYPES = _registry(MOTION / "src/explainer/widgets/index.ts", r"export con
 SLOT_NAMES = re.findall(r'"(\w+)"', re.search(r"SLOT_NAMES[^=]*=\s*\[([^\]]*)\]",
                                               (MOTION / "src/explainer/slots.ts").read_text()).group(1))
 OVERLAY_TYPES = _registry(MOTION / "src/Overlay.tsx", r"export const REGISTRY")
+_icons = (MOTION / "src/components/icons.tsx").read_text()
+ICON_NAMES = re.findall(r'\|\s*"(\w+)"', re.search(r"export type IconKind\s*=([^;]*);", _icons).group(1))
+ICON_KEYS = ("icon", "leftIcon", "rightIcon")
+MOVE_S = 0.8  # default figure move time (Figure.tsx MOVE_S)
 
 
 class Story:
@@ -427,6 +431,9 @@ class Story:
                 errs.append(f"{name}: unknown widget {w.get('type')!r} (widgets: {', '.join(sorted(WIDGET_TYPES))})")
             if w.get("slot", "main") not in SLOT_NAMES:
                 errs.append(f"{name}: widget {w.get('type')} in unknown slot {w.get('slot')!r} (slots: {', '.join(SLOT_NAMES)})")
+            for key in ICON_KEYS:
+                if key in w and w[key] not in ICON_NAMES:
+                    errs.append(f"{name}: widget {w.get('type')} has unknown {key} {w[key]!r} (icons: {', '.join(ICON_NAMES)})")
         fig = props.get("figure")
         if fig:
             cues = fig.get("poses") or ([{"pose": fig["pose"]}] if fig.get("pose") else [])
@@ -435,6 +442,16 @@ class Story:
                     errs.append(f"{name}: unknown pose {c.get('pose')!r} (poses: {', '.join(POSE_NAMES)})")
                 if c.get("prop") not in (None, *PROP_NAMES):
                     errs.append(f"{name}: unknown prop {c.get('prop')!r} (props: {', '.join(PROP_NAMES)})")
+            if not 0 <= float(fig.get("x", 0.5)) <= 1:
+                errs.append(f"{name}: figure x {fig['x']} is outside 0–1")
+            end = None
+            for m in sorted(fig.get("moves", []), key=lambda m: float(m.get("at", 0))):
+                at, x = float(m.get("at", 0)), m.get("x")
+                if not isinstance(x, (int, float)) or not 0 <= x <= 1:
+                    errs.append(f"{name}: figure move at {at:.2f}s has x {x!r}; x must be 0–1")
+                if end is not None and at < end - 1e-6:
+                    errs.append(f"{name}: figure move at {at:.2f}s starts before the previous one ends ({end:.2f}s)")
+                end = at + float(m.get("dur", MOVE_S))
             if fig.get("slot", "figure") not in SLOT_NAMES:
                 errs.append(f"{name}: unknown figure slot {fig.get('slot')!r} (slots: {', '.join(SLOT_NAMES)})")
         return errs

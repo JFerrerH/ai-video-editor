@@ -1,12 +1,14 @@
 import React from "react";
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
-import { clamp } from "../anim";
+import { clamp, easeInOut } from "../anim";
 import { BgKind, usePalette } from "../scenes/Bg";
 import { useBrand } from "../theme";
 import { lerpPose, Pose, POSE_PROP, PoseName, POSES, PropName } from "./poses";
 import { Rect } from "./slots";
 
 export type PoseCue = { pose: PoseName; at?: number; prop?: PropName | null };
+/** Walk to `x` (0 = left edge of the slot, 1 = right edge) starting at `at`, over `dur` s. */
+export type MoveCue = { x: number; at: number; dur?: number };
 export type FigureSpec = {
   pose?: PoseName; // a single held pose
   poses?: PoseCue[]; // or a list with start times (s from the scene start; cues resolved by the engine)
@@ -14,6 +16,8 @@ export type FigureSpec = {
   slot?: string;
   scale?: number;
   phase?: number; // idle-motion phase (s), so figures in consecutive beats don't sway in lockstep
+  x?: number; // starting position inside the slot, 0–1 (default 0.5, centred)
+  moves?: MoveCue[];
 };
 
 // segment lengths in rig units; the whole figure is ~540 units from shoe to cap
@@ -23,6 +27,10 @@ const FLOOR = 26; // rig units kept under the feet, so the ground shadow stays i
 const STROKE = 11;
 const BLEND_S = 0.4; // a pose change settles within this
 const IDLE_S = 2.4; // period of the idle sway and breath
+const MOVE_S = 0.8; // default travel time of a move
+const STRIDE_S = 0.5; // one full walk cycle
+const RAMP_S = 0.15; // walk blends in/out over this at a move's ends
+const HAND_PROPS = new Set<PropName>(["book", "phone", "bag"]);
 
 const rad = (d: number) => (d * Math.PI) / 180;
 /** Unit vector for a screen angle: 0 = down, +90 = front (+x), 180 = up. */
@@ -83,13 +91,41 @@ const pt = (q: [number, number]) => `${q[0].toFixed(1)},${q[1].toFixed(1)}`;
  * shoes take the brand accent. Fits its `box` (feet on the box's bottom edge), mirrored for
  * `facing: "left"`.
  */
-export const Figure: React.FC<FigureSpec & { box: Rect; bg?: BgKind }> = ({ pose, poses, facing = "right", scale = 1, phase = 0, box, bg }) => {
+/** Where the figure is (0–1 across its slot) at `frame`, and the move in progress, if any. */
+const moveAt = (moves: MoveCue[], x0: number, frame: number, fps: number) => {
+  let x = x0;
+  let walking: { w: number; since: number; dir: number } | null = null;
+  for (const m of [...moves].sort((a, b) => a.at - b.at)) {
+    const f0 = Math.round(m.at * fps);
+    const f1 = f0 + Math.max(1, Math.round((m.dur ?? MOVE_S) * fps));
+    if (frame < f0) break;
+    const u = Math.min(1, (frame - f0) / (f1 - f0));
+    const from = x;
+    x = from + (m.x - from) * easeInOut(u);
+    if (u < 1) {
+      const ramp = RAMP_S * fps;
+      walking = { w: Math.min(1, (frame - f0) / ramp, (f1 - frame) / ramp), since: (frame - f0) / fps, dir: Math.sign(m.x - from) };
+    }
+  }
+  return { x, walking };
+};
+
+export const Figure: React.FC<FigureSpec & { box: Rect; bg?: BgKind }> = ({ pose, poses, facing = "right", scale = 1, phase = 0, x: x0 = 0.5, moves = [], box, bg }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { colors } = useBrand();
   const pal = usePalette(bg);
   const cues: PoseCue[] = poses?.length ? [...poses].sort((a, b) => (a.at ?? 0) - (b.at ?? 0)) : [{ pose: pose ?? "stand" }];
-  const { pose: base, cur, p } = poseAt(cues, frame, fps);
+  const { pose: held, cur, p } = poseAt(cues, frame, fps);
+  const { x: pos, walking } = moveAt(moves, x0, frame, fps);
+  // while travelling, a walk cycle is layered over the held pose (blended in/out at the ends)
+  let base = held;
+  if (walking) {
+    const sn = Math.sin((2 * Math.PI * walking.since) / STRIDE_S);
+    const step: Pose = { ...POSES.walk, bH: -22 * sn, fH: 22 * sn, bK: 16 * Math.max(0, sn), fK: 16 * Math.max(0, -sn), bS: 24 * sn, bE: 12, fS: -24 * sn, fE: 12 };
+    base = lerpPose(held, step, walking.w);
+  }
+  const face = walking && walking.dir ? (walking.dir > 0 ? "right" : "left") : facing;
   const t = frame / fps + phase;
   const wave = Math.sin((2 * Math.PI * t) / IDLE_S);
   const pz: Pose = { ...base, lean: base.lean + 1.5 * wave };
@@ -100,12 +136,16 @@ export const Figure: React.FC<FigureSpec & { box: Rect; bg?: BgKind }> = ({ pose
 
   const k = (box.h * 0.94 * scale) / (RIG_H + FLOOR);
   // centre figure + prop in the box, from the pose without idle motion (so the sway doesn't slide it)
-  const still = rig(base);
+  const still = rig(held);
   const xs = [still.head[0] - L.headR, still.head[0] + L.headR + 30, ...still.arms.map((a) => a.hand[0]), ...still.legs.map((l) => l.foot[0] + 32)];
   if (prop === "box") xs.push((Math.max(still.arms[0].hand[0], still.arms[1].hand[0]) + 190) * propIn);
   if (prop === "desk") xs.push(-150 * propIn, 210 * propIn);
   if (prop === "megaphone") xs.push((still.head[0] + L.headR + 80) * propIn);
+  if (prop && HAND_PROPS.has(prop)) xs.push((still.arms[1].hand[0] + 90) * propIn);
   const cx = -(Math.min(...xs) + Math.max(...xs)) / 2;
+  // slide inside the slot: x 0–1 maps to the room left beside the figure's widest extent
+  const room = Math.max(0, box.w / k - (Math.max(...xs) - Math.min(...xs)) - 40);
+  const off = (Math.min(1, Math.max(0, pos)) - 0.5) * room;
   const ink = pal.fg;
   const dark = bg === "dark";
   const line = { stroke: ink, strokeWidth: STROKE, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, fill: "none" };
@@ -141,6 +181,36 @@ export const Figure: React.FC<FigureSpec & { box: Rect; bg?: BgKind }> = ({ pose
         </g>
       );
     }
+    const [hx0, hy0] = fArm.hand;
+    if (prop === "book") {
+      // an open book held up in front of the chest, pages towards the face
+      const bx = hx0 + 8;
+      const by = hy0 - 70;
+      return (
+        <g style={s}>
+          <path d={`M ${bx} ${by + 12} L ${bx + 58} ${by} L ${bx + 58} ${by + 84} L ${bx} ${by + 96} Z`} fill={ink} />
+          <path d={`M ${bx} ${by + 12} L ${bx - 50} ${by} L ${bx - 50} ${by + 84} L ${bx} ${by + 96} Z`} fill={ink} opacity={0.85} />
+          <line x1={bx} y1={by + 10} x2={bx} y2={by + 98} stroke={colors.accent} strokeWidth={8} strokeLinecap="round" />
+        </g>
+      );
+    }
+    if (prop === "phone") {
+      return (
+        <g style={s} transform={`rotate(-14 ${hx0} ${hy0})`}>
+          <rect x={hx0 - 6} y={hy0 - 86} width={52} height={96} rx={10} fill={ink} />
+          <rect x={hx0 + 1} y={hy0 - 76} width={38} height={66} rx={5} fill={colors.accent} />
+        </g>
+      );
+    }
+    if (prop === "bag") {
+      // a shopping bag hanging from the hand
+      return (
+        <g style={s}>
+          <path d={`M ${hx0 - 22} ${hy0 + 34} Q ${hx0} ${hy0 - 18} ${hx0 + 22} ${hy0 + 34}`} {...line} strokeWidth={7} />
+          <rect x={hx0 - 50} y={hy0 + 30} width={100} height={104} rx={8} fill={colors.accent} stroke={ink} strokeWidth={7} />
+        </g>
+      );
+    }
     const x0 = Math.max(bArm.hand[0], fArm.hand[0]) + STROKE / 2;
     const top = Math.min(bArm.hand[1], fArm.hand[1]) - 36;
     const w = 180;
@@ -159,7 +229,7 @@ export const Figure: React.FC<FigureSpec & { box: Rect; bg?: BgKind }> = ({ pose
       style={{ position: "absolute", left: box.x, top: box.y, width: box.w, height: box.h, overflow: "visible" }}
       viewBox={`${-box.w / 2 / k} ${FLOOR - box.h / k} ${box.w / k} ${box.h / k}`}
     >
-      <g transform={`${facing === "left" ? "scale(-1,1) " : ""}translate(${cx.toFixed(1)},0)`}>
+      <g transform={`translate(${off.toFixed(1)},0) ${face === "left" ? "scale(-1,1) " : ""}translate(${cx.toFixed(1)},0)`}>
         <ellipse cx={r.hip[0] + 10} cy={6} rx={120} ry={15} fill={dark ? "rgba(0,0,0,0.45)" : "rgba(20,20,10,0.10)"} />
         {prop === "box" ? propEl : null}
         {/* legs, shoes */}
@@ -174,7 +244,7 @@ export const Figure: React.FC<FigureSpec & { box: Rect; bg?: BgKind }> = ({ pose
         <polyline points={`${pt(r.hip)} ${pt(r.top)} ${pt(r.head)}`} {...line} strokeWidth={STROKE + 3} />
         {limb(r.shoulder, fArm.elbow, fArm.hand)}
         {prop === "desk" ? propEl : null}
-        {prop === "megaphone" ? propEl : null}
+        {prop === "megaphone" || (prop && HAND_PROPS.has(prop)) ? propEl : null}
         {/* head: solid, an eye towards the front, an accent cap with its brim forwards */}
         <g transform={`translate(${hx.toFixed(1)},${hy.toFixed(1)}) rotate(${(r.headTilt * 0.6).toFixed(2)})`}>
           <circle r={L.headR} fill={ink} />

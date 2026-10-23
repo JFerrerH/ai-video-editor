@@ -24,7 +24,7 @@ export type Pose = {
   look: number;
 };
 
-export type PropName = "desk" | "megaphone" | "box";
+export type PropName = "desk" | "megaphone" | "box" | "book" | "phone" | "bag";
 
 const P = (p: Partial<Pose>): Pose => ({
   lean: 0, head: 0, bS: -10, bE: 3, fS: 10, fE: -3, bH: -5, bK: 0, fH: 5, fK: 0, lift: 0, look: 0,
@@ -42,14 +42,19 @@ export const POSES = {
   type: P({ bS: 18, bE: 58, fS: 38, fE: 48, lean: 8, head: 10, look: 6 }),
   push: P({ bS: 70, bE: 16, fS: 82, fE: 8, lean: 16, bH: -26, bK: 6, fH: 12, fK: -10 }),
   shout: P({ fS: 75, fE: 105, bS: -40, bE: 80, lean: -8, head: -12, bH: -8, fH: 8 }),
+  read: P({ bS: 28, bE: 78, fS: 36, fE: 70, head: 16, look: 8, lean: 2 }),
+  wait: P({ bS: -30, bE: 72, fS: -24, fE: 66, head: -8, lean: -3, bH: -6, fH: 6 }),
+  reach: P({ fS: 100, fE: -6, bS: -32, bE: 10, lean: 14, head: 4, bH: -16, bK: 6, fH: 14, fK: -4 }),
+  scared: P({ bS: 96, bE: 64, fS: 150, fE: 14, lean: -14, head: -14, lift: 12, bH: -14, bK: 12, fH: 8, fK: 4 }),
+  walk: P({ bS: 16, bE: 10, fS: -16, fE: 14, lean: 5, bH: -18, bK: 12, fH: 18, fK: 0 }),
 } satisfies Record<string, Pose>;
 
 export type PoseName = keyof typeof POSES;
 export const POSE_NAMES = Object.keys(POSES) as PoseName[];
 
 /** The prop a pose brings with it unless the pose entry says otherwise. */
-export const POSE_PROP: Partial<Record<PoseName, PropName>> = { type: "desk", push: "box", shout: "megaphone" };
-export const PROP_NAMES: PropName[] = ["desk", "megaphone", "box"];
+export const POSE_PROP: Partial<Record<PoseName, PropName>> = { type: "desk", push: "box", shout: "megaphone", read: "book" };
+export const PROP_NAMES: PropName[] = ["desk", "megaphone", "box", "book", "phone", "bag"];
 
 export const lerpPose = (a: Pose, b: Pose, t: number): Pose => {
   const out = {} as Pose;

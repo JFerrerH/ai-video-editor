@@ -1,4 +1,5 @@
 import React from "react";
+import { Balance, Calendar, ProductCard, ThoughtBubble } from "./Acting";
 import { Checklist } from "./Checklist";
 import { Counter, FunnelBars, Gauge, Stopwatch, TileGrid } from "./Numbers";
 import { Badge, Stamp } from "./Stamp";
@@ -17,4 +18,8 @@ export const WIDGETS: Record<string, React.FC<any>> = {
   FunnelBars,
   TileGrid,
   Badge,
+  ProductCard,
+  Calendar,
+  Balance,
+  ThoughtBubble,
 };

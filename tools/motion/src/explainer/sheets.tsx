@@ -54,6 +54,10 @@ export const WIDGET_SAMPLES: WidgetSpec[] = [
   { type: "FunnelBars", drop: true, rows: [{ label: "Visits", value: 10000 }, { label: "Signups", value: 1800 }, { label: "Paid", value: 240 }] },
   { type: "TileGrid", count: 100, cols: 10, highlight: 12, label: "12 of 100" },
   { type: "Badge", text: "All green", tone: "ok", slot: "side" },
+  { type: "ProductCard", name: "Headphones", price: "$240", icon: "cart", pressAt: 0.8 },
+  { type: "Calendar", title: "Oct", pages: [{ label: "Today" }, { label: "Tomorrow", at: 0.6 }] },
+  { type: "Balance", left: "Head", right: "Heart", leftIcon: "brain", rightIcon: "heart", tilts: [{ to: "right", at: 0.3 }] },
+  { type: "ThoughtBubble", icon: "brain", slot: "side" },
 ];
 export const WIDGET_SEG = 60; // frames per sample: still at the segment's last frame
 

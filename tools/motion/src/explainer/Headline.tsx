@@ -4,7 +4,7 @@ import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { clamp, easeOut } from "../anim";
 import { useFrameLayout } from "../layout";
 import { BgKind, usePalette } from "../scenes/Bg";
-import { useBrand } from "../theme";
+import { textOn, useBrand } from "../theme";
 
 /** One narration word as tools/storyboard.py injects it: script text (marks stripped), the time it's
  *  spoken (s from the scene start), whether it's `*emphasised*`, and its headline phrase. */
@@ -131,7 +131,7 @@ export const Headline: React.FC<{ words: HeadWord[]; bg?: BgKind; size?: number;
                   display: "inline-flex",
                   columnGap: GAP * s,
                   padding: `0 ${PILL_X}em 0.06em`,
-                  color: "#FFFFFF",
+                  color: textOn(colors.accent, colors.ink),
                   opacity: frame >= start ? 1 : 0,
                   scale: String(interpolate(pop, [0, 1], [0.6, 1])),
                   transformOrigin: "left center",

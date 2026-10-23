@@ -36,7 +36,7 @@ export const BeatScene: React.FC<{
         if (!W) throw new Error(`Unknown widget: ${type}`);
         const r = slots[slot] ?? slots.main;
         // keep each card's drop shadow inside the slot too
-        return <W key={i} {...p} box={{ ...r, h: r.h - CARD_SHADOW }} bg={bg} />;
+        return <W key={i} {...p} slot={slot} box={{ ...r, h: r.h - CARD_SHADOW }} bg={bg} />;
       })}
       {figure ? <Figure {...figure} box={slots[(figure.slot as SlotName) ?? "figure"] ?? slots.figure} bg={bg} /> : null}
       {headline && words.length ? <Headline words={words} bg={bg} size={headlineSize} /> : null}

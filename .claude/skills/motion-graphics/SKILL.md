@@ -76,6 +76,14 @@ while the pipeline loads); Whisper ~0.7 s per clip after a ~4 s model load; a 13
 
 ### Picture
 - **The figure reacts to every beat.** Change pose on the beat's key word (`{"pose": "cheer", "at": "@done"}`).
+- **Act the script out.** Read each line for a verb or an object and stage it: "as the book
+  shows" → `read` with the `book`; "you want to buy it" → walk to a `ProductCard` and `reach`; "wait a
+  day" → `wait`; "fear" → `scared`; "head or heart" → a `Balance` that tips on each word. Aim for 2–3 pose
+  changes in a 4 s beat, each on its word. A badge is the fallback when nothing in the line can be shown.
+- **Sequence, don't stack.** When a beat needs several elements, give the earlier one an `out` on
+  the cue where the next one enters (same slot), so there's still one hero at a time.
+- **Recurring objects carry the story:** the same `ProductCard` can be shown, locked (`lockAt`) and
+  made to vanish (`out`) across consecutive beats.
 - **Numbers move while they're said:** a `Counter` from `"@first-word"` to `"@last-word"` of the number.
 - **A stamp for a negation** ("we *skip it*", "not this"): `Stamp` on the cue, over the thing negated.
 - **Light/dark switch when the mood flips** (problem → answer, before → after). One dark beat per
@@ -105,9 +113,20 @@ Poses (`tools/motion/src/explainer/poses.ts`; check them with `sheet poses`):
 | `type` | working, building | `desk` (desk + laptop) |
 | `push` | effort, shipping, moving something | `box` |
 | `shout` | announcing, marketing | `megaphone` |
+| `read` | a book, a source, studying | `book` |
+| `wait` | patience, "wait a day" (hands behind the back) | |
+| `reach` | wanting, grabbing, "buy it" | |
+| `scared` | fear, a shock, a risk | |
+| `walk` | going somewhere (played automatically while a move runs) | |
 
-Figure: `{pose}` or `{poses: [{pose, at, prop?}]}`, `facing: right|left`, `slot`, `scale`. Pose
-changes spring in within 0.4 s; it sways and breathes while it holds. `prop: null` drops a default prop.
+Props: `desk`, `megaphone`, `box`, plus hand-held `book`, `phone` and `bag` (a shopping bag), which
+follow the front hand. Set any of them on a pose cue: `{"pose": "cheer", "at": "@bought", "prop": "bag"}`.
+
+Figure: `{pose}` or `{poses: [{pose, at, prop?}]}`, `facing: right|left`, `slot`, `scale`, `x`
+(0–1 start position in its slot, default 0.5) and `moves: [{x, at, dur}]` (walks there over `dur`,
+default 0.8 s, facing the way it goes). Pose changes spring in within 0.4 s; it sways and breathes
+while it holds. `prop: null` drops a default prop. With a `side` widget the figure's slot is half the
+band, so moves are short; use them in beats without a side widget for a visible walk.
 
 Widgets (`tools/motion/src/explainer/widgets/`; check them with `sheet widgets --aspect <a>`). All
 take `at` (entrance), `out` (exit), `slot`; times accept cues:
@@ -123,6 +142,10 @@ take `at` (entrance), `out` (exit), `slot`; times accept cues:
 | `FunnelBars` | a funnel, a ranking | `title, rows[{label, value}], drop` (shows % lost) |
 | `TileGrid` | "12 of 100" | `count, cols, highlight, colors, label` |
 | `Badge` | a status, a result | `text, tone: ok\|alert\|neutral, icon` |
+| `ProductCard` | something to buy, a temptation | `name, price, icon, button, pressAt, pressedText, lockAt, lockText` (`out` shrinks it away) |
+| `Calendar` | "tomorrow", a deadline, days passing | `title, pages[{label, at, sub}]` (flips to each page on its cue) |
+| `Balance` | X vs Y, a trade-off, head vs heart | `left, right, leftIcon, rightIcon, tilts[{to: left\|right\|level, at}]` |
+| `ThoughtBubble` | what the figure thinks or wants | `icon` and/or `text`; trails dots towards the figure (`tail` overrides) |
 
 Widget text is never under 28 px; each card fits its slot in every aspect.
 
@@ -282,7 +305,7 @@ caret, for prompts and searches.
 The 9:16 overlay components from short-form-pro (`RingStat`, `PhoneMockup`, `Receipt`…) also work as
 scene types, **only in 9:16**. `check` rejects them in other aspects.
 
-Icons: `LineIcon` kinds in `components/icons.tsx` (speech, bulb, mail, receipt, calendar, search,
+Icons: `LineIcon` kinds in `components/icons.tsx` (book, cart, heart, brain, moon, speech, bulb, mail, receipt, calendar, search,
 person, check, spark, send, chart, cv, plane). Use line icons, not emoji.
 
 ### Adding a primitive

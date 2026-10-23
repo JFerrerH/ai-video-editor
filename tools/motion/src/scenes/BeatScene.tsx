@@ -27,7 +27,8 @@ export const BeatScene: React.FC<{
   widgets?: WidgetSpec[];
 }> = ({ bg = "light", grain = 0, words = [], headline = true, headlineSize, figure, widgets = [] }) => {
   const { aspect, width, height, safe } = useFrameLayout();
-  const slots = slotRects(aspect, width, height, safe, widgets.some((w) => w.slot === "side"));
+  const mainOnly = !figure && widgets.every((w) => (w.slot ?? "main") === "main");
+  const slots = slotRects(aspect, width, height, safe, widgets.some((w) => w.slot === "side"), mainOnly);
   return (
     <AbsoluteFill>
       <GridBg kind={bg} grain={grain} />

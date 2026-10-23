@@ -41,13 +41,19 @@ LANGS: dict[str, tuple[str, str, str]] = {
     "en": ("a", "English (US)", "af_heart"),
     "en-us": ("a", "English (US)", "af_heart"),
     "en-gb": ("b", "English (UK)", "bf_emma"),
-    "es": ("e", "Spanish", "em_alex"),
+    "es": ("e", "Spanish (Latin America)", "em_alex"),
+    "es-419": ("e", "Spanish (Latin America)", "em_alex"),
+    "es-es": ("e", "Spanish (Spain)", "em_alex"),
     "fr": ("f", "French", "ff_siwis"),
     "it": ("i", "Italian", "if_sara"),
     "pt": ("p", "Portuguese (BR)", "pf_dora"),
     "pt-br": ("p", "Portuguese (BR)", "pf_dora"),
     "hi": ("h", "Hindi", "hf_alpha"),
 }
+# espeak-ng dialect for the phonemiser, where Kokoro's default isn't the one wanted. Kokoro's `e`
+# uses espeak `es` (Spain: "doce" → ˈdoθe, "cierran" → θjˈeran); most Spanish-speaking audiences
+# expect seseo, so plain `es` means Latin American Spanish and `es-es` opts into Spain.
+ESPEAK = {"es": "es-419", "es-419": "es-419", "es-es": "es"}
 # Kokoro's Japanese and Mandarin need misaki[ja]/[zh] (pyopenjtalk, unidic, jieba…), which the
 # `gen` group doesn't install; add them there before listing `ja`/`zh` here.
 
@@ -62,6 +68,11 @@ PRESETS = (
 
 TRIM_DB = -50.0  # silence threshold for the edge trim (dBFS, RMS over 10 ms windows)
 TRIM_KEEP_S = 0.04  # silence kept at each end; + one window of slack stays under 50 ms
+# Kokoro reads a whole line in one breath: it drops the pause after ".", "…", ":" and turns a
+# sentence break into a comma. So a line is synthesised one sentence/clause at a time and joined
+# with these silences (s) after the mark that ends each piece. Commas stay inside a piece.
+PAUSE_S = {".": 0.18, "!": 0.18, "?": 0.2, "…": 0.25, ":": 0.12, ";": 0.12}  # short: longer reads as hesitant
+PROSODY = 3  # bump when the chunking/pauses change, so cached clips are re-synthesised
 
 
 def presets_for(lang: str) -> list[str]:
@@ -116,7 +127,8 @@ class Job:
 
     def key(self) -> dict:
         return {"text": self.text, "lang": self.lang, "preset": self.voice,
-                "speed": round(float(self.speed), 3), "model": MODEL_ID}
+                "speed": round(float(self.speed), 3), "model": MODEL_ID, "prosody": PROSODY,
+                "phonemes": ESPEAK.get(self.lang)}
 
 
 def sidecar_path(wav: Path) -> Path:
@@ -160,6 +172,24 @@ def _trim(audio, sr: int):
     return audio[max(0, loud[0] * win - keep): min(len(audio), (loud[-1] + 1) * win + keep)]
 
 
+def pieces(text: str) -> list[tuple[str, float]]:
+    """The line cut after each sentence/clause mark: [(text for TTS, pause after it in s)].
+    "…" is sent as "." (the phonemiser has no ellipsis); the last piece gets no pause."""
+    parts = [p for p in re.split(r"(?<=[.!?…:;])\s+", text.strip()) if p]
+    # a one-word piece ("Ojo:") said alone comes out garbled: keep it with the next, as a comma
+    k = 0
+    while k < len(parts) - 1:
+        if len(parts[k].split()) < 2:
+            parts[k : k + 2] = [parts[k][:-1] + ", " + parts[k + 1]]
+        else:
+            k += 1
+    out = []
+    for k, p in enumerate(parts):
+        mark = p.rstrip("»\"')")[-1:] if p else ""
+        out.append((p.replace("…", "."), 0.0 if k == len(parts) - 1 else PAUSE_S.get(mark, 0.0)))
+    return out
+
+
 def _write_wav(path: Path, audio, sr: int) -> None:
     import numpy as np
 
@@ -193,6 +223,25 @@ def _load_model():
     return model
 
 
+def _use_dialect(model, lang: str) -> None:
+    """Point the language's espeak phonemiser at its dialect (ESPEAK). mlx-audio caches one
+    pipeline per Kokoro language code and builds its EspeakG2P from a fixed table, so the cached
+    pipeline's g2p is replaced (private API: `_get_pipeline`, checked by `voice --list` users)."""
+    variant = ESPEAK.get(lang)
+    if not variant:
+        return
+    import contextlib
+    import io
+
+    from misaki import espeak
+
+    with contextlib.redirect_stdout(io.StringIO()):
+        pipe = model._get_pipeline(LANGS[lang][0])
+    if getattr(pipe.g2p, "_dialect", None) != variant:
+        pipe.g2p = espeak.EspeakG2P(language=variant)
+        pipe.g2p._dialect = variant
+
+
 def synthesize_many(jobs: list[Job], force: bool = False) -> list[dict]:
     """Synthesise every job whose clip is missing or stale, loading the model once.
     Returns one dict per job: {out, cached, duration, seconds}. Validates everything first and
@@ -223,11 +272,16 @@ def synthesize_many(jobs: list[Job], force: bool = False) -> list[dict]:
         import numpy as np
 
         t0 = time.time()
-        with contextlib.redirect_stdout(io.StringIO()):
-            segs = [np.array(r.audio, dtype=np.float32).ravel()
-                    for r in model.generate(text=j.text, voice=j.voice, speed=float(j.speed),
-                                            lang_code=LANGS[j.lang][0])]
-        audio = _trim(np.concatenate(segs), model.sample_rate)
+        sr = model.sample_rate
+        _use_dialect(model, j.lang)
+        chunks = []
+        for text, pause in pieces(j.text):
+            with contextlib.redirect_stdout(io.StringIO()):
+                segs = [np.array(r.audio, dtype=np.float32).ravel()
+                        for r in model.generate(text=text, voice=j.voice, speed=float(j.speed),
+                                                lang_code=LANGS[j.lang][0])]
+            chunks += [_trim(np.concatenate(segs), sr), np.zeros(round(pause * sr), dtype=np.float32)]
+        audio = _trim(np.concatenate(chunks), sr)
         _write_wav(j.out, audio, model.sample_rate)
         took = round(time.time() - t0, 2)
         dur = round(len(audio) / model.sample_rate, 3)

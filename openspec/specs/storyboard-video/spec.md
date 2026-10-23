@@ -44,10 +44,10 @@ compute the same frames.
 ### Requirement: Scene primitives
 
 The system SHALL provide the scene types `TitleCard`, `KineticType`, `StatScene`, `BarChart`,
-`ListScene`, `ImageScene`, `BeatScene`, `NetworkScene`, `IsoOffice` and `EndCard`. Each SHALL lay out
-inside the aspect's safe box, take colours from its background tone (`light`, `dark`, `accent`,
-`none`), and take fonts from the brand. The 9:16 overlay components SHALL be accepted as scene types
-only when the aspect is 9:16.
+`ListScene`, `ImageScene`, `BeatScene`, `NetworkScene`, `IsoOffice`, `EndCard` and `WorldScene`.
+Each SHALL lay out inside the aspect's safe box, take colours from its background tone (`light`,
+`dark`, `accent`, `none`), and take fonts from the brand. The 9:16 overlay components SHALL be
+accepted as scene types only when the aspect is 9:16.
 
 #### Scenario: Overlay component outside 9:16
 
@@ -97,11 +97,18 @@ files.
 
 `stills` SHALL render a frame of each scene once it has settled, plus the midpoint of each transition
 (or the times given with `--at`), and write one labelled contact sheet to `edit/stills/contact.png`.
+Beats of a world run SHALL each get their own settled frame, labelled with the beat's name, even
+though the run renders as one scene.
 
 #### Scenario: Default stills
 
 - **WHEN** `stills` runs on a storyboard with 5 scenes and 4 transitions
 - **THEN** `edit/stills/contact.png` holds 9 labelled frames
+
+#### Scenario: World run beats
+
+- **WHEN** `stills` runs on a storyboard whose only scenes are a world run of 4 beats
+- **THEN** `edit/stills/contact.png` holds 4 frames labelled with the 4 beat names
 
 ### Requirement: Soundtrack and loudness
 
@@ -148,13 +155,22 @@ a `voice` block, `narration` SHALL stay a planning field, as today.
 ### Requirement: Narration-driven duration
 
 A narrated scene whose `duration` is omitted or `"auto"` SHALL last its transition-in time plus its
-clip's duration plus a tail (`tail`, default 0.3 s). Its clip SHALL start when the scene's
-transition-in ends. A fixed `duration` shorter than that SHALL be a `check` ERROR.
+clip's duration plus a tail. Its clip SHALL start when the scene's transition-in ends. A fixed
+`duration` shorter than that SHALL be a `check` ERROR. The tail SHALL be the scene's `tail` when set;
+otherwise, when the next scene is narrated and enters with a cut, it SHALL make the silence between
+the two voices match the voice's own pause for the punctuation that ends the line (the `voice` pause
+for that mark plus 0.12 s; 0.13 s after a comma; 0.08 s with no mark), net of the clip's trailing
+silence; before a transition, a non-narrated scene or the end, it SHALL be 0.3 s.
 
 #### Scenario: Auto duration
 
-- **WHEN** a scene with a hard cut has a 2.10 s clip and no `duration`
+- **WHEN** a scene with a hard cut has a 2.10 s clip and no `duration`, and the next scene is not narrated
 - **THEN** `check` prints a duration of 2.40 s for it
+
+#### Scenario: Full stop between beats
+
+- **WHEN** two narrated scenes are joined by a cut and the first line ends with "."
+- **THEN** the silence between the two voices in the narration track is within 0.1 s of the silence after a "." inside one clip
 
 #### Scenario: Fixed duration too short
 
@@ -216,12 +232,18 @@ cue.
 
 `check` SHALL report an ERROR when the `voice` block's language isn't supported or its preset doesn't
 belong to that language, and when a narrated scene's clip is missing or stale (its sidecar no longer
-matches the text or voice). Each such ERROR SHALL say to run `voice`.
+matches the text or voice). Each such ERROR SHALL say to run `voice`. It SHALL WARN when a narrated
+clip runs faster than 4 words per second.
 
 #### Scenario: Edited line
 
 - **WHEN** a narration line is edited after `voice` ran
 - **THEN** `check` reports an ERROR for that scene saying to run `voice`, and `stills`/`render` refuse to run
+
+#### Scenario: Narration too fast
+
+- **WHEN** a narrated scene's clip holds 13 words in 3.0 s (4.3 words/s, over the 4.0 limit)
+- **THEN** `check` prints a WARN for that scene with its rate and suggests a shorter line
 
 ### Requirement: Network scene
 

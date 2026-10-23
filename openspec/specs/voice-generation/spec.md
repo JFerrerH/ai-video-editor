@@ -25,6 +25,34 @@ cached.
 - **WHEN** the same line is synthesised with speed 1.5 instead of 1.0
 - **THEN** the clip is at least 20% shorter (Kokoro's speed is not linear: 1.2 gives only ~8–10%)
 
+### Requirement: Pauses at punctuation
+
+The system SHALL synthesise a line one sentence or clause at a time, cutting after `.`, `!`, `?`,
+`…`, `:` and `;`, and join the pieces with silences of 0.18, 0.18, 0.2, 0.25, 0.12 and 0.12 s
+respectively. A one-word piece SHALL be joined to the next with a comma instead. `…` SHALL be sent to
+the model as `.`. Commas SHALL stay inside a piece. The cache key SHALL include a prosody version, so
+clips made before a change to this rule are re-synthesised.
+
+#### Scenario: Two sentences
+
+- **WHEN** "Yo no estoy de acuerdo. Te explico por qué." is synthesised
+- **THEN** the clip has a run of silence (below -40 dBFS) of 0.15–0.4 s between the two sentences, and none longer anywhere in it
+
+#### Scenario: One-word lead-in
+
+- **WHEN** "Ojo: si la diferencia es enorme, saca cuentas antes." is synthesised
+- **THEN** it is sent to the model as one piece, "Ojo, si la diferencia es enorme, saca cuentas antes."
+
+### Requirement: Spanish dialect
+
+`es` SHALL be phonemised as Latin American Spanish (seseo) and `es-es` as Spain Spanish; `es-419`
+SHALL be accepted as an alias of `es`. The dialect SHALL be part of the clip's cache key.
+
+#### Scenario: Seseo by default
+
+- **WHEN** "dos mil doce" is phonemised for `es`
+- **THEN** the phonemes contain no `θ` ("doce" → `ˈose`), and for `es-es` they do
+
 ### Requirement: Language and voice validation
 
 The system SHALL reject a language the model does not support, and a voice preset that does not

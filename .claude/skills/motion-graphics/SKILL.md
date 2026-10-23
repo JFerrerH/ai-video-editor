@@ -24,6 +24,7 @@ Read that brand's `brand.md` before planning. Its taste overrides the defaults b
    The aspect comes from the first platform: reels/tiktok/shorts → 9:16, youtube → 16:9, linkedin → 4:5, x → 1:1.
 2. **Brief.** Ask, or infer, four things: the **one sentence** the viewer should remember, the audience,
    the platform (which sets the aspect and length), and the call to action. Without that sentence, the video has no spine.
+   Then write the **story spine** before choosing any graphic (see "Story first" below).
 3. **Beat sheet.** Write one idea per scene, in a table:
    `# | dur | scene type | on screen | narration (if any) | transition | SFX`.
    Present it in plain English and **wait for approval**. This is cheap to change now and expensive later.
@@ -46,9 +47,34 @@ stills, because line breaks change.
 
 ## Narrated explainer
 
-A voice tells a short story; each spoken phrase builds on screen as a headline in time with it; a
-stick figure reacts in every beat; UI-style cards show what the words say. Vector only: no photos,
-no human likeness. One scene type does it all: `BeatScene`.
+A voice tells a short story; each spoken phrase builds on screen as a headline in time with it;
+UI-style cards and recurring objects show what the words say; a stick figure acts where a person
+doing something is the clearest picture. Vector only: no photos, no human likeness. One scene type
+does it all: `BeatScene`.
+
+### Story first
+The story is the product; the figure and the widgets only serve it. Write the spine before any
+graphic, and present it above the beat sheet:
+
+- **Spine:** setup (who, what they believe or want) → tension (what goes wrong, what it costs) →
+  turn (the insight, the evidence) → payoff (what changes, shown happening) → CTA. Every beat
+  moves one of these forward; a beat that only restates the last one is cut.
+- **A concrete case beats an abstract claim.** One person, one situation, real-looking numbers
+  ("three debts: $600.000, $4 M, $18 M") that the viewer can follow from beat to beat.
+- **Show the mechanism.** If the idea works in a certain way (money rolling from one debt to the
+  next, a habit compounding), animate that process with objects and numbers that change, rather than
+  a character reacting to it.
+- **Recurring visual protagonist.** Pick the object that carries the story (a card, a list, a
+  counter, a bar) and keep it across beats so its state changes are the plot.
+- **The figure is optional, per beat.** Use it when a human action is the clearest image (reading
+  the source, giving up, celebrating) and drop it (`figure` omitted) when the object or the number
+  is the hero. As a guide, the figure appears in at most about half the beats. Never add it to fill
+  space. In a beat with no figure and every widget in `main`, `main` takes the whole area under the
+  headline (no empty band); or put a second widget in the `figure` slot.
+- Beat sheet columns for an explainer: `# | story role | narration | hero (object/widget) | figure (or —) | cue`.
+- **When the idea has a physical metaphor** (a snowball, a ladder, a leak, a road), tell it in a
+  **world** instead of beats with cards: see "World scenes" below. Prefer a world whenever the story
+  is about something changing over time (growing, breaking, piling up, moving forward).
 
 **Setup, once:** `uv sync --group gen` (Kokoro-82M through `mlx-audio`, Apache-2.0 weights, fully
 local; ~0.37 GB: 330 MB weights + ~0.5 MB per voice used, the spaCy English model and the bundled
@@ -73,9 +99,38 @@ while the pipeline loads); Whisper ~0.7 s per clip after a ~4 s model load; a 13
 - **`voice.pronounce`** respells names the voice gets wrong (`{"SaaS": "sass"}`); the headline keeps
   the script's spelling. List every substitution in `project.md`.
 - Numbers: write them the way they should be said ("twelve hundred"); the widget shows the digits.
+- **Punctuation marks the pacing, briefly.** `voice` synthesises each sentence or clause on its own
+  and joins them with short silences: 0.18 s after `.` `!`, 0.2 s after `?`, 0.25 s after `…`,
+  0.12 s after `:` `;`. Keep them short: longer pauses (0.3–0.45 s) were measured and rejected as
+  hesitant and hard to follow. `|` only breaks the headline (no pause); a comma is a breath inside a
+  piece; a one-word piece ("Ojo:") is kept with the next one, as a comma.
+- **Questions don't rise.** Kokoro ends a yes/no question with the same falling pitch as a
+  statement (measured), so "¿Tienes claro…?" sounds like an assertion. Write it as a statement or
+  a condition ("Si no tienes claro cuánto debes…, comenta…"); wh-questions ("¿Por qué funciona?")
+  fall naturally and are fine.
+- **Keep the voice at `speed` 1.0.** Slowing it (0.85) made a reel drag and words blur into each
+  other; aim for ~3–3.5 words/s and shorten lines instead. `check` warns above 4 words/s.
+- **Spanish is Latin American by default** (`lang: "es"` phonemises with espeak `es-419`: seseo,
+  "doce" → /ˈdose/, "motivación" → /motiβaˈsjon/). Kokoro's own default is Spain (/ˈdoθe/), which
+  sounds odd to most audiences; use `lang: "es-es"` only for Spain.
+- **Years and long numbers stumble** ("dos mil… doce": a gap inside the number). Keep them on
+  screen and out of the voice unless the number is the point.
+- **No foreign names or titles in the narration.** A respelled English title ("Journal of
+  Marketing Research" for a Spanish voice) is read word by word with gaps; say it in the voice's
+  language ("un estudio publicado en 2012") and put the exact name on screen and in the sources.
+- **Line ends are punctuation too.** End each beat's line with the mark the sentence needs (`,` when
+  it continues into the next beat), because the pause between beats is taken from it.
+- **Measure the pauses** (you can't listen): every silence ≥ 60 ms in `audio/narration_track.wav`
+  (decode with ffmpeg: it's 24-bit) next to the script's punctuation. Same mark, same pause; a long
+  gap with no mark is the voice hesitating, so rephrase that spot.
+- **Verify intelligibility**, since you can't listen: transcribe each clip with the local Whisper
+  and compare to the script. Missing words mean garbled audio; missing full stops mean the pauses
+  are lost.
 
 ### Picture
-- **The figure reacts to every beat.** Change pose on the beat's key word (`{"pose": "cheer", "at": "@done"}`).
+- **The story's object is the hero; the figure is a supporting actor.** When the figure is in a beat,
+  it changes pose on the beat's key word (`{"pose": "cheer", "at": "@done"}`); a figure standing
+  still beside a widget adds nothing, so drop it.
 - **Act the script out.** Read each line for a verb or an object and stage it: "as the book
   shows" → `read` with the `book`; "you want to buy it" → walk to a `ProductCard` and `reach`; "wait a
   day" → `wait`; "fear" → `scared`; "head or heart" → a `Balance` that tips on each word. Aim for 2–3 pose
@@ -148,6 +203,73 @@ take `at` (entrance), `out` (exit), `slot`; times accept cues:
 | `ThoughtBubble` | what the figure thinks or wants | `icon` and/or `text`; trails dots towards the figure (`tail` overrides) |
 
 Widget text is never under 28 px; each card fits its slot in every aspect.
+
+## World scenes
+
+One continuous world seen through a moving camera: the metaphor's objects move, collide, break and
+grow while the voice tells the story. This is the default for a narrated explainer whose idea has a
+physical image; `BeatScene` + widgets is for lists of facts, not for a story.
+
+**The run rule.** Each narrated line is still its own scene (`"type": "WorldScene"`, its own
+`narration`, cues and headline phrase), with `"props": {"world": "<id>", "actions": [...]}`.
+Consecutive `WorldScene`s naming the same world render as **one** continuous scene: time, camera and
+every object's state carry over (a broken block stays broken). No `transition` inside a run (`check`
+errors); a run ends at the next non-world scene, which may have a transition (e.g. a fade to the end card).
+
+**The world** lives at the storyboard top level: `"worlds": {"<id>": {"terrain": {"kind": "snow",
+"slope": 9}, "objects": [...]}}`. World units: `x` along the ground (0 = start, ~1000 units ≈ one
+screen width at zoom 1), ground at y = 0. Objects with `"hidden": true` appear on `show` (with a spring).
+
+| kind | is | fields |
+|---|---|---|
+| `block` | a labelled obstacle (a debt, a task, a wall) that can break | `x, w, h, label, tag?, tone: ice\|alert, burst?` (pill text when it breaks) |
+| `ball` | the thing that rolls, gathers and grows | `x, r, grow` (×radius per block absorbed, default 1.45), `value, prefix, suffix, locale` (pill over it) |
+| `figure` | the stick figure, standing upright on the slope | `x, pose, facing, scale` |
+| `sign` | a post planted in the ground (the CTA) | `x, text, sub` |
+| `prop` | `paper`, `towel`, `dumbbell`, `calculator` | `x, item, size` |
+| `callout` | a speech bubble pointing at an object | `text, target, dx, dy` |
+
+Actions: `{"at": <s or "@cue">, "target": <id | "sky" | "camera">, "do": <action>, ...}`.
+
+| do | on | does |
+|---|---|---|
+| `roll` | ball | rolls to `to` (an x, or a block id) arriving at `arrive` (a cue: land the impact on the word) or after `dur`. Reaching a block **breaks** it: shards burst, fly into the ball, the ball grows, a lime ring + burst pill, camera punch + shake; then it rolls on through |
+| `value` | ball | counts the pill up to `v` over 0.6 s; `chip` ("+$80.000") pops 0.5 s before and flies into the pill |
+| `grow` | ball | grows by `by` |
+| `break` | block | breaks without a ball (`into` a ball id to absorb) |
+| `push` | block | barely moves (`dx`, `dur`) with a shudder: effort that gets nowhere |
+| `pile` | block | snow piles on top (`amount`, `dur`): time passing on something stuck |
+| `highlight` | block | pulsing red outline (until `until`) |
+| `pose` | figure | `pose`, `prop` (same names as `BeatScene`) |
+| `walk` | figure | walks to `x` (walk cycle, faces the way it goes) |
+| `throw` | figure | throws prop `item` on an arc to `to` ("tirar la toalla") |
+| `fall` | prop | falls from the sky to `to` (a source, a letter, an idea arriving) |
+| `hold` | prop | held over the head of figure `on` (lifting a weight) |
+| `show` / `hide` | any | appear (spring) / vanish |
+| `timelapse` | sky | sun and moon cycle once per step, a pill shows each label (`steps`, `dur`) |
+| `camera` | camera | `follow` an object id or hold `x`, `zoom` (default 1.3), eased over `dur` |
+
+Camera craft: frame the hero of each line (`follow` the block being talked about, the figure when
+it acts, the ball while it rolls); pan with `x` keyframes to reveal a layout ("three debts":
+show each block as the camera reaches it); pull back (`zoom` 0.85) for overviews, push in (1.3–1.4)
+for a moment. A followed ball is framed ahead of its motion and the camera pulls back as it grows.
+Change the picture every 2–3 s: a camera move, a pose, an object appearing, an impact.
+
+```json
+"worlds": {"slope": {"terrain": {"kind": "snow"}, "objects": [
+  {"id": "ball", "kind": "ball", "x": 380, "r": 55, "value": 200000, "prefix": "$", "locale": "es-CO"},
+  {"id": "small", "kind": "block", "x": 900, "w": 240, "h": 210, "tag": "Card", "label": "$600"},
+  {"id": "fig", "kind": "figure", "x": 250}]}},
+"scenes": [{"name": "push", "type": "WorldScene", "bg": "dark", "narration": "Start with the smallest. | You *break* it.",
+  "props": {"world": "slope", "actions": [
+    {"at": "@Start", "target": "fig", "do": "pose", "pose": "push", "prop": null},
+    {"at": "@Start", "target": "camera", "do": "camera", "follow": "ball"},
+    {"at": "@smallest", "target": "ball", "do": "roll", "to": "small", "arrive": "@break"}]},
+  "sfx": [["impact", "@break", -14], ["sparkle", "@break+0.35", -18]]}]
+```
+
+Engine: `tools/motion/src/world/model.ts` (state per frame, pure functions of time) and
+`scenes/WorldScene.tsx` (layers). New terrains or object kinds go there, mirrored in `check`.
 
 ## Craft rules
 
@@ -251,6 +373,10 @@ every cut is the clearest amateur tell. A transition lasts 0.4–0.65 s and over
 
 ### 10. Anti-patterns (if the video does this, fix it)
 
+- **Animated bullet points:** every beat is the headline plus one card (list, gauge, counter,
+  badge) that pops in, and each cut resets the frame. That is a slide deck, not a story. Find the
+  visual metaphor, build the world it lives in, and let the same objects move, collide, grow and
+  break across beats while the camera travels. Cards are at most an occasional insert for a number.
 - Everything enters at once, or everything bounces.
 - Text arrives and leaves before it can be read.
 - A different transition on every cut, or slides in random directions.
@@ -282,7 +408,9 @@ every cut is the clearest amateur tell. A transition lasts 0.4–0.65 s and over
   (it draws no background there; for a lower third, use a transparent `TitleCard` or `KineticType`).
 - `ImageScene` defaults to `bg: "none"`. Every other scene defaults to `light`.
 - With a `voice` block, each scene's `narration` is spoken (or `narration_audio` is used as a recorded
-  clip), and `duration` may be omitted or `"auto"`: transition-in + clip + `tail` (0.3 s). `speed`
+  clip), and `duration` may be omitted or `"auto"`: transition-in + clip + tail. Between two
+  narrated beats joined by a cut the tail follows the line's last mark, so a full stop sounds the same
+  across beats as inside one (≈0.35 s; `:` ≈0.22, `,` ≈0.2); 0.3 s before a transition or silence. `speed`
   per scene overrides the voice's. Without it, `narration` is a planning note, as before.
   Use one voice source: `audio.voice` or narrated scenes, not both.
 
@@ -302,6 +430,7 @@ All of them work in 9:16, 16:9, 1:1 and 4:5. They lay out inside the aspect's sa
 | `BeatScene` | a narrated explainer beat (see "Narrated explainer") | `bg, figure, widgets[], headline, headlineSize` |
 | `NetworkScene` | integrations, routing, "everything through one hub" | `kicker, title, emphasis, nodes[{id, label, color?, icon?}], hub{label?, icon?, color?}, chaos, connect, chips[{node, text, at}], messages[{from, to, at, lock?}], log[{text, at}]` |
 | `IsoOffice` | a team or agents visibly doing the work; handoffs; "watch it again" | `kicker, title, emphasis, cols, rows, desks[{id, u, v}], agents[{id, label, color?, at?, pos}], walks[{agent, to, at, dur?, carry?}], bubbles[{agent, text\|icon, at, until?}], replay{at, dur, to?}` |
+| `WorldScene` | a story told by objects in one continuous world (see "World scenes") | `world` (id from top-level `worlds`), `actions[]`, `burst` |
 | `EndCard` | closing card with the brand's logo and a call to action | `logo` (SVG/PNG path), `logoHeight, title, tagline, button, url` |
 
 `KineticType` styles: `rise` is masked word-by-word, typeset and editorial (the default). `pop`
@@ -372,5 +501,5 @@ Add a row to the table above, then check stills in 9:16 **and** 16:9.
 - Clips live in `edit/audio/narration/<scene>.wav`, shared by every storyboard in that edit dir. An
   aspect copy (`storyboard_16x9.json`) reuses them; a **language copy needs its own project**.
   Set `locale` on `Counter`/`FunnelBars` to match (`"es-ES"`: 12.000, and no separator under 10 000).
-- Languages: en (US), en-gb, es, fr, it, pt-br, hi (`uv run tools/gen/voice.py --list`). Spanish has
+- Languages: en (US), en-gb, es, fr, it, pt-br, hi (`uv run tools/gen/voice.py --list`). Spanish (`es` = Latin America, `es-es` = Spain) has
   three voices (`em_alex`, the default, `ef_dora`, and `em_santa`, a novelty voice); for a better Spanish read, record and use `narration_audio`.

@@ -42,7 +42,7 @@ vendor/video-use/         third-party skill (cloned by scripts/setup.sh, don't e
 | B-roll from the brand's own website / app | `uv run tools/site_capture.py <url> -o <edit>/downloads/site` (phone viewport + full-page PNG) |
 | Sound effects (license-free) | `uv run tools/sfx_synth.py` → `assets/sfx/synth/*.wav` + `attack.json` |
 | **Video from scratch, no footage** (explainer, kinetic type, data story, promo, intro/outro) | **`motion-graphics` skill**: `new_project.py --type generated` → `edit/storyboard.json` → `tools/storyboard.py check / stills / render`. Any aspect (9:16, 16:9, 1:1, 4:5). Promos animate the mechanism with `NetworkScene` (hub, messages), `IsoOffice` (agents at work, replay) and close on `EndCard`; screenshots only as brief proof |
-| **Narrated explainer** (a voice tells it; headline builds with the voice; stick figure + UI cards) | **`motion-graphics` skill**, "Narrated explainer": `new_project.py --type generated --explainer` → `storyboard.py voice` (local TTS + word times) → `check / sheet / stills / render` |
+| **Narrated explainer** (story first: a voice tells it; headline builds with the voice; a metaphor-driven story plays in one continuous `WorldScene` world: objects roll, break and grow under a moving camera; UI cards only for lists of facts) | **`motion-graphics` skill**, "Narrated explainer": `new_project.py --type generated --explainer` → `storyboard.py voice` (local TTS + word times) → `check / sheet / stills / render` |
 | Voiceover for a script line (local, free) | `uv run tools/gen/voice.py "<line>" -o out.wav --lang <code>` (Kokoro-82M, Apache-2.0; `--list` for voices) |
 | Motion craft (timing, easing, transitions, typography) for any graphics, including overlays on footage | **`motion-graphics` skill** (craft rules); Remotion API questions → `remotion-best-practices` |
 | Animated captions, Remotion API details | **Remotion skills** (`remotion-best-practices` covers all of them) |
@@ -60,7 +60,7 @@ Run video-use helpers from the repo root: `uv run vendor/video-use/helpers/<help
 ## Workflow rules
 
 0. **Project first.** Every request gets a `footage/<project>/` with `project.md` stating its brand, type, platforms and language (`tools/new_project.py`).
-1. **Inventory first.** `ffprobe` every source (codec, fps, resolution, audio tracks, duration) before planning. (From-scratch projects: brief and beat sheet first.)
+1. **Inventory first.** `ffprobe` every source (codec, fps, resolution, audio tracks, duration) before planning. (From-scratch projects: brief, story spine, then beat sheet. Storytelling leads; graphics and the stick figure serve it and are never the format itself.)
 2. **Plan, then cut.** Propose the edit in plain English and wait for approval before rendering. This rule comes from video-use.
 3. **Never touch originals.** Write to `footage/<project>/edit/`, and copy finals to `exports/`.
 4. **Preview at 720p** (`render.py --preview`) and render full quality only after approval.

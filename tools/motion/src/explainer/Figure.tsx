@@ -110,14 +110,17 @@ const moveAt = (moves: MoveCue[], x0: number, frame: number, fps: number) => {
   return { x, walking };
 };
 
-export const Figure: React.FC<FigureSpec & { box: Rect; bg?: BgKind }> = ({ pose, poses, facing = "right", scale = 1, phase = 0, x: x0 = 0.5, moves = [], box, bg }) => {
+/** `walk` overrides the slot moves: a caller that places the figure itself (a world scene) passes
+ *  the walk cycle's weight, time and direction, and the figure stays at `x`. */
+export type WalkState = { w: number; since: number; dir: number } | null;
+export const Figure: React.FC<FigureSpec & { box: Rect; bg?: BgKind; walk?: WalkState }> = ({ pose, poses, facing = "right", scale = 1, phase = 0, x: x0 = 0.5, moves = [], box, bg, walk }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { colors } = useBrand();
   const pal = usePalette(bg);
   const cues: PoseCue[] = poses?.length ? [...poses].sort((a, b) => (a.at ?? 0) - (b.at ?? 0)) : [{ pose: pose ?? "stand" }];
   const { pose: held, cur, p } = poseAt(cues, frame, fps);
-  const { x: pos, walking } = moveAt(moves, x0, frame, fps);
+  const { x: pos, walking } = walk !== undefined ? { x: x0, walking: walk } : moveAt(moves, x0, frame, fps);
   // while travelling, a walk cycle is layered over the held pose (blended in/out at the ends)
   let base = held;
   if (walking) {

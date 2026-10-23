@@ -7,6 +7,7 @@ import { IsoOffice } from "./IsoOffice";
 import { KineticType } from "./KineticType";
 import { ListScene } from "./ListScene";
 import { NetworkScene } from "./NetworkScene";
+import { WorldScene } from "./WorldScene";
 import { StatScene } from "./StatScene";
 import { TitleCard } from "./TitleCard";
 
@@ -24,4 +25,5 @@ export const SCENES: Record<string, React.FC<any>> = {
   NetworkScene,
   IsoOffice,
   EndCard,
+  WorldScene,
 };

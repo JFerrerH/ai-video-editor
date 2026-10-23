@@ -11,15 +11,21 @@ export const HEADLINE_H: Record<Aspect, number> = { "9:16": 220, "16:9": 200, "1
  * Where a BeatScene's slots sit, inside the safe box under the headline.
  *  9:16, 1:1, 4:5: stacked. `main` across the middle, `figure` bottom-centre; with a `side`
  *    widget, `side` takes the left of the bottom band and the figure moves to its right.
+ *  `mainOnly` (a beat with no figure and nothing in `side`/`figure`): `main` takes the whole area,
+ *    so a figure-less beat has no empty band.
  *  16:9: `main` on the left two-thirds, `figure` on the right; `side` takes the top of the right
  *    column and the figure stands under it.
  */
-export const slotRects = (aspect: Aspect, width: number, height: number, safe: Safe, sideUsed: boolean): Record<SlotName, Rect> => {
+export const slotRects = (aspect: Aspect, width: number, height: number, safe: Safe, sideUsed: boolean, mainOnly = false): Record<SlotName, Rect> => {
   const x0 = safe.left;
   const w = width - safe.left - safe.right;
   const y0 = safe.top + HEADLINE_H[aspect];
   const h = height - safe.bottom - y0;
   const gap = 32;
+  if (mainOnly) {
+    const all = { x: x0, y: y0, w, h };
+    return { main: all, side: all, figure: all };
+  }
   if (aspect === "16:9") {
     const mw = Math.round(w * 0.62);
     const col = { x: x0 + mw + gap, y: y0, w: w - mw - gap, h };

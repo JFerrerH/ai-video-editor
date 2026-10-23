@@ -70,9 +70,30 @@ TEXT_KEYS = {"text", "title", "kicker", "sub", "label"}  # on-screen text, for t
 NARRATION_WPS = 2.6  # ≈155 wpm, a natural voiceover pace
 READ_WPS = 4.0  # on-screen words a viewer reads per second (display text), after READ_SETTLE s to find it
 READ_SETTLE = 0.8
-TAIL_S = 0.3  # default breathing room after a narration clip, before the scene ends
+TAIL_S = 0.3  # breathing room after the last narration clip before a transition or a silent scene
+PAUSE_OVERHEAD_S = 0.12  # a piece's own edge silences: a 0.18 s `.` pause measures ~0.30 s inside a clip
 # on-screen text keys: never read as `@word` cues (a subtitle can say "@handle")
 DISPLAY_KEYS = TEXT_KEYS | {"emphasis", "prefix", "suffix", "handle", "name", "icon", "words"}
+
+
+def _trailing_silence(clip: Path, db: float = -35.0) -> float:
+    """Seconds of near-silence at the end of a mono 16-bit WAV (after the last 10 ms window above `db`)."""
+    import wave
+
+    import numpy as np
+
+    try:
+        with wave.open(str(clip)) as w:
+            sr, a = w.getframerate(), np.frombuffer(w.readframes(w.getnframes()), dtype="<i2").astype(np.float64) / 32768
+    except (OSError, wave.Error):
+        return 0.0
+    win = sr // 100
+    n = len(a) // win
+    if n == 0:
+        return 0.0
+    rms = 20 * np.log10(np.sqrt((a[: n * win].reshape(n, win) ** 2).mean(1)) + 1e-9)
+    loud = np.nonzero(rms > db)[0]
+    return 0.0 if not len(loud) else (n - 1 - loud[-1]) * win / sr
 
 
 def _registry(path: Path, block: str) -> set[str]:
@@ -92,6 +113,15 @@ OVERLAY_TYPES = _registry(MOTION / "src/Overlay.tsx", r"export const REGISTRY")
 _icons = (MOTION / "src/components/icons.tsx").read_text()
 ICON_NAMES = re.findall(r'\|\s*"(\w+)"', re.search(r"export type IconKind\s*=([^;]*);", _icons).group(1))
 ICON_KEYS = ("icon", "leftIcon", "rightIcon")
+HEADLINE_SCENES = {"BeatScene", "WorldScene"}  # scenes that draw the voice-built headline
+_world = (MOTION / "src/world/model.ts").read_text()
+WORLD_KINDS = re.findall(r'"(\w+)"', re.search(r"WORLD_KINDS = \[([^\]]*)\]", _world).group(1))
+WORLD_ACTIONS = {a: (WORLD_KINDS if k.strip() == "WORLD_KINDS" else re.findall(r'"(\w+)"', k))
+                 for a, k in re.findall(r"^  (\w+): (WORLD_KINDS|\[[^\]]*\])", _world.split("export const ACTIONS")[1].split("};")[0], re.M)}
+WORLD_FIELDS = {"block": ("w", "h", "label"), "sign": ("text",), "prop": ("item",), "callout": ("text", "target")}
+PROP_ITEMS = re.findall(r'"(\w+)"', re.search(r"export type PropItem = ([^;]*);", _world).group(1))
+WORLD_TIME_KEYS = ("at", "arrive", "until")  # action fields on the run's clock (shifted when beats merge)
+VOICE_MAX_WPS = 4.0  # above this a synthetic voice gets hard to follow
 MOVE_S = 0.8  # default figure move time (Figure.tsx MOVE_S)
 OFFICE_GRID = (8, 6)  # IsoOffice default floor, cols x rows (IsoOffice.tsx)
 
@@ -180,6 +210,22 @@ class Story:
                      "aligned": n, "words": timed}, indent=1, ensure_ascii=False))
                 print(f"  words: {clip.name} {n}/{len(timed)} aligned")
 
+    def _tail(self, i: int, s: dict, clip: Path) -> float:
+        """Silence after a narrated scene's clip. An explicit `tail` wins. Otherwise, when the next
+        scene is narrated and cut straight in, the gap between the two voices matches the pause the
+        voice makes for the same punctuation inside a clip (`.` ≈ 0.3 s, `,` ≈ 0.13 s), so a full
+        stop sounds the same within a beat and across beats. Before a transition or a silent scene,
+        TAIL_S."""
+        if "tail" in s:
+            return float(s["tail"])
+        nxt = self.scenes[i + 1] if i + 1 < len(self.scenes) else None
+        if not nxt or nxt.get("transition") or self.clip_for(i + 1, nxt) is None:
+            return TAIL_S
+        text = re.sub(r"[*|\s]+$", "", s.get("narration", ""))
+        mark = text[-1:] if text and not text[-1].isalnum() else ""
+        gap = V.PAUSE_S.get(mark, 0.0) + PAUSE_OVERHEAD_S if mark in V.PAUSE_S else (0.13 if mark == "," else 0.08)
+        return max(0.0, gap - _trailing_silence(clip))
+
     def resolve(self) -> None:
         """Fill auto durations from narration clips, record each narrated scene's voice start, and
         resolve `@word` cues in props and `sfx` to seconds. Problems go to `self.narr_errors`."""
@@ -221,7 +267,7 @@ class Story:
                     errs.append(f"{name}: word times missing or stale; run `voice`")
             d = s.get("duration")
             if info:
-                need = tf + math.ceil((info["duration"] + float(s.get("tail", TAIL_S))) * self.fps - 1e-6)
+                need = tf + math.ceil((info["duration"] + self._tail(i, s, clip)) * self.fps - 1e-6)
                 if d in (None, "auto"):
                     s["duration"] = need / self.fps
                 elif self._frames(float(d)) < need:
@@ -363,12 +409,17 @@ class Story:
                 warns.append(f"{name}: narration ({narr} words) needs ~{narr / NARRATION_WPS:.1f}s, scene is {dur:.1f}s")
             if dur > 7:
                 warns.append(f"{name}: {dur:.1f}s on one scene. Hold attention with a beat inside it, or split it")
+            if (nv := self.narrated.get(i)) and nv["duration"] > 0.8 and len(nv["words"]) / nv["duration"] > VOICE_MAX_WPS:
+                warns.append(f"{name}: narration runs at {len(nv['words']) / nv['duration']:.1f} words/s (clear is ≤ {VOICE_MAX_WPS}); "
+                             "shorten the line (slowing the voice below 1.0 makes it drag)")
             if t == "BeatScene":
                 errors += self._check_beat(name, s.get("props", {}))
             elif t == "NetworkScene":
                 errors += self._check_network(name, s.get("props", {}))
             elif t == "IsoOffice":
                 errors += self._check_office(name, s.get("props", {}), dur)
+            elif t == "WorldScene":
+                errors += self._check_world_beat(name, s.get("props", {}))
             for a in self._assets(s.get("props", {})):
                 if not self._resolve(a):
                     errors.append(f"{name}: asset not found: {a} (relative to edit/ or repo root)")
@@ -376,6 +427,9 @@ class Story:
             nv = self.narrated.get(i)
             vo = f"{start + nv['voiceStart']:6.2f} {nv['aligned']:>2}/{len(nv['words']):<2}" if nv else f"{'':6} {'':5}"
             rows.append(f"{i:>2} {start:6.2f} {dur:5.2f}  {t:<13} {s.get('bg', '-'):<7} {tr:<9} {vo} {name}")
+        w_err, w_warn = self._check_worlds()
+        errors += w_err
+        warns += w_warn
         for e in self.sb.get("events", []):
             if e["type"] not in SCENE_TYPES | OVERLAY_TYPES:
                 errors.append(f"event {e['type']!r} at {e['start']}: unknown type")
@@ -461,6 +515,114 @@ class Story:
             if fig.get("slot", "figure") not in SLOT_NAMES:
                 errs.append(f"{name}: unknown figure slot {fig.get('slot')!r} (slots: {', '.join(SLOT_NAMES)})")
         return errs
+
+    def world_runs(self) -> list[list[int]]:
+        """Indices of consecutive WorldScene beats sharing a `world`; each run renders as one scene."""
+        runs: list[list[int]] = []
+        for i, s in enumerate(self.scenes):
+            wid = s.get("props", {}).get("world") if s["type"] == "WorldScene" else None
+            if wid is not None and runs and self.scenes[runs[-1][-1]].get("props", {}).get("world") == wid and runs[-1][-1] == i - 1:
+                runs[-1].append(i)
+            elif wid is not None:
+                runs.append([i])
+        return runs
+
+    def _check_worlds(self) -> tuple[list[str], list[str]]:
+        """World definitions (kinds, ids, fields), transitions inside runs, unused worlds."""
+        errs, warns = [], []
+        for wid, wd in self.sb.get("worlds", {}).items():
+            ids = [o.get("id") for o in wd.get("objects", [])]
+            for d in sorted({i for i in ids if ids.count(i) > 1}, key=str):
+                errs.append(f"world {wid}: duplicate object id {d!r}")
+            for o in wd.get("objects", []):
+                oid, kind = o.get("id"), o.get("kind")
+                if kind not in WORLD_KINDS:
+                    errs.append(f"world {wid}: object {oid!r} has unknown kind {kind!r} (kinds: {', '.join(WORLD_KINDS)})")
+                    continue
+                if kind != "callout" and not isinstance(o.get("x"), (int, float)):
+                    errs.append(f"world {wid}: {kind} {oid!r} needs a numeric `x`")
+                for f in WORLD_FIELDS.get(kind, ()):
+                    if f not in o:
+                        errs.append(f"world {wid}: {kind} {oid!r} needs `{f}`")
+                if kind == "prop" and o.get("item") not in PROP_ITEMS:
+                    errs.append(f"world {wid}: prop {oid!r} has unknown item {o.get('item')!r} (items: {', '.join(PROP_ITEMS)})")
+                if kind == "callout" and o.get("target") not in ids:
+                    errs.append(f"world {wid}: callout {oid!r} points at unknown object {o.get('target')!r}")
+                if kind == "figure" and o.get("pose", "stand") not in POSE_NAMES:
+                    errs.append(f"world {wid}: figure {oid!r} has unknown pose {o.get('pose')!r}")
+            if (k := (wd.get("terrain") or {}).get("kind", "snow")) != "snow":
+                errs.append(f"world {wid}: unknown terrain {k!r} (terrains: snow)")
+        used = {self.scenes[r[0]].get("props", {}).get("world") for r in self.world_runs()}
+        for wid in self.sb.get("worlds", {}):
+            if wid not in used:
+                warns.append(f"world {wid!r} is defined but no WorldScene uses it")
+        for run in self.world_runs():
+            for i in run[1:]:
+                if self.scenes[i].get("transition"):
+                    errs.append(f"{self.scenes[i].get('name', f'#{i}')}: transition inside world run "
+                                f"{self.scenes[run[0]]['props'].get('world')!r}; beats of one world are continuous")
+        return errs, warns
+
+    def _check_world_beat(self, name: str, props: dict) -> list[str]:
+        """WorldScene props: a known world; actions with known targets, verbs that fit the target's kind."""
+        wid = props.get("world")
+        wd = self.sb.get("worlds", {}).get(wid)
+        if wd is None:
+            return [f"{name}: unknown world {wid!r} (worlds: {', '.join(self.sb.get('worlds', {})) or 'none'})"]
+        kinds = {o.get("id"): o.get("kind") for o in wd.get("objects", [])} | {"sky": "sky", "camera": "camera"}
+        errs = []
+        for a in props.get("actions", []):
+            tgt, verb = a.get("target"), a.get("do")
+            what = f"action {verb!r} on {tgt!r}"
+            if tgt not in kinds:
+                errs.append(f"{name}: {what}: unknown target {tgt!r} (objects: {', '.join(k for k in kinds if k not in ('sky', 'camera'))})")
+                continue
+            if verb not in WORLD_ACTIONS:
+                errs.append(f"{name}: {what}: unknown action (actions: {', '.join(WORLD_ACTIONS)})")
+                continue
+            if kinds[tgt] not in WORLD_ACTIONS[verb]:
+                errs.append(f"{name}: {what}: {verb!r} applies to {', '.join(WORLD_ACTIONS[verb])}, not a {kinds[tgt]}")
+            if verb == "roll" and isinstance(a.get("to"), str) and kinds.get(a["to"]) != "block":
+                errs.append(f"{name}: {what}: `to` {a['to']!r} is not a block")
+            if verb == "throw" and kinds.get(a.get("item")) != "prop":
+                errs.append(f"{name}: {what}: `item` {a.get('item')!r} is not a prop")
+            if verb == "hold" and kinds.get(a.get("on")) != "figure":
+                errs.append(f"{name}: {what}: `on` {a.get('on')!r} is not a figure")
+            if verb == "camera" and a.get("follow") is not None and a["follow"] not in kinds:
+                errs.append(f"{name}: {what}: follows unknown object {a['follow']!r}")
+            if verb == "pose" and a.get("pose") not in POSE_NAMES:
+                errs.append(f"{name}: {what}: unknown pose {a.get('pose')!r} (poses: {', '.join(POSE_NAMES)})")
+            if verb == "pose" and a.get("prop") not in (None, *PROP_NAMES):
+                errs.append(f"{name}: {what}: unknown prop {a.get('prop')!r} (props: {', '.join(PROP_NAMES)})")
+        return errs
+
+    def _merge_worlds(self, scenes: list[dict]) -> list[dict]:
+        """Render props: each world run becomes one scene on one clock (durations summed, action
+        times and headline words shifted by each beat's offset), with the world definition inlined."""
+        runs = {r[0]: r for r in self.world_runs()}
+        out, i = [], 0
+        while i < len(scenes):
+            if i not in runs:
+                out.append(scenes[i])
+                i += 1
+                continue
+            run = runs[i]
+            first = scenes[i]
+            acts, words, beats, off = [], [], [], 0.0
+            for j in run:
+                p = scenes[j].get("props", {})
+                beats.append({"name": scenes[j].get("name", f"#{j}"), "start": round(off, 3)})
+                for a in p.get("actions", []):
+                    acts.append({k: (round(v + off, 3) if k in WORLD_TIME_KEYS and isinstance(v, (int, float)) else v) for k, v in a.items()})
+                base = max((w["phrase"] for w in words), default=-1) + 1  # phrases never span two beats
+                words += [{**w, "t": round(w["t"] + off, 3), "phrase": w["phrase"] + base} for w in p.get("words", [])]
+                off += float(scenes[j]["duration"])
+            merged = {**first, "duration": round(off, 4), "name": first.get("name", "world"),
+                      "props": {**{k: v for k, v in first.get("props", {}).items() if k not in ("actions", "words")},
+                                "world": self.sb["worlds"][first["props"]["world"]], "actions": acts, "words": words, "beats": beats}}
+            out.append(merged)
+            i = run[-1] + 1
+        return out
 
     def _check_icons(self, name: str, what: str, obj: dict) -> list[str]:
         icon = obj.get("icon")
@@ -550,13 +712,14 @@ class Story:
         keep = ("type", "duration", "bg", "grain", "transition", "props", "name")
         scenes = [{k: s[k] for k in keep if k in s} for s in self.scenes]
         for i, nv in self.narrated.items():  # the headline draws these
-            if scenes[i]["type"] == "BeatScene":
+            if scenes[i]["type"] in HEADLINE_SCENES:
                 scenes[i]["props"] = {**scenes[i].get("props", {}), "words": [
                     {"text": w["text"], "t": w["t"], "emph": w["emph"], "phrase": w["phrase"]} for w in nv["words"]]}
         for i, sc in enumerate(scenes):  # consecutive figures don't sway in lockstep
             fig = sc.get("props", {}).get("figure")
             if sc["type"] == "BeatScene" and fig and "phase" not in fig:
                 sc["props"] = {**sc["props"], "figure": {**fig, "phase": round(i * 0.9, 2)}}
+        scenes = self._merge_worlds(scenes)
         events = list(self.sb.get("events", []))
         if self.sb.get("progress"):
             events.append({"type": "ProgressBar", "start": 0, "duration": self.audio_len, "name": "progress"})

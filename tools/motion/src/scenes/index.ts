@@ -1,9 +1,12 @@
 import React from "react";
 import { BarChart } from "./BarChart";
 import { BeatScene } from "./BeatScene";
+import { EndCard } from "./EndCard";
 import { ImageScene } from "./ImageScene";
+import { IsoOffice } from "./IsoOffice";
 import { KineticType } from "./KineticType";
 import { ListScene } from "./ListScene";
+import { NetworkScene } from "./NetworkScene";
 import { StatScene } from "./StatScene";
 import { TitleCard } from "./TitleCard";
 
@@ -18,4 +21,7 @@ export const SCENES: Record<string, React.FC<any>> = {
   ListScene,
   ImageScene,
   BeatScene,
+  NetworkScene,
+  IsoOffice,
+  EndCard,
 };

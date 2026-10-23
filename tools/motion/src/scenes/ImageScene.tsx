@@ -62,7 +62,7 @@ export const ImageScene: React.FC<{
                 {kicker}
               </div>
             ) : null}
-            <div style={{ fontFamily: fonts.serif, fontSize: aspect === "16:9" ? 84 : 76, lineHeight: 1.05, letterSpacing: "-0.02em", color: "#fff" }}>{title}</div>
+            <div style={{ fontFamily: fonts.serif, fontSize: aspect === "16:9" ? 84 : 76, lineHeight: 1.05, letterSpacing: "-0.02em", color: "#fff", whiteSpace: "pre-line" }}>{title}</div>
           </div>
         </>
       ) : null}

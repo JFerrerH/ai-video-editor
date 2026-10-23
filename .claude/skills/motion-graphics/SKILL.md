@@ -230,6 +230,10 @@ every cut is the clearest amateur tell. A transition lasts 0.4–0.65 s and over
 
 ### 8. Images
 
+- **A promo animates the product's mechanism.** Show what the product *does* with code-drawn motion
+  (`NetworkScene`, `IsoOffice`, widgets), not screenshots with a pan. A capture is at most a short
+  proof beat (≤ 2 s, once or twice per video), never the backbone. The stick figure is a rare
+  accent in a promo, not a fixture in every beat.
 - `ImageScene` always moves. Put `focus` on the subject. `amount` ranges from 0.06 (calm) through 0.12 (default) to 0.2 (dramatic).
 - **Alternate move directions** across consecutive image scenes (in → left → out), never the same move twice in a row.
 - Only use images the user has rights to: their own captures (`site_capture.py`), photos, or
@@ -296,6 +300,9 @@ All of them work in 9:16, 16:9, 1:1 and 4:5. They lay out inside the aspect's sa
 | `ListScene` | steps, reasons, features | `kicker, title, items[{text, icon?, at?}], marker: number\|check\|icon\|dot, dimPrevious` |
 | `ImageScene` | any still: captures, photos, generated art | `src, move: in\|out\|left\|right\|up\|down\|none, amount, focus{x,y}, kicker, title, darken, mono` |
 | `BeatScene` | a narrated explainer beat (see "Narrated explainer") | `bg, figure, widgets[], headline, headlineSize` |
+| `NetworkScene` | integrations, routing, "everything through one hub" | `kicker, title, emphasis, nodes[{id, label, color?, icon?}], hub{label?, icon?, color?}, chaos, connect, chips[{node, text, at}], messages[{from, to, at, lock?}], log[{text, at}]` |
+| `IsoOffice` | a team or agents visibly doing the work; handoffs; "watch it again" | `kicker, title, emphasis, cols, rows, desks[{id, u, v}], agents[{id, label, color?, at?, pos}], walks[{agent, to, at, dur?, carry?}], bubbles[{agent, text\|icon, at, until?}], replay{at, dur, to?}` |
+| `EndCard` | closing card with the brand's logo and a call to action | `logo` (SVG/PNG path), `logoHeight, title, tagline, button, url` |
 
 `KineticType` styles: `rise` is masked word-by-word, typeset and editorial (the default). `pop`
 springs words in, playful and social. `blur` is soft and premium. `fade` is calm and documentary.
@@ -307,6 +314,35 @@ scene types, **only in 9:16**. `check` rejects them in other aspects.
 
 Icons: `LineIcon` kinds in `components/icons.tsx` (book, cart, heart, brain, moon, speech, bulb, mail, receipt, calendar, search,
 person, check, spark, send, chart, cv, plane). Use line icons, not emoji.
+
+### Promo scenes
+
+Every time below is seconds from the scene start or an `@word` cue. `check` rejects ids that don't
+exist (message/chip nodes; walk, bubble and carry agents; desks), unknown icons, and a `replay` that
+ends after its scene.
+
+- **`NetworkScene`.** Nodes drift in `chaos` (tangled dashed lines, packets that never arrive,
+  blinking error marks) until that time, then at `connect` (default: `chaos`, or 0) they ease into a
+  ring around the `hub`, staggered, and spokes draw in. Without `chaos` the ring is there from the
+  start. Without a `hub`, nodes link to their neighbours and messages travel straight. A message is
+  a packet (envelope, or a lock with `lock: true`) that travels 0.9 s: half to the hub, half out to
+  `to`, lighting each spoke and pulsing on arrival. `chips` pin a mono pill (e.g. "ID") to a node.
+  `log` lines print in a ticker under the ring (beside it in 16:9), newest highlighted, older dimmed.
+  Up to 8 nodes read well; node colours cycle a neutral palette unless given.
+- **`IsoOffice`.** A `cols × rows` floor (default 8×6) with two back walls. `desks` are tiles
+  `{id, u, v}` (0-based); omit them for `desk1…deskN` along the back rows (N = max(4, agents)). A
+  position (`pos`, a walk's `to`) is a desk id (the agent stands at its front, at work, and its
+  monitor lights up) or a tile `[u, v]`. Walks are straight lines (eased, default 1 s); `carry: true`
+  holds a document on that walk (a handoff). Bubbles show `text` or an `icon` over the head from
+  `at` to `until`. For portrait frames, a smaller floor (6×5) makes everything bigger.
+- **Replay clock.** `replay{at, dur, to}` shows a scrub bar while the floor's content clock runs back
+  from `at` to `to` (default 0) over the first 60% of `dur`, then forward again to `at`. After the
+  replay the content clock runs `dur` behind real time. **Write every cue in narration time as
+  usual**: the engine pauses the content for the replay, it doesn't move your cues. Walks, bubbles
+  and entrances all reverse because everything is a function of that clock.
+- **`EndCard`.** Logo (from `brands/<slug>/logos/`) springs from 60% over a soft glow, then title,
+  tagline, button (pill with a drawn arrow: `ink` on light/accent, `accent` on dark) and url rise in,
+  6 frames apart. At 0.2 s only the logo shows; by 1.5 s everything has landed.
 
 ### Adding a primitive
 

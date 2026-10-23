@@ -93,6 +93,7 @@ _icons = (MOTION / "src/components/icons.tsx").read_text()
 ICON_NAMES = re.findall(r'\|\s*"(\w+)"', re.search(r"export type IconKind\s*=([^;]*);", _icons).group(1))
 ICON_KEYS = ("icon", "leftIcon", "rightIcon")
 MOVE_S = 0.8  # default figure move time (Figure.tsx MOVE_S)
+OFFICE_GRID = (8, 6)  # IsoOffice default floor, cols x rows (IsoOffice.tsx)
 
 
 class Story:
@@ -364,6 +365,10 @@ class Story:
                 warns.append(f"{name}: {dur:.1f}s on one scene. Hold attention with a beat inside it, or split it")
             if t == "BeatScene":
                 errors += self._check_beat(name, s.get("props", {}))
+            elif t == "NetworkScene":
+                errors += self._check_network(name, s.get("props", {}))
+            elif t == "IsoOffice":
+                errors += self._check_office(name, s.get("props", {}), dur)
             for a in self._assets(s.get("props", {})):
                 if not self._resolve(a):
                     errors.append(f"{name}: asset not found: {a} (relative to edit/ or repo root)")
@@ -455,6 +460,75 @@ class Story:
                 end = at + float(m.get("dur", MOVE_S))
             if fig.get("slot", "figure") not in SLOT_NAMES:
                 errs.append(f"{name}: unknown figure slot {fig.get('slot')!r} (slots: {', '.join(SLOT_NAMES)})")
+        return errs
+
+    def _check_icons(self, name: str, what: str, obj: dict) -> list[str]:
+        icon = obj.get("icon")
+        if icon is not None and icon not in ICON_NAMES:
+            return [f"{name}: {what} has unknown icon {icon!r} (icons: {', '.join(ICON_NAMES)})"]
+        return []
+
+    def _check_network(self, name: str, props: dict) -> list[str]:
+        """NetworkScene props: messages and chips name existing nodes; icons are known."""
+        nodes = props.get("nodes") or []
+        if not nodes:
+            return [f"{name}: NetworkScene needs `nodes`"]
+        ids = [n.get("id") for n in nodes]
+        errs = [f"{name}: duplicate node id {i!r}" for i in sorted({i for i in ids if ids.count(i) > 1})]
+        for n in nodes:
+            errs += self._check_icons(name, f"node {n.get('id')!r}", n)
+        if isinstance(props.get("hub"), dict):
+            errs += self._check_icons(name, "hub", props["hub"])
+        for m in props.get("messages", []):
+            for key in ("from", "to"):
+                if m.get(key) not in ids:
+                    errs.append(f"{name}: message {key} unknown node {m.get(key)!r} (nodes: {', '.join(map(str, ids))})")
+        for c in props.get("chips", []):
+            if c.get("node") not in ids:
+                errs.append(f"{name}: chip on unknown node {c.get('node')!r} (nodes: {', '.join(map(str, ids))})")
+        return errs
+
+    def _check_office(self, name: str, props: dict, dur: float) -> list[str]:
+        """IsoOffice props: walks, bubbles and carries name existing agents; positions are desk ids or
+        [u, v] inside the floor; icons are known; a replay ends inside the scene."""
+        agents = props.get("agents") or []
+        if not agents:
+            return [f"{name}: IsoOffice needs `agents`"]
+        cols, rows = int(props.get("cols", OFFICE_GRID[0])), int(props.get("rows", OFFICE_GRID[1]))
+        ids = [a.get("id") for a in agents]
+        desks = [d.get("id") for d in props["desks"]] if props.get("desks") else \
+            [f"desk{k + 1}" for k in range(max(4, len(agents)))]  # IsoOffice.tsx autoDesks
+        errs = [f"{name}: duplicate agent id {i!r}" for i in sorted({i for i in ids if ids.count(i) > 1})]
+
+        def place(what: str, p) -> None:
+            if isinstance(p, str):
+                if p not in desks:
+                    errs.append(f"{name}: {what} unknown desk {p!r} (desks: {', '.join(map(str, desks))})")
+            elif not (isinstance(p, list) and len(p) == 2 and 0 <= p[0] < cols and 0 <= p[1] < rows):
+                errs.append(f"{name}: {what} {p!r} must be a desk id or [u, v] inside the {cols}x{rows} floor")
+
+        for a in agents:
+            place(f"agent {a.get('id')!r} pos", a.get("pos"))
+        for d in props.get("desks") or []:
+            if not (0 <= d.get("u", -1) < cols and 0 <= d.get("v", -1) < rows):
+                errs.append(f"{name}: desk {d.get('id')!r} at ({d.get('u')}, {d.get('v')}) is outside the {cols}x{rows} floor")
+        for w in props.get("walks", []):
+            what = "carry" if w.get("carry") else "walk"
+            if w.get("agent") not in ids:
+                errs.append(f"{name}: {what} by unknown agent {w.get('agent')!r} (agents: {', '.join(map(str, ids))})")
+            place(f"{what} by {w.get('agent')!r} to", w.get("to"))
+        for b in props.get("bubbles", []):
+            if b.get("agent") not in ids:
+                errs.append(f"{name}: bubble on unknown agent {b.get('agent')!r} (agents: {', '.join(map(str, ids))})")
+            errs += self._check_icons(name, f"bubble on {b.get('agent')!r}", b)
+        if r := props.get("replay"):
+            at, rd = float(r.get("at", 0)), float(r.get("dur", 0))
+            if rd <= 0:
+                errs.append(f"{name}: replay needs a positive `dur`")
+            if at + rd > dur + 1e-6:
+                errs.append(f"{name}: replay ends at {at + rd:.2f}s, after the scene ({dur:.2f}s)")
+            if float(r.get("to", 0)) >= at:
+                errs.append(f"{name}: replay `to` ({r.get('to', 0)}) must be before its `at` ({at})")
         return errs
 
     # ── Remotion ──────────────────────────────────────────────────────────

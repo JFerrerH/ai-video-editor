@@ -2,6 +2,7 @@
 
     uv run tools/storyboard.py footage/<project>/edit check              # timeline + craft warnings
     uv run tools/storyboard.py footage/<project>/edit voice              # narration clips + word times (needs `uv sync --group gen`)
+    uv run tools/storyboard.py footage/<project>/edit sheet poses        # reference sheet: figure poses (or `widgets [--aspect A]`)
     uv run tools/storyboard.py footage/<project>/edit stills             # contact sheet → edit/stills/contact.png
     uv run tools/storyboard.py footage/<project>/edit stills --at 1.2,4  # specific times (s)
     uv run tools/storyboard.py footage/<project>/edit render --preview   # 720p → edit/preview.mp4

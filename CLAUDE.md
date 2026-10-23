@@ -12,7 +12,7 @@ footage/<project>/edit/   all working files for that project (video-use conventi
 brands/<slug>/            one brand/client: brand.md (taste + rules), brand.json (colors, fonts, captions), fonts/, logos/, broll/
 brands/_template/         copy this to add a brand
 assets/                   shared, brand-neutral: sfx/ (synth), luts/, music/ (licensed), fonts/
-templates/                starting points: project.md, shortform_build.py, storyboard.json
+templates/                starting points: project.md, shortform_build.py, storyboard.json, storyboard_explainer.json
 exports/                  final deliverables: <project>_<platform>_<YYYYMMDD>.mp4
 tools/                    our own helpers
 vendor/video-use/         third-party skill (cloned by scripts/setup.sh, don't edit)

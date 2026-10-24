@@ -1,0 +1,53 @@
+{
+  "aspect": "9:16",
+  "fps": 30,
+  "brand": "none",
+  "grain": 0.35,
+  "lufs": -14,
+  "scenes": [
+    {
+      "name": "hook",
+      "type": "KineticType",
+      "duration": 2.4,
+      "bg": "dark",
+      "narration": "",
+      "props": { "style": "rise", "lines": [{ "text": "One idea" }, { "text": "per scene", "emphasis": "per scene" }] },
+      "sfx": [["whoosh_short", 0.05, -20]]
+    },
+    {
+      "name": "title",
+      "type": "TitleCard",
+      "duration": 3.8,
+      "bg": "light",
+      "transition": { "type": "slide", "direction": "from-bottom" },
+      "props": { "kicker": "Topic", "title": "The headline\ngoes here", "emphasis": "here", "sub": "One supporting sentence." }
+    },
+    {
+      "name": "stat",
+      "type": "StatScene",
+      "duration": 3.0,
+      "bg": "accent",
+      "transition": { "type": "zoom" },
+      "props": { "value": 42, "suffix": "%", "label": "what the number means" },
+      "sfx": [["tick", 0.2, -18]]
+    },
+    {
+      "name": "steps",
+      "type": "ListScene",
+      "duration": 4.0,
+      "bg": "light",
+      "transition": { "type": "wipe", "direction": "from-left" },
+      "props": { "title": "Three steps", "marker": "number", "items": [{ "text": "First step" }, { "text": "Second step" }, { "text": "Third step" }] }
+    },
+    {
+      "name": "end",
+      "type": "TitleCard",
+      "duration": 2.6,
+      "bg": "dark",
+      "transition": { "type": "fade" },
+      "props": { "title": "Call to action", "sub": "@handle" }
+    }
+  ],
+  "events": [],
+  "audio": { "music": null, "sfx": [] }
+}

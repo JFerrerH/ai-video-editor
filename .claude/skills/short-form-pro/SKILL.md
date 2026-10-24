@@ -14,6 +14,11 @@ spoken. Everything here runs locally and costs nothing.
 **Template:** `templates/shortform_build.py`. Past projects' `footage/<project>/edit/build.py` files are good
 worked examples when they exist on this machine; they are never committed.
 
+**Motion craft** (timing, easing, choreography, transitions, type sizes) lives in the `motion-graphics`
+skill and applies to every overlay here. A full-screen cutaway that needs to be a whole designed scene can
+use its aspect-aware primitives (`TitleCard`, `KineticType`, `StatScene`, `BarChart`, `ListScene`, `ImageScene`)
+as overlay events with `full: true`.
+
 **Brand first.** Each project's `edit/project.md` names its brand. When it has one, read
 `brands/<slug>/brand.md` before planning: the brand's taste **overrides the defaults below** (caption
 colour, hook rules, looks, SFX vocabulary, CTA). Without a brand (`Brand: none`), use the neutral defaults
@@ -101,6 +106,8 @@ Examples below are illustrative. They show the technique, not a style to copy.
    `SEGMENTS`, `brand="<slug>"` (loads theme, fonts and caption style from `brands/<slug>/brand.json`),
    events (anchored with `p.word(take, "word", after=…)`), `sfx`. Keep the
    `p.refine_edges()` call **before** `p.offsets()`. It widens every cut to measured silence.
+   A `base.mov` from `tools/shotcut.py` (character videos, `character-video` skill) is also a valid
+   single source: one locked segment over it, as in `templates/character_build.py`.
 5a. Run `p.echo_check()` and `p.sfx_check()` → fix anything they flag.
 5. **Edge pass (non-negotiable; clipped words are the #1 complaint).** Read the
    `refine_edges()` report. Every `WARN` and every `edge_energy()` "check" needs an
@@ -149,7 +156,7 @@ the event start**.
 | `Polaroids` | people in the story | `photos[{src, label, at, rotate}], chip, chipAt` |
 | `CodeEditor` | building / hustle montage | `file, lines, dayFrom, dayTo, countStart, countEnd` (pair with `full, dark`) |
 | `IdCard` | who / role / where, floating above the head | `kicker, title, subtitle, rows[{icon: pin\|swap\|dot, text, at}]` |
-| `BoardingPass` | travel, conferences, remote work | `from, to, fromCity, toCity, details[{k, v}], flyStart, flyEnd` |
+| `BoardingPass` | travel, conferences, remote work | `from, to, fromCity, toCity, carrier, details[{k, v}], flyStart, flyEnd` |
 | `AiWorkflow` | AI tools / workflows: robot hub wires up emoji nodes, optional content pile at `pileAt` (pair with `full`) | `hub, nodes[{emoji, at}], pileAt, pileCount` |
 | `PostPile` | "too much content" / noise (pair with `full`) | `count, pileStart, pileEnd, seed` |
 | `Milestones` | life/career steps as icons (no numbers) | `items[{icon: cap\|diploma\|briefcase\|star, at, label?}]` |

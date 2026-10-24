@@ -9,10 +9,10 @@ This workspace serves any number of unrelated projects, clients and brands. Noth
 ```
 footage/<project>/        raw takes, never modified
 footage/<project>/edit/   all working files for that project (video-use convention); project.md first
-brands/<slug>/            one brand/client: brand.md (taste + rules), brand.json (colors, fonts, captions), fonts/, logos/, broll/
+brands/<slug>/            one brand/client: brand.md (taste + rules), brand.json (colors, fonts, captions), fonts/, logos/, broll/, library/ (animated character clips)
 brands/_template/         copy this to add a brand
 assets/                   shared, brand-neutral: sfx/ (synth), luts/, music/ (licensed), fonts/
-templates/                starting points: project.md, shortform_build.py
+templates/                starting points: project.md, shortform_build.py, storyboard.json, storyboard_explainer.json, shots.json, character_build.py
 exports/                  final deliverables: <project>_<platform>_<YYYYMMDD>.mp4
 tools/                    our own helpers
 vendor/video-use/         third-party skill (cloned by scripts/setup.sh, don't edit)
@@ -20,7 +20,7 @@ vendor/video-use/         third-party skill (cloned by scripts/setup.sh, don't e
 
 ## Projects and brands
 
-- **Start every new request with a project:** `uv run tools/new_project.py <name> --brand <slug|none> --type <type> --platforms <list> --language <code> [--shortform]`. Name it `<brand-or-client>-<what>` in kebab-case ASCII. If a request continues earlier work, open that project's `edit/project.md` instead.
+- **Start every new request with a project:** `uv run tools/new_project.py <name> --brand <slug|none> --type <type> --platforms <list> --language <code> [--shortform]`. `--type generated` (no footage) starts from a storyboard instead of raw takes. Name it `<brand-or-client>-<what>` in kebab-case ASCII. If a request continues earlier work, open that project's `edit/project.md` instead.
 - **The brand comes from `project.md`, never from habit.** If it names a brand, read `brands/<slug>/brand.md` before planning and pass `brand="<slug>"` to the engine. If it says `none`, use neutral defaults and ask the user about style. Don't apply one brand's taste, examples or rejected ideas to another project. If you can't tell which brand a request belongs to, ask.
 - **New brand:** copy `brands/_template/`, then fill in `brand.md` and `brand.json` from the user's site, deck or answers. Fonts go in its `fonts/`. This repo is public: every kit except `_template` is gitignored and lives only on the machine that has it. Never name a client, brand, person or private project in a tracked file (skills, tools, templates, docs); use neutral examples. A missing kit means asking the user, not falling back to another brand.
 - Skills hold general technique and neutral defaults. Feedback that is only taste ("I don't like yellow") goes into that brand's `brand.md`. Feedback that is about craft ("never clip a word") goes into the skill or tool.
@@ -41,9 +41,18 @@ vendor/video-use/         third-party skill (cloned by scripts/setup.sh, don't e
 | Transcribe | `uv run tools/transcribe_local.py <video...> --language <es\|en…>` (offline, free, see below) |
 | B-roll from the brand's own website / app | `uv run tools/site_capture.py <url> -o <edit>/downloads/site` (phone viewport + full-page PNG) |
 | Sound effects (license-free) | `uv run tools/sfx_synth.py` → `assets/sfx/synth/*.wav` + `attack.json` |
-| Motion graphics, titles, animated captions, explainers, intros | **Remotion skills** (`remotion-best-practices` covers all of them) |
+| **Video from scratch, no footage** (explainer, kinetic type, data story, promo, intro/outro) | **`motion-graphics` skill**: `new_project.py --type generated` → `edit/storyboard.json` → `tools/storyboard.py check / stills / render`. Any aspect (9:16, 16:9, 1:1, 4:5). Promos animate the mechanism with `NetworkScene` (hub, messages), `IsoOffice` (agents at work, replay) and close on `EndCard`; screenshots only as brief proof |
+| **Narrated explainer** (story first: a voice tells it; headline builds with the voice; a metaphor-driven story plays in one continuous `WorldScene` world: objects roll, break and grow under a moving camera; UI cards only for lists of facts) | **`motion-graphics` skill**, "Narrated explainer": `new_project.py --type generated --explainer` → `storyboard.py voice` (local TTS + word times) → `check / sheet / stills / render` |
+| **Brand characters that act** (the brand's own mascot stills, real motion, a camera move in every shot, cut to narration). **Paid, opt-in** | **`character-video` skill**: `new_project.py --type generated --characters` → narration → `shotcut.py --plan` → `gen/keyframes.py` → `gen/animate.py --dur fit` → `shotcut.py` → `build.py`. Reuse `brands/<slug>/library/` clips first (`gen/library.py list`) |
+| Voiceover for a script line (local, free) | `uv run tools/gen/voice.py "<line>" -o out.wav --lang <code>` (Kokoro-82M, Apache-2.0; `--list` for voices) |
+| Motion craft (timing, easing, transitions, typography) for any graphics, including overlays on footage | **`motion-graphics` skill** (craft rules); Remotion API questions → `remotion-best-practices` |
+| Animated captions, Remotion API details | **Remotion skills** (`remotion-best-practices` covers all of them) |
 | Download reference or source clips | `yt-dlp` (only content the user has rights to) |
 | Anything else (reframe, speed, grade, LUTs, concat, overlays) | `ffmpeg` directly (full build with libass + freetype) |
+
+## Paid APIs: one opt-in exception
+
+The workspace is free and local by default. The only paid path is character animation and cloud narration (`character-video` skill: fal.ai image models and image-to-video, ElevenLabs TTS). It runs only when the user has put the key in `vendor/video-use/.env` (`FAL_API_KEY` or `FAL_KEY`, `ELEVENLABS_API_KEY`; never committed, never printed). Guardrails, built into the tools: every run prints the request count and estimated cost first, stops before sending if the estimate is over `--budget` (default $2), and logs every request to `edit/gen_spend.jsonl`. Test one shot before a batch and reuse the brand library first. ElevenLabs' free plan has no commercial licence; say so at delivery. Don't add another paid service without an OpenSpec change.
 
 ## Transcription: local first
 
@@ -51,15 +60,26 @@ video-use expects ElevenLabs Scribe (`ELEVENLABS_API_KEY` in `vendor/video-use/.
 
 Run video-use helpers from the repo root: `uv run vendor/video-use/helpers/<helper>.py ...`
 
+`storyboard.py voice` reuses the same local Whisper to time each narration clip's words, then aligns them to the script, so the headline shows the script's exact words.
+
 ## Workflow rules
 
 0. **Project first.** Every request gets a `footage/<project>/` with `project.md` stating its brand, type, platforms and language (`tools/new_project.py`).
-1. **Inventory first.** `ffprobe` every source (codec, fps, resolution, audio tracks, duration) before planning.
+1. **Inventory first.** `ffprobe` every source (codec, fps, resolution, audio tracks, duration) before planning. (From-scratch projects: brief, story spine, then beat sheet. Storytelling leads; graphics and the stick figure serve it and are never the format itself.)
 2. **Plan, then cut.** Propose the edit in plain English and wait for approval before rendering. This rule comes from video-use.
 3. **Never touch originals.** Write to `footage/<project>/edit/`, and copy finals to `exports/`.
 4. **Preview at 720p** (`render.py --preview`) and render full quality only after approval.
 5. **Verify before presenting.** Pull frames at each cut (`ffmpeg -ss T -i out.mp4 -frames:v 1 f.png`, then Read the PNG). Measure loudness and report the numbers.
 6. Keep `edit/project.md` up to date so later sessions can pick up where the last one stopped.
+
+## Developing the workspace (OpenSpec)
+
+Changes to the workspace itself (`tools/`, `tools/motion/`, `.claude/skills/`, `templates/`, this file) go through OpenSpec spec-driven development. Specs live in `openspec/specs/`, and repo-wide rules for proposals, designs and tasks live in `openspec/config.yaml`.
+
+- New capability or behaviour change: `/opsx:explore` (optional) → `/opsx:propose "<idea>"` → **user approves** → `/opsx:apply` → `/opsx:verify` → `/opsx:archive`.
+- Small fixes (a typo, a one-line bug) don't need a change. If one alters behaviour a spec describes, update that spec.
+- Editing a project's video is **not** an OpenSpec change. That work is tracked in `footage/<project>/edit/project.md`.
+- Work on a branch, never directly on `main`.
 
 ## Delivery specs
 
@@ -76,6 +96,7 @@ Use `h264_videotoolbox` / `hevc_videotoolbox` for fast hardware previews. Use li
 
 - `ffmpeg` on PATH is Homebrew's **ffmpeg-full** (needed for the `subtitles`/`ass`/`drawtext` filters). If those filters go missing after a `brew upgrade`, run `brew unlink ffmpeg && brew link --force ffmpeg-full`.
 - The first `transcribe_local.py` run downloads Whisper large-v3-turbo (about 1.6 GB, then cached).
+- Local voice (`tools/gen/voice.py`, `storyboard.py voice`) needs the optional group: `uv sync --group gen` (~0.37 GB on first use, then offline). A plain `uv sync` removes it again; the phonemiser (`espeak-ng`) comes bundled, no Homebrew install.
 - Vertical reframes of 16:9 talking heads: crop around the face (check a frame first) rather than center-cropping blindly.
 - Only use music, fonts and footage that the user has rights to.
 - iPhone exports can have a U+202F (narrow no-break space) before "am/pm" in the filename. Rename sources to plain ASCII before scripting.

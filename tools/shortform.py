@@ -410,14 +410,7 @@ class Project:
         fc = ";".join(parts + [f"[0:a]{labels}amix=inputs={len(self.sfx) + 1}:normalize=0:duration=first[m]"])
         raw = self.edit_dir / "mix_raw.wav"
         run(cmd + ["-filter_complex", fc, "-map", "[m]", "-c:a", "pcm_s24le", str(raw)])
-        target = f"I={self.lufs}:TP=-1.5:LRA=11"
-        err = run(["ffmpeg", "-hide_banner", "-nostats", "-i", str(raw), "-af",
-                   f"loudnorm={target}:print_format=json", "-f", "null", "-"])
-        m = json.loads(err[err.rindex("{"):err.rindex("}") + 1])
-        ln = (f"loudnorm={target}:measured_I={m['input_i']}:measured_TP={m['input_tp']}:"
-              f"measured_LRA={m['input_lra']}:measured_thresh={m['input_thresh']}:"
-              f"offset={m['target_offset']}:linear=true,aresample=48000")
-        run(["ffmpeg", "-y", "-i", str(raw), "-af", ln, "-c:a", "pcm_s24le", str(out)])
+        loudnorm_2pass(raw, out, self.lufs)
 
     def sfx_check(self, min_gap: float = 0.3) -> list[str]:
         """Effects closer than `min_gap` s read as clutter (two hits on one beat). Typing
@@ -667,6 +660,28 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
              "-c:a", "aac", "-b:a", "320k", "-ar", "48000", "-movflags", "+faststart", "-shortest", str(out)])
         print(f"wrote {out}")
         return out
+
+
+def loudnorm_2pass(raw: Path, out: Path, lufs: float, tp: float = -1.5) -> None:
+    """Two-pass linear loudnorm to `lufs` integrated, true peak ≤ `tp` dBTP, 48 kHz 24-bit."""
+    target = f"I={lufs}:TP={tp}:LRA=11"
+    err = run(["ffmpeg", "-hide_banner", "-nostats", "-i", str(raw), "-af",
+               f"loudnorm={target}:print_format=json", "-f", "null", "-"])
+    m = json.loads(err[err.rindex("{"):err.rindex("}") + 1])
+    ln = (f"loudnorm={target}:measured_I={m['input_i']}:measured_TP={m['input_tp']}:"
+          f"measured_LRA={m['input_lra']}:measured_thresh={m['input_thresh']}:"
+          f"offset={m['target_offset']}:linear=true,aresample=48000")
+    run(["ffmpeg", "-y", "-i", str(raw), "-af", ln, "-c:a", "pcm_s24le", str(out)])
+
+
+def loudness(path: Path) -> tuple[float, float]:
+    """(integrated LUFS, true peak dBTP) of a file's audio, via ebur128."""
+    err = run(["ffmpeg", "-hide_banner", "-nostats", "-i", str(path), "-af", "ebur128=peak=true",
+               "-f", "null", "-"])
+    summary = err[err.rindex("Summary:"):]
+    i = float(re.search(r"I:\s+(-?[\d.]+|-inf) LUFS", summary).group(1))
+    tp = float(re.search(r"Peak:\s+(-?[\d.]+|-inf) dBFS", summary).group(1))
+    return i, tp
 
 
 def _norm(s: str) -> str:

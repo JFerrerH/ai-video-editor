@@ -1,0 +1,62 @@
+{
+  "aspect": "9:16",
+  "fps": 30,
+  "brand": "none",
+  "grain": 0.3,
+  "lufs": -14,
+  "progress": true,
+  "voice": { "lang": "en", "preset": "af_heart", "speed": 1.0, "pronounce": {} },
+  "scenes": [
+    {
+      "name": "hook",
+      "type": "BeatScene",
+      "bg": "light",
+      "narration": "Most launch plans take a *whole week.*",
+      "props": {
+        "figure": { "poses": [{ "pose": "stand" }, { "pose": "slump", "at": "@week" }] },
+        "widgets": [{ "type": "Stopwatch", "seconds": 604800, "start": "@plans", "end": "@week", "label": "planning time" }]
+      },
+      "sfx": [["whoosh_short", 0.0, -22]]
+    },
+    {
+      "name": "list",
+      "type": "BeatScene",
+      "bg": "light",
+      "tail": 0.5,
+      "narration": "Long checklists. Endless meetings. We *skip them.*",
+      "props": {
+        "figure": { "poses": [{ "pose": "think" }, { "pose": "point", "at": "@skip" }] },
+        "widgets": [
+          { "type": "Checklist", "items": [
+            { "text": "Weekly sync", "state": "struck", "at": "@meetings" },
+            { "text": "Status report", "state": "struck", "at": "@meetings+0.3" },
+            { "text": "Ship it" }] },
+          { "type": "Stamp", "text": "Skip it", "at": "@skip" }
+        ]
+      },
+      "sfx": [["stamp", "@skip", -16]]
+    },
+    {
+      "name": "dark",
+      "type": "BeatScene",
+      "bg": "dark",
+      "narration": "One page, one goal, | *one afternoon.*",
+      "props": {
+        "figure": { "poses": [{ "pose": "type" }, { "pose": "cheer", "at": "@afternoon" }] },
+        "widgets": [{ "type": "Counter", "label": "hours spent", "from": 40, "to": 4, "start": "@goal", "end": "@afternoon", "spark": [9, 8, 8.5, 6, 4, 3, 2] }]
+      }
+    },
+    {
+      "name": "end",
+      "type": "BeatScene",
+      "bg": "light",
+      "narration": "Try it on your next launch.",
+      "props": {
+        "figure": { "pose": "wave" },
+        "widgets": [{ "type": "Badge", "text": "Ready to ship", "tone": "ok", "at": "@launch" }]
+      }
+    }
+  ],
+  "events": [],
+  "audio": { "music": null, "sfx": [] }
+}

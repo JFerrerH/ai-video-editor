@@ -14,7 +14,12 @@ export type IconKind =
   | "send"
   | "chart"
   | "cv"
-  | "plane";
+  | "plane"
+  | "book"
+  | "cart"
+  | "heart"
+  | "brain"
+  | "moon";
 
 const PATHS: Record<IconKind, React.ReactNode> = {
   speech: <path d="M4 5h16v11H9l-5 4z" />,
@@ -71,6 +76,28 @@ const PATHS: Record<IconKind, React.ReactNode> = {
     </>
   ),
   plane: <path d="M3 13.5 21 6l-4.5 13-4-5.2zM12.5 13.8 21 6" />,
+  book: (
+    <>
+      <path d="M12 6.5C10 5 7 4.5 3.5 5v13c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5C17 4.5 14 5 12 6.5z" />
+      <path d="M12 6.5v13" />
+    </>
+  ),
+  cart: (
+    <>
+      <path d="M3 4h2.5l2.2 10.5h10.6L20.5 7H6.4" />
+      <circle cx="9" cy="19" r="1.4" />
+      <circle cx="17" cy="19" r="1.4" />
+    </>
+  ),
+  heart: <path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.2a4.3 4.3 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z" />,
+  brain: (
+    <>
+      <path d="M12 5.5a3 3 0 0 0-5.6-.9A3.2 3.2 0 0 0 4 9.6a3.4 3.4 0 0 0 .9 5.6A3.3 3.3 0 0 0 9 19.4a3 3 0 0 0 3-1.4z" />
+      <path d="M12 5.5a3 3 0 0 1 5.6-.9 3.2 3.2 0 0 1 2.4 5 3.4 3.4 0 0 1-.9 5.6 3.3 3.3 0 0 1-4.1 4.2 3 3 0 0 1-3-1.4z" />
+      <path d="M12 5.5V18M8 10.5c1.2 0 2 .8 2 2M16 10.5c-1.2 0-2 .8-2 2" />
+    </>
+  ),
+  moon: <path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z" />,
 };
 
 export const LineIcon: React.FC<{ kind: IconKind; size?: number; color: string; stroke?: number; fill?: string }> = ({

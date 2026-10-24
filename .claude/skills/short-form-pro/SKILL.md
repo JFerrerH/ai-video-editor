@@ -149,7 +149,7 @@ the event start**.
 | `HookTitle` | opening hook card | `lines[{text, emphasis}]` |
 | `PhoneMockup` | real app screens / website | `variant: center\|side`, `side`, `screens[{src, at, label}]`, `scroll{src, srcWidth, from, to, start, end, url}` |
 | `DocumentCard` | a year, thesis, contract | `year?, kicker, title, emphasis, author, cardAt, enterFrom` |
-| `Receipt` | cost / quote, "too expensive" | `title, items[{text, at}], total, stamp?, stampAt?, enterFrom` |
+| `Receipt` | cost / quote, "too expensive" | `title, items[{text, at, amount?}], total, stamp?, stampAt?, enterFrom` |
 | `ProgressCard` | % progress, or "not ready yet" | `label, to, fillStart, fillEnd, stall, note, mono, showValue` |
 | `RingStat` | a single % ("half") | `value, label?, fillAt, pulseAt, mono` |
 | `Drawer` | shelving / giving up | `docTitle, closeAt` (pair with `full, mono`) |

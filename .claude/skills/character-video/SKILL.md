@@ -47,6 +47,10 @@ voice.synthesize_many([voice.Job(edit / "audio/vo" / f"{s['id']}.wav", voice.spo
 EOF
 ```
 
+**Narration lines:** fast voices (ElevenLabs `speed` > 1.1) can skip mid-line commas and read a short
+yes/no question as a statement, so "¿… ni qué …?" runs together. Write those lines as a conditional that
+flows into the next clause ("Si no sabes X ni Y, comenta…") and check the pause in the word times.
+
 ## Cost discipline (from the first pilot: ~$10 for one reel, under $1 redone this way)
 
 - **Library first.** `uv run tools/gen/library.py <slug> list --cast hero --mood happy` (or
@@ -89,6 +93,8 @@ EOF
 - Read `verify/keyframes_sheet.png` before animating, and each `verify/<id>_strip.png` before
   cutting: on-model characters, the camera actually moves, no text, no morphing, no extra limbs.
   Note per-clip quirks (a prop that vanishes after 1 s, a frame to cut before) in the library README.
+- After any re-cut (a line or shot changed), delete `transcripts/base.json` before `transcribe_local.py`:
+  it keeps an existing transcript, and the captions would show the old words.
 - `shotcut.py` stops if a clip is shorter than its shot and names the fix (`animate --dur fit --redo`).
 - Pull a frame at every cut from the final (`ffmpeg -ss T -i final.mp4 -frames:v 1 f.png`) using
   `timeline.json` starts, and Read them.
@@ -103,5 +109,8 @@ EOF
 - **ElevenLabs free plan has no commercial licence** (and can't use shared-library voices through
   the API). `voice_cloud.py` warns on every run. Repeat the warning at delivery and don't present a
   free-plan voice as ready to publish for a brand. Local Kokoro narration (Apache-2.0) has no such limit.
-- After delivery, offer to import the project's good new shots into the library:
-  `uv run tools/gen/library.py <slug> import <project> <shot> --as <id> --mood … --use …`.
+- **Every new video ends with a library review** (don't just offer it): go through each newly
+  generated shot and import the ones that are on-model and reusable beyond this script
+  (`uv run tools/gen/library.py <slug> import <project> <shot> --as <id> --mood … --use …`). Skip a shot
+  only for a reason (off-model, text in frame, too script-specific, a quirk that ruins it), note
+  quirks in the library README, and tell the user what went in and what didn't, and why.

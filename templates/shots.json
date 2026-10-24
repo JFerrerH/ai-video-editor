@@ -1,0 +1,43 @@
+{
+  "_comment": "Character video shot list. Pipeline: narration (audio/vo/<id>.wav) -> shotcut.py --plan -> keyframes.py -> animate.py --dur fit -> shotcut.py -> build.py. Paths are relative to this file. A shot either points at a brand library clip (\"library\": \"<id>\") or describes a new one (cast, frame, motion, camera). `base` = add characters to an approved keyframe instead of sending every reference at once.",
+  "brand": "none",
+  "library": null,
+  "aspect": "9:16",
+  "world": "A small, warmly lit room with a wooden table, a window with soft daylight and a few plants. Cinematic lighting, shallow depth of field. Camera at the characters' eye level; medium shot, the characters large in frame.",
+  "style": "",
+  "pronounce": {},
+  "cast": {
+    "hero": {
+      "ref": "images/hero.png",
+      "desc": "the hero character, exactly as in its reference still"
+    },
+    "guide": {
+      "ref": "images/guide.png",
+      "desc": "the guide character, exactly as in its reference still"
+    }
+  },
+  "shots": [
+    {
+      "id": "s01_hook",
+      "line": "One clear question opens the video.",
+      "cast": ["hero"],
+      "frame": "HERO stands by the table in the lower half of the frame, looking at the camera, curious.",
+      "motion": "The hero tilts its head, blinks and leans toward the camera as if about to ask something.",
+      "camera": "The camera slowly pushes in toward the hero."
+    },
+    {
+      "id": "s02_meet",
+      "line": "Then someone arrives with the answer.",
+      "base": "keyframes/s01_hook.png",
+      "cast": ["guide"],
+      "frame": "GUIDE now stands next to HERO, both facing each other, the guide raising one hand to explain.",
+      "motion": "The guide gestures while explaining; the hero nods slowly.",
+      "camera": "The camera arcs slowly from left to right around both characters."
+    },
+    {
+      "id": "s03_payoff",
+      "line": "And it all makes sense.",
+      "library": "hero_happy"
+    }
+  ]
+}

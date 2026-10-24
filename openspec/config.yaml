@@ -9,7 +9,10 @@ context: |
   sheets and loudness numbers.
   The repo is PUBLIC and serves many unrelated brands: never name a client, brand, person or
   private project in specs, proposals, designs or tasks. Use neutral examples.
-  Everything must stay free and local (Apple Silicon, MLX/Metal). No paid APIs or per-use keys.
+  Everything must stay free and local (Apple Silicon, MLX/Metal) by default. One opt-in exception:
+  character animation and cloud narration (fal.ai, ElevenLabs) through the character-video tools,
+  only with a key in vendor/video-use/.env, an estimate before every run, a per-run budget and a
+  spend log. Any other paid API or per-use key needs a proposal that flags it.
   Any new model must have weights licensed for commercial use (Apache-2.0/MIT or similar);
   non-commercial models are out unless the proposal flags it and the user accepts.
   Craft rules belong in skills or tools; per-brand taste belongs in brands/<slug>/ (gitignored).

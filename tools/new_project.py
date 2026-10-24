@@ -9,6 +9,9 @@
     uv run tools/new_project.py acme-explainer --type generated --explainer --platforms reels --language es
         # narrated explainer: copies templates/storyboard_explainer.json instead (voice block in
         # --language; BeatScenes with headline, figure and widgets); `storyboard.py <edit> voice` first
+    uv run tools/new_project.py acme-tips --brand acme --type generated --characters --platforms reels --language en
+        # brand characters animated by a paid image-to-video model: copies templates/shots.json →
+        # edit/shots.json and templates/character_build.py → edit/build.py; skill: character-video
 
 Without --brand the project is unbranded (neutral look; no brand's taste applies).
 Raw takes go in footage/<name>/ (rename to plain ASCII first); never modify them.
@@ -44,7 +47,11 @@ def main() -> None:
     ap.add_argument("--shortform", action="store_true", help="copy the short-form build.py template")
     ap.add_argument("--explainer", action="store_true",
                     help="with --type generated: start from the narrated-explainer storyboard")
+    ap.add_argument("--characters", action="store_true",
+                    help="character video: copy the shot list and character build templates")
     a = ap.parse_args()
+    if a.characters and a.shortform:
+        sys.exit("--characters and --shortform can't be combined: both write edit/build.py")
 
     if not re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", a.name):
         sys.exit(f"name must be kebab-case ASCII: {a.name!r}")
@@ -68,7 +75,9 @@ def main() -> None:
         shutil.copy2(REPO / "templates" / "shortform_build.py", dst)
         if a.brand != "none":
             dst.write_text(dst.read_text().replace("    brand=None,", f'    brand="{a.brand}",'))
-    if a.type in STORYBOARD_TYPES:
+    if a.characters:
+        characters(edit, a)
+    elif a.type in STORYBOARD_TYPES:
         tpl = "storyboard_explainer.json" if a.explainer else "storyboard.json"
         sb = json.loads((REPO / "templates" / tpl).read_text())
         sb["brand"] = a.brand
@@ -85,8 +94,30 @@ def main() -> None:
         if not a.explainer:
             print("  narrated explainer (voice, headline, figure, widgets)? start from "
                   "templates/storyboard_explainer.json instead: add --explainer")
-    what = "storyboard-driven, no footage needed" if a.type in STORYBOARD_TYPES else "drop raw takes there"
+    what = "shot-list driven, no footage needed" if a.characters else \
+        "storyboard-driven, no footage needed" if a.type in STORYBOARD_TYPES else "drop raw takes there"
     print(f"created {proj.relative_to(REPO)}/ → {what}; notes in {md.relative_to(REPO)}")
+
+
+def characters(edit: Path, a: argparse.Namespace) -> None:
+    """edit/shots.json + edit/build.py from the character templates, brand and library filled in."""
+    sl = json.loads((REPO / "templates" / "shots.json").read_text())
+    sl["brand"] = a.brand
+    sl["aspect"] = ASPECT_FOR.get(a.platforms.split(",")[0].strip(), "9:16")
+    lib = REPO / "brands" / a.brand / "library"
+    sl["library"] = str(lib.relative_to(REPO)) if a.brand != "none" and lib.is_dir() else None
+    if a.language != "tbd":
+        sl["voice"] = {"lang": a.language.lower()}
+    (edit / "shots.json").write_text(json.dumps(sl, indent=2, ensure_ascii=False) + "\n")
+    build = edit / "build.py"
+    build.write_text((REPO / "templates" / "character_build.py").read_text().replace(
+        "    brand=None,", f'    brand="{a.brand}",' if a.brand != "none" else "    brand=None,"))
+    for d in ("keyframes", "shots", "audio", "images"):
+        (edit / d).mkdir(exist_ok=True)
+    rel = edit.relative_to(REPO)
+    print(f"shots: {rel / 'shots.json'} ({sl['aspect']}); library: {sl['library'] or 'none'}")
+    print(f"  next: write the lines, narrate into {rel}/audio/vo/, then uv run tools/shotcut.py {rel} --plan "
+          "(skill: .claude/skills/character-video/SKILL.md)")
 
 
 if __name__ == "__main__":

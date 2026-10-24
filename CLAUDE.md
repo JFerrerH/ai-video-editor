@@ -9,10 +9,10 @@ This workspace serves any number of unrelated projects, clients and brands. Noth
 ```
 footage/<project>/        raw takes, never modified
 footage/<project>/edit/   all working files for that project (video-use convention); project.md first
-brands/<slug>/            one brand/client: brand.md (taste + rules), brand.json (colors, fonts, captions), fonts/, logos/, broll/
+brands/<slug>/            one brand/client: brand.md (taste + rules), brand.json (colors, fonts, captions), fonts/, logos/, broll/, library/ (animated character clips)
 brands/_template/         copy this to add a brand
 assets/                   shared, brand-neutral: sfx/ (synth), luts/, music/ (licensed), fonts/
-templates/                starting points: project.md, shortform_build.py, storyboard.json, storyboard_explainer.json
+templates/                starting points: project.md, shortform_build.py, storyboard.json, storyboard_explainer.json, shots.json, character_build.py
 exports/                  final deliverables: <project>_<platform>_<YYYYMMDD>.mp4
 tools/                    our own helpers
 vendor/video-use/         third-party skill (cloned by scripts/setup.sh, don't edit)
@@ -43,11 +43,16 @@ vendor/video-use/         third-party skill (cloned by scripts/setup.sh, don't e
 | Sound effects (license-free) | `uv run tools/sfx_synth.py` → `assets/sfx/synth/*.wav` + `attack.json` |
 | **Video from scratch, no footage** (explainer, kinetic type, data story, promo, intro/outro) | **`motion-graphics` skill**: `new_project.py --type generated` → `edit/storyboard.json` → `tools/storyboard.py check / stills / render`. Any aspect (9:16, 16:9, 1:1, 4:5). Promos animate the mechanism with `NetworkScene` (hub, messages), `IsoOffice` (agents at work, replay) and close on `EndCard`; screenshots only as brief proof |
 | **Narrated explainer** (story first: a voice tells it; headline builds with the voice; a metaphor-driven story plays in one continuous `WorldScene` world: objects roll, break and grow under a moving camera; UI cards only for lists of facts) | **`motion-graphics` skill**, "Narrated explainer": `new_project.py --type generated --explainer` → `storyboard.py voice` (local TTS + word times) → `check / sheet / stills / render` |
+| **Brand characters that act** (the brand's own mascot stills, real motion, a camera move in every shot, cut to narration). **Paid, opt-in** | **`character-video` skill**: `new_project.py --type generated --characters` → narration → `shotcut.py --plan` → `gen/keyframes.py` → `gen/animate.py --dur fit` → `shotcut.py` → `build.py`. Reuse `brands/<slug>/library/` clips first (`gen/library.py list`) |
 | Voiceover for a script line (local, free) | `uv run tools/gen/voice.py "<line>" -o out.wav --lang <code>` (Kokoro-82M, Apache-2.0; `--list` for voices) |
 | Motion craft (timing, easing, transitions, typography) for any graphics, including overlays on footage | **`motion-graphics` skill** (craft rules); Remotion API questions → `remotion-best-practices` |
 | Animated captions, Remotion API details | **Remotion skills** (`remotion-best-practices` covers all of them) |
 | Download reference or source clips | `yt-dlp` (only content the user has rights to) |
 | Anything else (reframe, speed, grade, LUTs, concat, overlays) | `ffmpeg` directly (full build with libass + freetype) |
+
+## Paid APIs: one opt-in exception
+
+The workspace is free and local by default. The only paid path is character animation and cloud narration (`character-video` skill: fal.ai image models and image-to-video, ElevenLabs TTS). It runs only when the user has put the key in `vendor/video-use/.env` (`FAL_API_KEY` or `FAL_KEY`, `ELEVENLABS_API_KEY`; never committed, never printed). Guardrails, built into the tools: every run prints the request count and estimated cost first, stops before sending if the estimate is over `--budget` (default $2), and logs every request to `edit/gen_spend.jsonl`. Test one shot before a batch and reuse the brand library first. ElevenLabs' free plan has no commercial licence; say so at delivery. Don't add another paid service without an OpenSpec change.
 
 ## Transcription: local first
 

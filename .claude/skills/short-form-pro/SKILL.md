@@ -106,6 +106,8 @@ Examples below are illustrative. They show the technique, not a style to copy.
    `SEGMENTS`, `brand="<slug>"` (loads theme, fonts and caption style from `brands/<slug>/brand.json`),
    events (anchored with `p.word(take, "word", after=…)`), `sfx`. Keep the
    `p.refine_edges()` call **before** `p.offsets()`. It widens every cut to measured silence.
+   A `base.mov` from `tools/shotcut.py` (character videos, `character-video` skill) is also a valid
+   single source: one locked segment over it, as in `templates/character_build.py`.
 5a. Run `p.echo_check()` and `p.sfx_check()` → fix anything they flag.
 5. **Edge pass (non-negotiable; clipped words are the #1 complaint).** Read the
    `refine_edges()` report. Every `WARN` and every `edge_energy()` "check" needs an

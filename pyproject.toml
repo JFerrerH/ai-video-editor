@@ -28,3 +28,8 @@ gen = [
     # spaCy model misaki uses for English; pinned so misaki doesn't install it at runtime
     "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
 ]
+# paid generators on fal.ai for tools/gen/{keyframes,animate,library}.py (opt-in: needs FAL_API_KEY
+# in vendor/video-use/.env). Run them with `uv run --group cloud …`; uv run's inexact sync keeps `gen`.
+cloud = [
+    "fal-client==1.0.3",
+]

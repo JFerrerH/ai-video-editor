@@ -1,12 +1,13 @@
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { clamp, enter, exit } from "../anim";
-import { SAFE, useBrand } from "../theme";
+import { SAFE, textOn, useBrand } from "../theme";
 
 type Line = { text: string; emphasis?: string };
 
 /** Opening hook: serif headline on a cream card above the speaker's head.
- *  `emphasis` is a substring of the line rendered italic + accent. */
+ *  `emphasis` is a substring of the line rendered italic + accent, or as an accent highlighter block
+ *  when the accent is as light (or as dark) as the card and wouldn't read as text on it. */
 export const HookTitle: React.FC<{ durationInFrames: number; lines: Line[] }> = ({
   durationInFrames,
   lines,
@@ -50,7 +51,13 @@ export const HookTitle: React.FC<{ durationInFrames: number; lines: Line[] }> = 
             >
               {parts[0]}
               {l.emphasis ? (
-                <span style={{ fontStyle: "italic", color: colors.accent }}>{l.emphasis}</span>
+                textOn(colors.accent, colors.ink) === textOn(colors.bg, colors.ink) ? (
+                  <span style={{ background: colors.accent, color: textOn(colors.accent, colors.ink), padding: "0 10px", borderRadius: 8 }}>
+                    {l.emphasis}
+                  </span>
+                ) : (
+                  <span style={{ fontStyle: "italic", color: colors.accent }}>{l.emphasis}</span>
+                )
               ) : null}
               {parts[1] ?? ""}
             </div>

@@ -7,7 +7,7 @@ import { SAFE, useBrand } from "../theme";
 export const Receipt: React.FC<{
   durationInFrames: number;
   title: string;
-  items: { text: string; at: number }[];
+  items: { text: string; at: number; amount?: string }[]; // amount: right column (default "$$$")
   total: string;
   stamp?: string; // optional: leave out for a plain quote
   stampAt?: number;
@@ -53,7 +53,7 @@ export const Receipt: React.FC<{
               }}
             >
               <span>{it.text}</span>
-              <span>$$$</span>
+              <span style={{ whiteSpace: "nowrap", marginLeft: 24 }}>{it.amount ?? "$$$"}</span>
             </div>
           );
         })}

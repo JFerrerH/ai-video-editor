@@ -44,6 +44,7 @@ vendor/video-use/         third-party skill (cloned by scripts/setup.sh, don't e
 | **Video from scratch, no footage** (explainer, kinetic type, data story, promo, intro/outro) | **`motion-graphics` skill**: `new_project.py --type generated` → `edit/storyboard.json` → `tools/storyboard.py check / stills / render`. Any aspect (9:16, 16:9, 1:1, 4:5). Promos animate the mechanism with `NetworkScene` (hub, messages), `IsoOffice` (agents at work, replay) and close on `EndCard`; screenshots only as brief proof |
 | **Narrated explainer** (story first: a voice tells it; headline builds with the voice; a metaphor-driven story plays in one continuous `WorldScene` world: objects roll, break and grow under a moving camera; UI cards only for lists of facts) | **`motion-graphics` skill**, "Narrated explainer": `new_project.py --type generated --explainer` → `storyboard.py voice` (local TTS + word times) → `check / sheet / stills / render` |
 | **Brand characters that act** (the brand's own mascot stills, real motion, a camera move in every shot, cut to narration). **Paid, opt-in** | **`character-video` skill**: `new_project.py --type generated --characters` → narration → `shotcut.py --plan` → `gen/keyframes.py` → `gen/animate.py --dur fit` → `shotcut.py` → `build.py`. Reuse `brands/<slug>/library/` clips first (`gen/library.py list`) |
+| Run one step without a person typing (queue worker, CI, a Linux box) | `uv run tools/run_job.py job.json` (JSON in → one JSON result out; fixed ops, paths confined to the project; see "Linux / Docker") |
 | Voiceover for a script line (local, free) | `uv run tools/gen/voice.py "<line>" -o out.wav --lang <code>` (Kokoro-82M, Apache-2.0; `--list` for voices) |
 | Motion craft (timing, easing, transitions, typography) for any graphics, including overlays on footage | **`motion-graphics` skill** (craft rules); Remotion API questions → `remotion-best-practices` |
 | Animated captions, Remotion API details | **Remotion skills** (`remotion-best-practices` covers all of them) |
@@ -58,9 +59,23 @@ The workspace is free and local by default. The only paid path is character anim
 
 video-use expects ElevenLabs Scribe (`ELEVENLABS_API_KEY` in `vendor/video-use/.env`). **If no key is set, use `tools/transcribe_local.py` instead.** It writes the same JSON to `<edit>/transcripts/<stem>.json`, so `pack_transcripts.py` and `render.py` work unchanged. Always pass `--language`: without it Whisper can mis-detect, and an English prompt on non-English audio makes it translate instead of transcribe. Local transcription has no speaker labels and no `(laughs)` tags. When diarization matters (interviews, podcasts), recommend Scribe.
 
+The backend is picked at runtime: `mlx-whisper` on Apple Silicon (default install), `faster-whisper` on CPU everywhere else (Linux/Docker: `uv sync --group asr`). Both use Whisper large-v3-turbo and write the same JSON; `source.engine` says which ran. `--backend mlx|faster-whisper` forces one.
+
 Run video-use helpers from the repo root: `uv run vendor/video-use/helpers/<helper>.py ...`
 
 `storyboard.py voice` reuses the same local Whisper to time each narration clip's words, then aligns them to the script, so the headline shows the script's exact words.
+
+## Linux / Docker
+
+The same tools run on Linux (CPU only) in one image, with the backends chosen at runtime: faster-whisper instead of mlx-whisper, Kokoro on PyTorch instead of mlx-audio, MediaPipe instead of Apple Vision for the person matte. On the Mac nothing changes.
+
+- **Build:** `docker build -t video-engine .` (weights baked in, so a container starts offline; ~2 GB more). `--build-arg WITH_MODELS=0` builds without them; they download on first use. It builds for the host's arch (arm64 on an M-series Mac); use `--platform linux/amd64` for x86 servers.
+- **Self-check:** `docker run --rm video-engine --self-check` loads every backend and reports Python, ffmpeg filters, Node, Remotion's browser, auto-editor, video-use and the three backends. It exits 1 if anything is missing.
+- **Run a job:** `docker run --rm -i -v "$PWD/footage:/engine/footage" video-engine - < job.json`, where a job looks like `{"op": "transcribe", "project": "acme-launch", "args": {"source": "take1.mov", "language": "en"}}`. Ops: `inventory`, `transcribe`, `voice`, `matte`, `storyboard` (`cmd`: check/voice/sheet/stills/render), `shortform.build`. Arguments are listed in `uv run tools/run_job.py --help`. Only the result JSON goes to stdout; logs go to stderr.
+- **Mounts, never baked in:** `footage/`, `brands/` (include `_template`), `assets/music/` and `exports/` at `/engine/<same path>`. The image holds no projects, brand kits or keys. Paid tools read keys from `-e FAL_API_KEY=… -e ELEVENLABS_API_KEY=…` at run time. The container runs as uid 1000, so on a Linux host the mounted dirs must be writable by that uid.
+- **`shortform.build` runs the project's `build.py`:** that is Python code, so treat it as trusted input only. A hosted service must never let its users author `build.py`.
+- **Speed on CPU (Docker on an M-series Mac, arm64):** transcription about 4× real time (a 30 s clip in ~7 s), a voice line in 3–7 s including model load, a 3.7 s 1080x1920 matte window in ~8 s, a 10 s storyboard preview in ~10 s, a 10 s short preview with one behind-the-speaker event in ~17 s. x86 servers vary; there is no GPU path yet.
+- **Differences from the Mac:** voice and transcript timing are close but not bit-identical, and a clip made by one backend is re-synthesised by the other (`storyboard.py voice` again after switching machines). The MediaPipe matte is softer around loose hair. Unbranded projects use the neutral theme's Mac fonts (Georgia, Helvetica Neue), which fall back to Noto Serif/Sans on Linux. Brand kits ship their own font files, so branded renders match.
 
 ## Workflow rules
 

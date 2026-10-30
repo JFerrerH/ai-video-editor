@@ -76,9 +76,11 @@ graphic, and present it above the beat sheet:
   **world** instead of beats with cards: see "World scenes" below. Prefer a world whenever the story
   is about something changing over time (growing, breaking, piling up, moving forward).
 
-**Setup, once:** `uv sync --group gen` (Kokoro-82M through `mlx-audio`, Apache-2.0 weights, fully
-local; ~0.37 GB: 330 MB weights + ~0.5 MB per voice used, the spaCy English model and the bundled
-`espeak-ng` phonemiser). Word times use the local Whisper that's already cached.
+**Setup, once:** `uv sync --group gen` (Kokoro-82M, Apache-2.0 weights, fully local: through `mlx-audio`
+on Apple Silicon, through the reference `kokoro` package on PyTorch CPU on Linux/Docker; ~0.37 GB on a Mac:
+330 MB weights + ~0.5 MB per voice used, the spaCy English model and the bundled `espeak-ng` phonemiser).
+Word times use the local Whisper that's already cached (on Linux also `uv sync --group asr`). Same voices
+on both; a clip made by one backend is re-synthesised by the other (the sidecar records `backend`).
 
 **Workflow:** `new_project.py <name> --type generated --explainer --platforms <p> --language <code>` →
 write the beat sheet (one row per beat: narration, pose, widget, cue word) and get it approved →

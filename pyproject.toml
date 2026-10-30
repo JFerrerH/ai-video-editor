@@ -10,8 +10,8 @@ dependencies = [
     "matplotlib",
     "pillow",
     "numpy",
-    # local, offline transcription on Apple Silicon
-    "mlx-whisper",
+    # local, offline transcription on Apple Silicon (Linux: `uv sync --group asr`)
+    "mlx-whisper; sys_platform == 'darwin' and platform_machine == 'arm64'",
     # subtitle tooling
     "pysrt",
     "playwright>=1.63.0",
@@ -21,9 +21,13 @@ dependencies = [
 package = false
 
 [dependency-groups]
-# local text-to-speech for tools/gen/voice.py (Kokoro-82M on MLX); `uv sync --group gen`
+# local text-to-speech for tools/gen/voice.py (Kokoro-82M: MLX on Apple Silicon, PyTorch CPU on
+# Linux); `uv sync --group gen`
 gen = [
-    "mlx-audio==0.6.1",
+    "mlx-audio==0.6.1; sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "kokoro==0.9.4; sys_platform == 'linux'",
+    # direct so [tool.uv.sources] applies: CPU wheels on Linux, PyPI (as before) elsewhere
+    "torch",
     "misaki[en]==0.9.4",
     # spaCy model misaki uses for English; pinned so misaki doesn't install it at runtime
     "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
@@ -32,4 +36,30 @@ gen = [
 # in vendor/video-use/.env). Run them with `uv run --group cloud …`; uv run's inexact sync keeps `gen`.
 cloud = [
     "fal-client==1.0.3",
+]
+# CPU transcription for tools/transcribe_local.py off Apple Silicon (faster-whisper on CTranslate2)
+asr = [
+    "faster-whisper==1.2.1; sys_platform == 'linux'",
+]
+# person matte for tools/person_matte.py off macOS (MediaPipe selfie segmenter)
+matte = [
+    "mediapipe==1.2.0; sys_platform == 'linux'",
+]
+
+# Linux torch comes from the CPU wheel index; PyPI's default Linux build pulls several GB of CUDA
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+explicit = true
+
+# the second entry keeps every other platform on PyPI, exactly as before
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux'" },
+    { index = "pypi", marker = "sys_platform != 'linux'" },
 ]

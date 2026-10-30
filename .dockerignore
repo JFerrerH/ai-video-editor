@@ -1,0 +1,32 @@
+# Build context = tracked engine code only. Projects, brand kits, exports, music and keys are
+# mounted at run time, never baked into the image (see CLAUDE.md, "Linux / Docker").
+.git
+.github
+.venv
+.pytest_cache
+**/__pycache__
+**/node_modules
+**/.DS_Store
+.env
+.env.*
+**/.env
+**/.env.*
+vendor/
+.claude/
+openspec/
+
+footage/*
+!footage/.gitkeep
+exports/*
+!exports/.gitkeep
+brands/*
+!brands/_template/
+assets/**
+!assets/*/.gitkeep
+
+*.mp4
+*.mov
+*.mkv
+*.wav
+*.aiff
+*.mp3

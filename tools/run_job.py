@@ -30,6 +30,10 @@ Ops (args in brackets are optional):
                    specs written by untrusted users): check returns errors/warnings/duration, renders loudness
   cut              cmd=check|render [edl preview subtitles] → plain EDL cut at the sources' orientation
                    (video-use render.py), EDL validated first: no raw ffmpeg filters, no outside paths
+  site             url → site/viewport.png + capture.json (+ images/, fonts/): one page's measured
+                   colours, fonts, image candidates and text; every request goes through a network guard
+  brand            cmd=check [dir] → validates <dir>/incoming/* (default dir: brand) into fonts/ and
+                   logos/ (invalid files deleted) and checks <dir>/brand.json; one entry per file
   shortform.build  [preview] → runs footage/<project>/edit/build.py. It EXECUTES the project's Python:
                    trusted input only; never let end users author build.py for a hosted runner.
 
@@ -325,6 +329,37 @@ def op_cut(root: Path, a: dict) -> dict:
     return {"duration": edl["total_duration_s"], "video": str(out.resolve().relative_to(root)), "lufs": lufs, "true_peak": tp}
 
 
+def op_site(root: Path, a: dict) -> dict:
+    from site_capture import capture_facts
+    from site_guard import FetchError, GuardError
+
+    if len(a["url"]) > 2048:
+        raise JobError("`url` is longer than 2048 characters")
+    out = root / "site"
+    if out.is_symlink():
+        raise JobError("site/ is a symlink")
+    try:
+        cap = capture_facts(a["url"], out)  # the page is checked before any browser starts
+    except GuardError as e:
+        raise JobError(f"url refused: {e}") from None
+    except FetchError as e:
+        return {"error": f"can't capture the page: {e}"}
+    return {k: v for k, v in cap.items() if k != "url"}
+
+
+def op_brand(root: Path, a: dict) -> dict:
+    from brand_files import check_dir
+
+    d = a["dir"]
+    if not d.is_dir():
+        raise JobError(f"no {d.relative_to(root)}/ in the project")
+    for sub in ("incoming", "fonts", "logos", "brand.json"):  # never write through a link out of the project
+        if (d / sub).is_symlink():
+            raise JobError(f"{d.relative_to(root)}/{sub} is a symlink")
+    res = check_dir(d)
+    return {**res, **({"error": f"{len(res['errors'])} kit error(s): {res['errors'][0]}"} if res["errors"] else {})}
+
+
 REPO_ID = r"(?!.*\.\.)[A-Za-z0-9][\w.-]*/[A-Za-z0-9][\w.-]*"  # a Hub repo id, never a local path
 LANG = r"[a-z]{2}(-[A-Za-z0-9]+)?"
 ASPECT = ("9:16", "16:9", "1:1", "4:5")
@@ -394,6 +429,13 @@ OPS: dict[str, Op] = {
         "edl": Arg("str", default="edit/edl.json", path="in"),
         "preview": Arg("bool", default=False),
         "subtitles": Arg("str", default="edl", choices=("edl", "build", "none")),
+    }),
+    "site": Op(op_site, {
+        "url": Arg("str", required=True),
+    }),
+    "brand": Op(op_brand, {
+        "cmd": Arg("str", required=True, choices=("check",)),
+        "dir": Arg("str", default="brand", path="out"),
     }),
     "shortform.build": Op(op_shortform_build, {
         "preview": Arg("bool", default=False),
@@ -546,6 +588,12 @@ def self_check() -> list[dict]:
                   for p in (motion / "node_modules" / ".remotion").glob(f"chrome-headless-shell/*/*/{name}")]
         add("remotion browser", bool(shells),
             str(shells[0].relative_to(motion)) if shells else "run `npx remotion browser ensure` in tools/motion")
+    try:  # the browser `site` and SVG rasterizing drive: launched for real, not just found
+        from browser import smoke
+
+        add("capture browser", True, smoke())
+    except Exception as e:  # noqa: BLE001
+        add("capture browser", False, _one_line(f"{type(e).__name__}: {e}"))
     ok, v = _cmd_ok(["auto-editor", "--version"])
     add("auto-editor", ok, v or "not found")
     helpers = REPO / "vendor" / "video-use" / "helpers"

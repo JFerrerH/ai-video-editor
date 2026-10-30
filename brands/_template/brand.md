@@ -1,6 +1,7 @@
 # Brand kit: <Brand name>
 
-Copy `brands/_template/` to `brands/<slug>/`, fill in this file and `brand.json`, and put font files in `fonts/`.
+Copy `brands/_template/` to `brands/<slug>/`, fill in this file and `brand.json`, put new font and logo files in `incoming/`,
+and run `uv run tools/brand_check.py brands/<slug>` to validate them into `fonts/` and `logos/` (invalid files are deleted).
 Claude reads this before editing any project whose `project.md` names this brand, and only those.
 Anything left blank falls back to the neutral defaults in the skills.
 

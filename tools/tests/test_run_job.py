@@ -15,6 +15,7 @@ from unittest import mock
 
 TOOLS = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(TOOLS))
+sys.path.insert(0, str(TOOLS / "tests"))
 
 import run_job as R  # noqa: E402
 
@@ -276,6 +277,68 @@ class Inventory(Base):
         self.assertFalse(res["ok"])
         self.assertNotIn("Traceback", r.stdout)
         self.assertEqual(len(r.stdout.strip().splitlines()), 1)
+
+
+class BrandOp(Base):
+    def setUp(self):
+        super().setUp()
+        from test_brand_files import make_font, png_bytes
+
+        self.font, self.png = make_font(family="Brand Sans"), png_bytes()
+        self.inc = self.root / "brand" / "incoming"
+        self.inc.mkdir(parents=True)
+
+    def fill(self):
+        (self.inc / "Brand-Regular.ttf").write_bytes(self.font)
+        (self.inc / "logo.png").write_bytes(self.png)
+        (self.inc / "broken.ttf").write_bytes(self.font[: len(self.font) // 2])
+        (self.inc / "notes.txt").write_bytes(b"hello")
+
+    def test_mixed_upload(self):
+        self.fill()
+        res, code = R.run({"op": "brand", "project": "demo", "args": {"cmd": "check"}})
+        self.assertEqual(code, 0, res)
+        self.assertTrue(res["ok"])
+        self.assertEqual(sorted((f["name"], f["status"]) for f in res["files"]),
+                         [("Brand-Regular.ttf", "valid"), ("broken.ttf", "invalid"), ("logo.png", "valid"),
+                          ("notes.txt", "invalid")])
+        self.assertEqual(res["errors"], [])
+        self.assertEqual(sorted(res["outputs"]), ["brand/fonts/Brand-Regular.ttf", "brand/logos/logo.png"])
+        self.assertEqual(list(self.inc.iterdir()), [])
+
+    def test_kit_error_fails_the_job(self):
+        (self.root / "brand" / "brand.json").write_text(json.dumps({"colors": {"accent": "red"}}))
+        res, code = R.run({"op": "brand", "project": "demo", "args": {"cmd": "check"}})
+        self.assertEqual(code, 1)
+        self.assertFalse(res["ok"])
+        self.assertIn("colors.accent", res["error"])
+
+    def test_dir_confined(self):
+        for d in ("../other", "/tmp", "missing"):
+            with self.subTest(d=d):
+                res, code = R.run({"op": "brand", "project": "demo", "args": {"cmd": "check", "dir": d}})
+                self.assertEqual(code, 2, res)
+        (self.root / "brand" / "fonts").symlink_to(self.tmp)
+        res, code = R.run({"op": "brand", "project": "demo", "args": {"cmd": "check"}})
+        self.assertEqual(code, 2)
+        self.assertIn("symlink", res["error"])
+
+    def test_cli_matches_op(self):
+        self.fill()
+        res, _ = R.run({"op": "brand", "project": "demo", "args": {"cmd": "check"}})
+        self.fill()
+        r = subprocess.run([sys.executable, str(TOOLS / "brand_check.py"), str(self.root / "brand")],
+                           capture_output=True, text=True, env={**os.environ, "PYTHONPATH": str(TOOLS)})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        cli = json.loads(r.stdout)
+        drop = lambda fs: [{k: v for k, v in f.items() if k != "replaced"} for f in fs]  # noqa: E731
+        self.assertEqual(drop(cli["files"]), drop(res["files"]))
+        self.assertEqual(cli["errors"], res["errors"])
+
+    def test_help_lists_brand_and_site(self):
+        r = subprocess.run([sys.executable, str(TOOLS / "run_job.py"), "--help"], capture_output=True, text=True)
+        for op in ("site ", "brand "):
+            self.assertIn(f"\n  {op}", r.stdout)
 
 
 if __name__ == "__main__":

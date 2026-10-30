@@ -1,0 +1,12 @@
+@font-face {
+  font-family: "Fixture Display";
+  src: url("fonts/display.ttf") format("truetype");
+  font-weight: 400;
+}
+html, body { margin: 0; background: #FFFFFF; color: #333333; font-family: Arial, sans-serif; }
+header { background: #101820; height: 160px; display: flex; align-items: center; gap: 16px; padding: 0 20px; }
+h1 { font-family: "Fixture Display", serif; font-size: 40px; margin: 24px 20px; color: #101820; }
+p { margin: 12px 20px; font-size: 18px; }
+.cta { display: block; margin: 24px 20px; padding: 40px 0; background: #E03A3E; color: #FFFFFF;
+       font-size: 28px; text-align: center; text-decoration: none; border-radius: 8px; }
+h2 { font-size: 20px; margin: 16px 20px; }

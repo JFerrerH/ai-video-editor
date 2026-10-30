@@ -15,6 +15,12 @@ dependencies = [
     # subtitle tooling
     "pysrt",
     "playwright>=1.63.0",
+    # brand file validation (tools/brand_files.py): fonts incl. WOFF2, SVG without DTD/entities
+    "fonttools>=4.66.1",
+    "brotli>=1.2.1",
+    "defusedxml>=0.7.1",
+    # the site capture's pinned-address fetch (tools/site_guard.py)
+    "urllib3>=2.8.0",
 ]
 
 [tool.uv]

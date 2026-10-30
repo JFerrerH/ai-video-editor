@@ -111,6 +111,95 @@ class OpSchemas(Base):
     def test_shortform_needs_build_file(self):
         self.rejected("shortform.build", {"preview": True}, "no edit/build.py")
 
+    def test_footage_ops(self):
+        (self.root / "clip.mov").write_text("")
+        (self.root / "edit").mkdir()
+        (self.root / "edit" / "short.json").write_text("{}")
+        (self.root / "edit" / "edl.json").write_text("{}")
+        for op, args, msg in (
+                ("conform", {"sources": ["clip.mov"], "crop": True}, "crop"),
+                ("conform", {"sources": ["../../x.mov"]}, "outside the project"),
+                ("conform", {"sources": "clip.mov"}, "must be strs"),
+                ("conform", {"frame": "4:3"}, "must be one of"),
+                ("pack", {"edit_dir": "/"}, "edit_dir"),
+                ("pack", {}, "no edit/transcripts"),
+                ("frames", {"source": "clip.mov", "at": [1], "vf": "x"}, "vf"),
+                ("frames", {"source": "/etc/passwd", "at": [1]}, "outside the project"),
+                ("frames", {"source": "clip.mov", "at": list(range(25))}, "1–24 times"),
+                ("face", {"sources": ["clip.mov"], "backend": "x"}, "backend"),
+                ("face", {"sources": [str(self.tmp)]}, "outside the project"),
+                ("shortform", {"cmd": "build"}, "must be one of"),
+                ("shortform", {"cmd": "check", "spec": "../../short.json"}, "outside the project"),
+                ("shortform", {"cmd": "check", "spec": "edit"}, "must be a .json file"),
+                ("shortform", {"cmd": "render", "build": "edit/build.py"}, "build"),
+                ("cut", {"cmd": "render", "filter": "x"}, "filter"),
+                ("cut", {"cmd": "check", "edl": "/etc/passwd"}, "outside the project"),
+                ("cut", {"cmd": "render", "subtitles": "../x.srt"}, "must be one of")):
+            with self.subTest(op=op, args=args):
+                self.rejected(op, args, msg)
+
+
+class Cut(Base):
+    """`cut` validates the EDL before render.py (or any ffmpeg) can start."""
+
+    def setUp(self):
+        super().setUp()
+        (self.root / "edit").mkdir()
+        (self.root / "take.mov").write_text("")
+        self.edl = {"version": 1, "sources": {"take": "take.mov"}, "ranges": [{"source": "take", "start": 0, "end": 1}]}
+
+    def run_cut(self, edl, cmd="render"):
+        (self.root / "edit" / "edl.json").write_text(json.dumps(edl))
+        with mock.patch("cut_edl._duration", return_value=10.0), \
+                mock.patch.object(R.subprocess, "run", side_effect=AssertionError("subprocess started")) as run:
+            res, code = R.run({"op": "cut", "project": "demo", "args": {"cmd": cmd}})
+        run.assert_not_called()
+        return res, code
+
+    def test_raw_filter_grade(self):
+        res, code = self.run_cut({**self.edl, "grade": "eq=contrast=1.1,movie=/etc/passwd"})
+        self.assertNotEqual(code, 0)
+        self.assertIn("grade", res["error"])
+        self.assertIn("auto", res["error"])
+
+    def test_absolute_source(self):
+        res, _ = self.run_cut({**self.edl, "sources": {"take": "/Users/someone/private.mov"}})
+        self.assertIn("outside the project", res["error"])
+
+    def test_unknown_field(self):
+        res, _ = self.run_cut({**self.edl, "ranges": [{"source": "take", "start": 0, "end": 1, "vf": "x"}]})
+        self.assertIn("'vf'", res["error"])
+
+    def test_range_past_the_end(self):
+        res, _ = self.run_cut({**self.edl, "ranges": [{"source": "take", "start": 5, "end": 12}]})
+        self.assertIn("after the end of take", res["error"])
+
+    def test_check_ok(self):
+        res, code = self.run_cut({**self.edl, "grade": "auto"}, cmd="check")
+        self.assertEqual(code, 0, res)
+        self.assertEqual(res["duration"], 1.0)
+
+
+class DataOnly(Base):
+    """A hosted `shortform` job renders from short.json and never runs the project's build.py."""
+
+    def test_build_py_never_runs(self):
+        edit = self.root / "edit"
+        edit.mkdir()
+        marker = self.tmp / "marker"
+        (edit / "build.py").write_text(f"open({str(marker)!r}, 'w').write('ran')\n")
+        (edit / "short.json").write_text("{}")
+        project = mock.Mock()
+        project.build.side_effect = lambda preview: (edit / "preview.mp4").write_text("") or edit / "preview.mp4"
+        with mock.patch("short_spec.load", return_value=(project, {"duration": 3.0, "edges": []})), \
+                mock.patch("shortform.loudness", return_value=(-14.0, -1.5)):
+            res, code = R.run({"op": "shortform", "project": "demo", "args": {"cmd": "render", "preview": True}})
+        self.assertEqual(code, 0, res)
+        project.build.assert_called_once_with(True)
+        self.assertEqual(res["video"], "edit/preview.mp4")
+        self.assertEqual((res["lufs"], res["true_peak"]), (-14.0, -1.5))
+        self.assertFalse(marker.exists())
+
 
 class Confinement(Base):
     def setUp(self):

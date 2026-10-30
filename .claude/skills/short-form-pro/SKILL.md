@@ -11,8 +11,12 @@ spoken. Everything here runs locally and costs nothing.
 
 **Engine:** `tools/shortform.py` (Python), `tools/motion/` (Remotion overlay),
 `tools/sfx_synth.py` (SFX), `tools/site_capture.py` (website stills).
-**Template:** `templates/shortform_build.py`. Past projects' `footage/<project>/edit/build.py` files are good
-worked examples when they exist on this machine; they are never committed.
+**Describe the short as data:** `edit/short.json` (template `templates/short.json`, shape and anchors in
+`tools/short_spec.py`), run with `uv run tools/shortform.py check|stills|render <edit>/short.json`. It is
+validated and executes nothing, so the same spec runs headless (`run_job.py` op `shortform`). `edit/build.py`
+(template `templates/shortform_build.py`) drives the same engine from Python: keep it as the escape hatch for
+one-off code the spec can't express. Past projects' `build.py` files are good worked examples when they exist on
+this machine; they are never committed.
 
 **Motion craft** (timing, easing, choreography, transitions, type sizes) lives in the `motion-graphics`
 skill and applies to every overlay here. A full-screen cutaway that needs to be a whole designed scene can
@@ -102,35 +106,46 @@ Examples below are illustrative. They show the technique, not a style to copy.
 3. **Plan the visuals as a table:** time | spoken line | what is on screen | SFX. Present it, ask
    only what you can't decide (permission for people photos, B&W low point, missing
    API keys). **Wait for approval.**
-4. Start from `templates/shortform_build.py` (`tools/new_project.py --shortform` copies it):
-   `SEGMENTS`, `brand="<slug>"` (loads theme, fonts and caption style from `brands/<slug>/brand.json`),
-   events (anchored with `p.word(take, "word", after=…)`), `sfx`. Keep the
-   `p.refine_edges()` call **before** `p.offsets()`. It widens every cut to measured silence.
+4. **Sources:** any SDR 9:16 take works (4K is scaled into the 1080x1920 work frame; face centres stay in
+   source px). HDR, horizontal or other-aspect takes must be conformed first:
+   `uv run tools/conform.py <project dir> --frame 9:16` → `edit/conformed/<stem>.mov` (same timeline, so the
+   original's transcript still fits). `uv run tools/face_centre.py <take>` suggests the face centre; check it on
+   a still (`uv run tools/frames.py <take> --at 2 8 --sheet`).
+4b. Fill `edit/short.json` (`tools/new_project.py --shortform` writes it): `sources` (file + face), `segments`
+   (take, in, out, zoom, look, freeze_after, lock_in/lock_out), `brand`, `captions` (fixes, word_fixes, skip),
+   `emphasis`, `events`, `sfx`, `public_files`. Time an event or SFX with an anchor instead of a number:
+   `{"word": "launch", "take": "take1", "after": 12.0, "edge": "start", "offset": 0.1}` or
+   `{"seg": 3, "edge": "end"}`. Anchors resolve **after** edge refinement, exactly as `p.word()` after
+   `p.refine_edges()` does in a `build.py`. `edges: {"above_floor": 28}` for very low noise floors (gotchas).
    A `base.mov` from `tools/shotcut.py` (character videos, `character-video` skill) is also a valid
    single source: one locked segment over it, as in `templates/character_build.py`.
-5a. Run `p.echo_check()` and `p.sfx_check()` → fix anything they flag.
+5a. `uv run tools/shortform.py check <edit>/short.json` → timeline, edge report, echo/SFX warnings and
+   errors; it writes no video. Fix every error; read every warning.
 5. **Edge pass (non-negotiable; clipped words are the #1 complaint).** Read the
-   `refine_edges()` report. Every `WARN` and every `edge_energy()` "check" needs an
+   edge report from `check`. Every `WARN` and every edge-energy "check" needs an
    envelope plot (±0.6 s, words overlaid, current vs refined edge: plot the RMS envelope with
    matplotlib, mark word starts/ends and both edges, save a PNG and Read it). If a word can't be cut cleanly because the next word
    follows with no gap, **keep the longer phrase**. Clean audio beats hitting 60 s.
    Use `lock_in`/`lock_out` only for edges you verified by eye. Watch for widened edges that **overlap the next segment** on continuous
-   boundaries (duplicated audio): check `S[i].t_out <= S[i+1].t_in` after refining and lock both at the dip.
+   boundaries (duplicated audio): check each segment's refined out ≤ the next one's in and lock both at the dip.
    A drawn-out filler ("y…") you drop at an in-point can still get captioned from Whisper's stretched
-   stamp: list it in `Project.caption_skip`.
-6. Dry-run: `uv run python -c "import build"` and print the events → check the order, gaps and total.
-7. `p.overlay_stills([t…], dir)` → contact sheet → fix layout before any full render.
-8. `uv run <edit>/build.py --preview` (~1 min for 60 s). Then verify (below), iterate,
-   and run the final without `--preview`. Copy to `exports/<project>_<platform>_<YYYYMMDD>.mp4`.
+   stamp: list it in `captions.skip`.
+6. `uv run tools/shortform.py stills <edit>/short.json [--at t …]` → finished-look frames (cut, zoom, overlays,
+   captions, behind-the-speaker layers) in `edit/stills/`, ~3 s each, no render. Read them and fix layout first.
+7. `uv run tools/shortform.py render <edit>/short.json --preview` (~1 min for 60 s). Then verify (below), iterate,
+   and render the final without `--preview`. Copy to `exports/<project>_<platform>_<YYYYMMDD>.mp4`.
    The final uses `DELIVERY_X264` (Instagram/TikTok master): source frame rate (don't upsample 30→60),
    H.264 High CRF 16, 1 s GOP, BT.709 tagged in the VUI, AAC 320k/48 kHz, faststart. Check with
    `ffprobe` that `color_primaries/transfer` read `bt709`.
+   With a `build.py` instead: `uv run <edit>/build.py --preview`, `p.echo_check()`, `p.sfx_check()`,
+   `p.stills([t…])` do the same.
 
 ## Tools
 
 | Tool | What it does |
 |---|---|
-| `tools/shortform.py` | `Seg(take, in, out, zoom, look, freeze_after)`, `Project(..., brand="<slug>").build(preview)`. Zooms: `("static", s)`, `("push", a, b)`, `("punch", base, peak, src_t)`, `("outpunch", a, b, peak, src_t)`. Looks: `None`, `"bw"`. `p.word()` / `p.at()` map source times → output timeline. Karaoke ASS, attack-aligned SFX mix, two-pass loudnorm, overlay composite, captions LAST. |
+| `tools/short_spec.py` | Loads `edit/short.json` into the engine: validates every field (paths stay inside the project, grades are preset names, overlay `src` must be a `public_files` name), refines edges, resolves anchors. `check()` plans without rendering. Limits: 180 s, 120 segments, 200 events, 200 SFX. |
+| `tools/shortform.py` | CLI `check\|stills\|render <spec>`. `Seg(take, in, out, zoom, look, freeze_after)`, `Project(..., brand="<slug>").build(preview)`. Zooms: `("static", s)`, `("push", a, b)`, `("punch", base, peak, src_t)`, `("outpunch", a, b, peak, src_t)`. Looks: `None`, `"bw"`. `p.word()` / `p.at()` map source times → output timeline. Karaoke ASS, attack-aligned SFX mix, two-pass loudnorm, overlay composite, captions LAST. |
 | `tools/brand.py` | `load_brand(slug)` → Remotion theme, font `public_files`, caption props from `brands/<slug>/brand.json`; `None` → neutral. |
 | `tools/motion/` | Remotion project. Composition `Overlay` reads `{durationInSeconds, brand, events[]}` and renders one transparent ProRes 4444 layer. Studio: `cd tools/motion && npx remotion studio --props=<edit>/overlay_props.json --public-dir=<edit>/motion_public`. |
 | `tools/sfx_synth.py` | Builds `assets/sfx/synth/*.wav` + `attack.json`: whoosh, whoosh_short, riser, impact, stamp, thud, pop, click, shutter, typing, chime, success, error, scratch, swell, pluck, bubble, swipe, tap, sparkle, sub, tick. Licence-free (synthesized). File RMS differs a lot (bubble/sub are hot): measure each effect against speech in the mix, not just the gain you typed. |

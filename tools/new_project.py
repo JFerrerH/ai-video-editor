@@ -2,7 +2,9 @@
 
     uv run tools/new_project.py acme-product-demo --brand acme --type tutorial --platforms youtube --language en
     uv run tools/new_project.py wedding-teaser --type montage --platforms reels,youtube --language es
-    uv run tools/new_project.py ... --shortform     # also copy templates/shortform_build.py → edit/build.py
+    uv run tools/new_project.py ... --shortform     # also copy templates/short.json → edit/short.json (the
+        # data-only short: uv run tools/shortform.py check|stills|render) and templates/shortform_build.py →
+        # edit/build.py (the same engine from Python, for one-off code)
     uv run tools/new_project.py acme-explainer --type generated --platforms reels --language en
         # from scratch, no footage: copies templates/storyboard.json → edit/storyboard.json
         # (aspect from the first platform, brand filled in); render with tools/storyboard.py
@@ -44,7 +46,7 @@ def main() -> None:
     ap.add_argument("--type", default="other", choices=TYPES)
     ap.add_argument("--platforms", default="tbd", help="comma list: youtube, reels, tiktok, shorts, linkedin, x, master")
     ap.add_argument("--language", default="tbd", help="spoken language code for transcription (es, en…)")
-    ap.add_argument("--shortform", action="store_true", help="copy the short-form build.py template")
+    ap.add_argument("--shortform", action="store_true", help="copy the short-form starters (short.json and build.py)")
     ap.add_argument("--explainer", action="store_true",
                     help="with --type generated: start from the narrated-explainer storyboard")
     ap.add_argument("--characters", action="store_true",
@@ -75,6 +77,11 @@ def main() -> None:
         shutil.copy2(REPO / "templates" / "shortform_build.py", dst)
         if a.brand != "none":
             dst.write_text(dst.read_text().replace("    brand=None,", f'    brand="{a.brand}",'))
+        spec = json.loads((REPO / "templates" / "short.json").read_text())
+        spec["brand"] = a.brand
+        (edit / "short.json").write_text(json.dumps(spec, indent=2, ensure_ascii=False) + "\n")
+        print(f"short: {(edit / 'short.json').relative_to(REPO)}; drop take1.mov in, transcribe it, then "
+              f"uv run tools/shortform.py check {(edit / 'short.json').relative_to(REPO)}")
     if a.characters:
         characters(edit, a)
     elif a.type in STORYBOARD_TYPES:

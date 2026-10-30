@@ -22,6 +22,14 @@ Ops (args in brackets are optional):
   voice            text out [lang preset speed pronounce force backend] → <out>.wav + sidecar
   matte            source start dur out [fps backend] → grey person matte video
   storyboard       cmd=check|voice|sheet|stills|render [storyboard what aspect bg at preview export force]
+  conform          [sources frame face] → edit/conformed/<stem>.mov + conform.json (SDR, CFR, 9:16 or source frame)
+  pack             [silence] → edit/takes_packed.md (every transcript, phrase by phrase)
+  frames           source at [sheet] → edit/frames/<stem>_<t>.png (+ _sheet.png), ≤ 24, ≤ 720 px
+  face             sources → suggested face centre + confidence per take (also edit/face.json)
+  shortform        cmd=check|stills|render [spec at preview] → from edit/short.json (data only; safe for
+                   specs written by untrusted users): check returns errors/warnings/duration, renders loudness
+  cut              cmd=check|render [edl preview subtitles] → plain EDL cut at the sources' orientation
+                   (video-use render.py), EDL validated first: no raw ffmpeg filters, no outside paths
   shortform.build  [preview] → runs footage/<project>/edit/build.py. It EXECUTES the project's Python:
                    trusted input only; never let end users author build.py for a hosted runner.
 
@@ -64,7 +72,7 @@ class JobError(Exception):
 # ── argument schemas ──────────────────────────────────────────────────────
 @dataclass
 class Arg:
-    type: str  # str | int | float | bool | floats | strmap
+    type: str  # str | int | float | bool | floats | strs | strmap
     required: bool = False
     default: Any = None
     choices: tuple | None = None
@@ -79,6 +87,7 @@ def _typed(name: str, spec: Arg, v: Any) -> Any:
         "float": isinstance(v, (int, float)) and not isinstance(v, bool),
         "bool": isinstance(v, bool),
         "floats": isinstance(v, list) and all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in v),
+        "strs": isinstance(v, list) and all(isinstance(x, str) for x in v),
         "strmap": isinstance(v, dict) and all(isinstance(k, str) and isinstance(x, str) for k, x in v.items()),
     }[spec.type]
     if not ok:
@@ -118,7 +127,9 @@ def check_args(schema: dict[str, Arg], args: Any, root: Path) -> dict[str, Any]:
             out[name] = confine(root, spec.default, spec.path) if spec.path and spec.default else spec.default
             continue
         v = _typed(name, spec, args[name])
-        out[name] = confine(root, v, spec.path) if spec.path else v
+        if spec.path:
+            v = [confine(root, x, spec.path) for x in v] if isinstance(v, list) else confine(root, v, spec.path)
+        out[name] = v
     return out
 
 
@@ -217,6 +228,103 @@ def op_shortform_build(root: Path, a: dict) -> dict:
     return {}
 
 
+def op_conform(root: Path, a: dict) -> dict:
+    from conform import VIDEO_EXT, conform
+
+    faces = {}
+    for take, xy in (a["face"] or {}).items():
+        try:
+            x, y = (float(v) for v in xy.split(","))
+        except ValueError:
+            raise JobError(f"face {take!r} must be \"x,y\" in source pixels, got {xy!r}") from None
+        faces[take] = (x, y)
+    if bad := [p.name for p in a["sources"] or [] if p.suffix.lower() not in VIDEO_EXT]:
+        raise JobError(f"not a video file: {', '.join(bad)}")
+    m = conform(root, a["sources"], a["frame"], faces)
+    return {"takes": {k: {f: r[f] for f in ("output", "as_is", "crop", "face", "fps")} for k, r in m["takes"].items()}}
+
+
+def op_pack(root: Path, a: dict) -> dict:
+    if not (root / "edit" / "transcripts").is_dir():
+        raise JobError("no edit/transcripts/ yet (run transcribe first)")
+    r = subprocess.run(["uv", "run", "--no-sync", str(REPO / "vendor/video-use/helpers/pack_transcripts.py"),
+                        "--edit-dir", str(root / "edit"), "--silence-threshold", str(a["silence"])],
+                       cwd=REPO, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    sys.stderr.write(r.stdout)
+    if r.returncode != 0:
+        return {"error": f"pack_transcripts exited {r.returncode}: {r.stdout.strip().splitlines()[-1:]}"}
+    return {}
+
+
+def op_frames(root: Path, a: dict) -> dict:
+    from frames import MAX_TIMES, frames
+
+    if not 1 <= len(a["at"]) <= MAX_TIMES:
+        raise JobError(f"`at` needs 1–{MAX_TIMES} times")
+    frames(a["source"], a["at"], root / "edit" / "frames", a["sheet"])
+    return {}
+
+
+def op_face(root: Path, a: dict) -> dict:
+    from face_centre import suggest
+
+    faces = {p.stem: suggest(p) for p in a["sources"]}
+    out = root / "edit" / "face.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(faces, indent=1))
+    return {"faces": faces}
+
+
+def op_shortform(root: Path, a: dict) -> dict:
+    import short_spec as S
+    from shortform import loudness
+
+    spec = a["spec"]
+    if spec.is_dir() or spec.suffix != ".json":
+        raise JobError("`spec` must be a .json file (default edit/short.json)")
+    if a["cmd"] == "check":
+        res = S.check(spec, root)
+        out = {k: res[k] for k in ("errors", "warnings", "duration", "timeline")}
+        return {**out, **({"error": f"{len(res['errors'])} spec error(s): {res['errors'][0]}"} if res["errors"] else {})}
+    try:
+        p, rep = S.load(spec, root)
+    except S.SpecError as e:
+        return {"errors": e.errors, "error": f"{len(e.errors)} spec error(s): {e.errors[0]}"}
+    if a["cmd"] == "stills":
+        p.stills(a["at"] or None, preview=True)
+        return {"duration": rep["duration"]}
+    out = p.build(a["preview"])
+    lufs, tp = loudness(out)
+    return {"duration": rep["duration"], "video": str(out.resolve().relative_to(root)), "lufs": lufs, "true_peak": tp}
+
+
+def op_cut(root: Path, a: dict) -> dict:
+    import cut_edl
+    from shortform import loudness
+
+    edl, errors = cut_edl.resolve(a["edl"], root)
+    if errors:
+        if a["cmd"] == "check":
+            return {"errors": errors, "error": f"{len(errors)} EDL error(s): {errors[0]}"}
+        raise JobError(f"{len(errors)} EDL error(s): {errors[0]}")
+    if a["cmd"] == "check":
+        return {"errors": [], "duration": edl["total_duration_s"], "ranges": len(edl["ranges"])}
+    resolved = root / "edit" / "edl_resolved.json"  # render.py reads transcripts next to the EDL
+    resolved.write_text(json.dumps(edl, indent=1))
+    out = root / "edit" / "cut" / ("preview.mp4" if a["preview"] else "final.mp4")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    cmd = ["uv", "run", "--no-sync", str(REPO / "vendor/video-use/helpers/render.py"), str(resolved), "-o", str(out)]
+    cmd += ["--preview"] if a["preview"] else []
+    cmd += {"build": ["--build-subtitles"], "none": ["--no-subtitles"]}.get(a["subtitles"], [])
+    r = subprocess.run(cmd, cwd=REPO, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    sys.stderr.write(r.stdout)
+    if r.returncode != 0:
+        tail = [ln for ln in r.stdout.splitlines() if ln.strip()]
+        return {"error": f"render.py exited {r.returncode}: {tail[-1] if tail else ''}"}
+    lufs, tp = loudness(out)
+    return {"duration": edl["total_duration_s"], "video": str(out.resolve().relative_to(root)), "lufs": lufs, "true_peak": tp}
+
+
 REPO_ID = r"(?!.*\.\.)[A-Za-z0-9][\w.-]*/[A-Za-z0-9][\w.-]*"  # a Hub repo id, never a local path
 LANG = r"[a-z]{2}(-[A-Za-z0-9]+)?"
 ASPECT = ("9:16", "16:9", "1:1", "4:5")
@@ -258,6 +366,34 @@ OPS: dict[str, Op] = {
         "preview": Arg("bool", default=False),
         "export": Arg("str", pattern=r"[a-z0-9]+(-[a-z0-9]+)*"),
         "force": Arg("bool", default=False),
+    }),
+    "conform": Op(op_conform, {
+        "sources": Arg("strs", path="in"),
+        "frame": Arg("str", default="9:16", choices=("9:16", "source")),
+        "face": Arg("strmap"),
+    }),
+    "pack": Op(op_pack, {
+        "silence": Arg("float", default=0.5),
+    }),
+    "frames": Op(op_frames, {
+        "source": Arg("str", required=True, path="in"),
+        "at": Arg("floats", required=True),
+        "sheet": Arg("bool", default=False),
+    }),
+    "face": Op(op_face, {
+        "sources": Arg("strs", required=True, path="in"),
+    }),
+    "shortform": Op(op_shortform, {
+        "cmd": Arg("str", required=True, choices=("check", "stills", "render")),
+        "spec": Arg("str", default="edit/short.json", path="in"),
+        "at": Arg("floats"),
+        "preview": Arg("bool", default=False),
+    }),
+    "cut": Op(op_cut, {
+        "cmd": Arg("str", required=True, choices=("check", "render")),
+        "edl": Arg("str", default="edit/edl.json", path="in"),
+        "preview": Arg("bool", default=False),
+        "subtitles": Arg("str", default="edl", choices=("edl", "build", "none")),
     }),
     "shortform.build": Op(op_shortform_build, {
         "preview": Arg("bool", default=False),

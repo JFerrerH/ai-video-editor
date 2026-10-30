@@ -90,6 +90,46 @@ LOOKS = {
 }
 
 
+HDR_TRANSFERS = {"arib-std-b67", "smpte2084"}  # HLG, PQ
+
+
+def probe_video(path: Path) -> dict:
+    """Display size (rotation applied), transfer and frame rate of a file's first video stream."""
+    r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                        "stream=width,height,color_transfer,color_primaries,color_space,r_frame_rate,avg_frame_rate"
+                        ":stream_side_data=rotation",
+                        "-of", "json", str(path)], capture_output=True, text=True)
+    st = (json.loads(r.stdout or "{}").get("streams") or [{}])[0]
+    w, h = st.get("width", 0), st.get("height", 0)
+    rot = next((abs(int(d["rotation"])) for d in st.get("side_data_list", []) if "rotation" in d), 0)
+    if rot % 180 == 90:
+        w, h = h, w
+    # the container can say bt709 while the frames carry HLG/PQ: the first frame's tags win when they're HDR
+    fr = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-read_intervals", "%+#1",
+                         "-show_entries", "frame=color_transfer,color_primaries,color_space", "-of", "json", str(path)],
+                        capture_output=True, text=True).stdout
+    f0 = (json.loads(fr or "{}").get("frames") or [{}])[0]
+    hdr = f0.get("color_transfer") in HDR_TRANSFERS
+    pick = lambda k: (f0 if hdr and f0.get(k) else st).get(k, "unknown")  # noqa: E731
+    return {"width": w, "height": h, "transfer": pick("color_transfer"),
+            "primaries": pick("color_primaries"), "matrix": pick("color_space"),
+            "r_frame_rate": st.get("r_frame_rate"), "avg_frame_rate": st.get("avg_frame_rate")}
+
+
+def source_problem(info: dict) -> str | None:
+    """Why a source can't go into the 1080x1920 work frame as is (None = it can)."""
+    w, h = info["width"], info["height"]
+    if not w or not h:
+        return "has no video stream"
+    if info["transfer"] in HDR_TRANSFERS:
+        return f"is HDR ({info['transfer']}); conform it to SDR first (conform op / tools/conform.py)"
+    if w > h:
+        return f"is horizontal ({w}x{h}); conform it to 9:16 first (conform op / tools/conform.py)"
+    if abs(w / h - 9 / 16) > 0.01 * 9 / 16:
+        return f"is {w}x{h}, not 9:16; conform it to 9:16 first (conform op / tools/conform.py)"
+    return None
+
+
 @dataclass
 class Seg:
     take: str
@@ -147,6 +187,17 @@ class Project:
             self.brand = kit.theme
             self.public_files = {**kit.public_files, **self.public_files}  # project files win
             self.caption_props = {**kit.caption_props, **self.caption_props}
+
+    def source_info(self, take: str) -> dict:
+        cache = self.__dict__.setdefault("_probe_cache", {})
+        if take not in cache:
+            cache[take] = probe_video(self.sources[take])
+        return cache[take]
+
+    def source_errors(self) -> list[str]:
+        """Sources the engine can't use as is (any SDR 9:16 size works; others need conform)."""
+        return [f"source {take} ({Path(self.sources[take]).name}) {why}" for take in self.sources
+                if (why := source_problem(self.source_info(take)))]
 
     # ── timeline ──────────────────────────────────────────────────────────
     def offsets(self) -> list[float]:
@@ -283,7 +334,15 @@ class Project:
 
     # ── 1. segments ───────────────────────────────────────────────────────
     def _vf(self, s: Seg, w: int, h: int) -> str:
+        info = self.source_info(s.take)
+        if why := source_problem(info):
+            raise SystemExit(f"source {s.take} {why}")
         cx, cy = self.face[s.take]
+        # any 9:16 size: work in a 1080x1920 frame (face centre is in source px)
+        k_src = 1080 / info["width"]
+        fit = "" if (info["width"], info["height"]) == (1080, 1920) else "scale=1080:1920:flags=lanczos,"
+        if fit:
+            cx, cy = round(cx * k_src), round(cy * k_src)
         look = LOOKS[s.look]
         post = ",".join(x for x in (self.grade, look) if x)
         hold = f",tpad=stop_mode=clone:stop_duration={s.freeze_after:.3f}" if s.freeze_after else ""
@@ -293,7 +352,7 @@ class Project:
             cw, ch = round(1080 / sc / 2) * 2, round(1920 / sc / 2) * 2
             x = max(0, min(1080 - cw, cx - cw // 2))
             y = max(0, min(1920 - ch, cy - ch // 2))
-            return (f"setpts=PTS-STARTPTS,crop={cw}:{ch}:{x}:{y},scale={w}:{h}:flags=lanczos,"
+            return (f"setpts=PTS-STARTPTS,{fit}crop={cw}:{ch}:{x}:{y},scale={w}:{h}:flags=lanczos,"
                     f"{post},fps={self.fps}{hold},format=yuv420p")
         # localize punch anchors to segment time
         if z[0] == "punch":
@@ -363,6 +422,64 @@ class Project:
             run(["npx", "remotion", "still", "Overlay", str(p), f"--props={pj}", f"--public-dir={pub}",
                  f"--frame={round(t * self.fps)}", "--scale=0.5", "--log=error"], cwd=MOTION)
             paths.append(p)
+        return paths
+
+    def stills(self, times: list[float] | None = None, preview: bool = True) -> list[Path]:
+        """Frames of the FINISHED short (cut + zoom/look, overlays, captions, behind-the-speaker
+        layers) at output times, without rendering the video: one source frame through the
+        segment's own filter, one Remotion still per layer, one ffmpeg composite each.
+        Default: the middle of every segment. → edit/stills/short_<t>.png (540x960 preview, else 1080x1920)."""
+        offs = self.offsets()
+        total = offs[-1]
+        times = times if times else [round(offs[i] + s.out_dur / 2, 3) for i, s in enumerate(self.segments)]
+        if bad := [t for t in times if not 0 <= t < total]:
+            raise ValueError(f"still time(s) {bad} outside the short (0–{total:.2f} s)")
+        w, h = (540, 960) if preview else (1080, 1920)
+        out_dir = self.edit_dir / "stills"
+        tmp = out_dir / "_layers"
+        tmp.mkdir(parents=True, exist_ok=True)
+        pub, pj = self.stage_overlay()
+        scale = "--scale=0.5" if preview else "--scale=1"
+
+        def remotion_still(props: Path, t: float, dst: Path) -> None:
+            run(["npx", "remotion", "still", "Overlay", str(dst.resolve()), f"--props={props}", f"--public-dir={pub}",
+                 f"--frame={min(round(t * self.fps), round(total * self.fps) - 1)}", scale, "--log=error"], cwd=MOTION)
+
+        paths = []
+        for t in times:
+            i = max(k for k in range(len(self.segments)) if offs[k] <= t + 1e-9)
+            s = self.segments[i]
+            local = min(t - offs[i], max(0.0, s.dur - 1 / self.fps))  # inside a freeze: its held frame
+            base = tmp / f"base_{t:06.2f}.png"
+            run(["ffmpeg", "-y", "-ss", f"{s.t_in:.3f}", "-t", f"{s.dur:.3f}", "-i", str(self.sources[s.take]),
+                 "-vf", f"{self._vf(s, w, h)},trim=start={local:.4f}", "-frames:v", "1", str(base)])
+            ov = tmp / f"ov_{t:06.2f}.png"
+            remotion_still(pj, t, ov)
+            inputs, parts, cur = ["-i", str(base)], [], "[0:v]"
+            behind = [e for e in self.events if e.get("props", {}).get("behind")
+                      and e["start"] <= t < e["start"] + e["duration"]]
+            if behind:
+                matte = tmp / f"matte_{t:06.2f}.mov"
+                make_matte(base, 0, 1 / self.fps, matte, fps=self.fps)
+                inputs += ["-i", str(matte)]
+                parts += [f"[1:v]scale={w}:{h},format=gray[m]", "[0:v]format=yuva420p[sp]", "[sp][m]alphamerge[pm]"]
+                for k, e in enumerate(behind):
+                    pk = tmp / f"behind_{t:06.2f}_{k}.json"
+                    pk.write_text(json.dumps({"durationInSeconds": round(total, 3), "brand": self.brand, "events": [e]},
+                                             ensure_ascii=False))
+                    layer = tmp / f"behind_{t:06.2f}_{k}.png"
+                    remotion_still(pk, t, layer)
+                    inputs += ["-i", str(layer)]
+                    parts.append(f"{cur}[{len(inputs) // 2 - 1}:v]overlay=0:0:format=auto[b{k}]")
+                    cur = f"[b{k}]"
+                parts.append(f"{cur}[pm]overlay=0:0:format=auto[sp2]")
+                cur = "[sp2]"
+            inputs += ["-i", str(ov)]
+            parts.append(f"{cur}[{len(inputs) // 2 - 1}:v]overlay=0:0:format=auto")
+            dst = out_dir / f"short_{t:06.2f}.png"
+            run(["ffmpeg", "-y", *inputs, "-filter_complex", ";".join(parts), "-frames:v", "1", str(dst)])
+            paths.append(dst)
+        shutil.rmtree(tmp, ignore_errors=True)
         return paths
 
     def render_overlay(self, preview: bool, out: Path) -> None:
@@ -691,3 +808,51 @@ def _norm(s: str) -> str:
 def _ts(t: float) -> str:
     cs = round(max(0.0, t) * 100)
     return f"{cs // 360000}:{cs // 6000 % 60:02d}:{cs // 100 % 60:02d}.{cs % 100:02d}"
+
+
+def main() -> None:
+    """CLI for a data-only short (`edit/short.json`, see tools/short_spec.py):
+
+        uv run tools/shortform.py check  footage/<project>/edit/short.json
+        uv run tools/shortform.py stills footage/<project>/edit/short.json [--at 1.5 4.2]
+        uv run tools/shortform.py render footage/<project>/edit/short.json [--preview]
+    """
+    import argparse
+    import sys
+
+    import short_spec as S
+
+    ap = argparse.ArgumentParser(description=main.__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("cmd", choices=("check", "stills", "render"))
+    ap.add_argument("spec", type=Path, nargs="?", default=Path("edit/short.json"))
+    ap.add_argument("--preview", action="store_true")
+    ap.add_argument("--at", type=float, nargs="+", help="output times for stills (default: each segment's middle)")
+    a = ap.parse_args()
+    if a.cmd == "check":
+        res = S.check(a.spec)
+        print("\n".join(res["timeline"] + [""] + res["edges"]))
+        for w in res["warnings"]:
+            print(f"WARN  {w}")
+        for e in res["errors"]:
+            print(f"ERROR {e}")
+        if res["duration"] is not None:
+            print(f"planned duration: {res['duration']:.2f}s")
+        sys.exit(1 if res["errors"] else 0)
+    try:
+        p, rep = S.load(a.spec)
+    except S.SpecError as e:
+        sys.exit("\n".join(f"ERROR {x}" for x in e.errors))
+    print("\n".join(rep["edges"]))
+    if a.cmd == "stills":
+        for path in p.stills(a.at, preview=True):
+            print(f"wrote {path}")
+    else:
+        out = p.build(a.preview)
+        print("loudness: {:.1f} LUFS, {:.1f} dBTP".format(*loudness(out)))
+
+
+if __name__ == "__main__":
+    import sys as _sys
+
+    _sys.path.insert(0, str(Path(__file__).resolve().parent))
+    main()

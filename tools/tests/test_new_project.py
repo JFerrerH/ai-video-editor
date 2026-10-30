@@ -1,4 +1,4 @@
-"""new_project.py --characters: branded starter with the library noted, and the --shortform conflict.
+"""new_project.py --characters / --shortform: branded starters, and the conflict between them.
 
     uv run python -m unittest discover -s tools/tests
 """
@@ -52,6 +52,16 @@ class Characters(unittest.TestCase):
             self.run_cli("acme-tips", "--brand", "acme", "--type", "generated", "--characters", "--shortform")
         self.assertIn("can't be combined", str(e.exception))
         self.assertFalse((self.repo / "footage" / "acme-tips").exists())
+
+
+    def test_shortform_starters(self):
+        for brand in ("acme", "none"):
+            self.run_cli(f"{brand}-short", "--brand", brand, "--type", "talking-head", "--shortform")
+            edit = self.repo / "footage" / f"{brand}-short" / "edit"
+            spec = json.loads((edit / "short.json").read_text())
+            self.assertEqual(spec["brand"], brand)
+            build = (edit / "build.py").read_text()
+            self.assertIn('brand="acme",' if brand == "acme" else "brand=None,", build)
 
 
 if __name__ == "__main__":

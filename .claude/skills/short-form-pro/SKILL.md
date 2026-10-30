@@ -134,7 +134,7 @@ Examples below are illustrative. They show the technique, not a style to copy.
 | `tools/brand.py` | `load_brand(slug)` → Remotion theme, font `public_files`, caption props from `brands/<slug>/brand.json`; `None` → neutral. |
 | `tools/motion/` | Remotion project. Composition `Overlay` reads `{durationInSeconds, brand, events[]}` and renders one transparent ProRes 4444 layer. Studio: `cd tools/motion && npx remotion studio --props=<edit>/overlay_props.json --public-dir=<edit>/motion_public`. |
 | `tools/sfx_synth.py` | Builds `assets/sfx/synth/*.wav` + `attack.json`: whoosh, whoosh_short, riser, impact, stamp, thud, pop, click, shutter, typing, chime, success, error, scratch, swell, pluck, bubble, swipe, tap, sparkle, sub, tick. Licence-free (synthesized). File RMS differs a lot (bubble/sub are hot): measure each effect against speech in the mix, not just the gain you typed. |
-| `tools/person_matte.py` | Grey person matte (white = person) for a window of a clip, via `person_matte.swift` (Apple Vision `.accurate`). Used automatically for `behind` events. |
+| `tools/person_matte.py` | Grey person matte (white = person) for a window of a clip: Apple Vision `.accurate` via `person_matte.swift` on macOS, MediaPipe selfie segmenter elsewhere (`uv sync --group matte`; `--backend` forces one). Used automatically for `behind` events. |
 | `tools/site_capture.py` | Phone-sized viewport + full-page PNG of a URL (system Chrome via Playwright). It scrolls first so reveal animations render. |
 
 ### Overlay components (`tools/motion/src/components/`)
@@ -176,8 +176,8 @@ the event start**.
 | `Captions` | added automatically by `Project` as the LAST event | `words[{t, text, emph(group id), chunk}]`, `chunks[{start, end}]`, `lightRanges`, `top`, `size`, `emphSize`, `emphColor` (defaults from `brand.json` `captions`; override via `Project.caption_props`) |
 
 **Behind the speaker:** any event with `props.behind: true` is rendered UNDER a person-matted copy of the
-footage (Apple Vision segmentation via `tools/person_matte.py`, macOS only, ~30 s per window): text appears
-behind the head/hair. Set the text's `top` so its lower part overlaps the top of the head (find the head top on
+footage (`tools/person_matte.py`: Apple Vision on macOS, ~30 s per window; MediaPipe on Linux/Docker, same
+build file, softer and less precise around loose hair against a busy background): text appears behind the head/hair. Set the text's `top` so its lower part overlaps the top of the head (find the head top on
 a frame of that segment at its zoom) and keep it within `SAFE.side`. Captions and normal events stay on top.
 
 To add a component: create it in `components/`, register it in `REGISTRY` in `Overlay.tsx`, drive all

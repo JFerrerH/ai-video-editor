@@ -1,28 +1,35 @@
 """Local text-to-speech: script line → mono 24 kHz WAV + sidecar JSON, fully offline once cached.
 
-    uv sync --group gen                                    # once: installs mlx-audio + misaki
+    uv sync --group gen                                    # once: installs the backend + misaki
     uv run tools/gen/voice.py "One clear idea." -o out.wav --lang en
     uv run tools/gen/voice.py "Una idea clara." -o out.wav --lang es --preset em_alex --speed 1.1
     uv run tools/gen/voice.py --list                       # languages and their voice presets
 
-Model: Kokoro-82M, weights `mlx-community/Kokoro-82M-bf16` (MLX conversion of `hexgrad/Kokoro-82M`),
-licence Apache-2.0, run through `mlx-audio` (MIT). Text → phonemes with `misaki` (Apache-2.0); for
+Model: Kokoro-82M, licence Apache-2.0, through one of two backends chosen at runtime (`--backend`):
+  - mlx    Apple Silicon macOS: weights `mlx-community/Kokoro-82M-bf16` (MLX conversion of
+           `hexgrad/Kokoro-82M`) through `mlx-audio` (MIT)
+  - torch  anywhere else (Linux, Docker): weights `hexgrad/Kokoro-82M` through the reference `kokoro`
+           package (Apache-2.0) on PyTorch CPU (BSD-3)
+Same voices, languages, dialects, pauses and trimming on both; the audio is not bit-identical. Text → phonemes with `misaki` (Apache-2.0); for
 non-English languages (and English words misaki doesn't know) misaki calls the `espeak-ng` library
 (GPL-3.0) bundled in the `espeakng-loader` wheel. It's loaded on this machine and not redistributed;
 it doesn't change the licence of the audio we produce. English also uses the spaCy model
 `en_core_web_sm` (MIT), pinned in the `gen` group. First run downloads ~0.36 GB of weights + voices.
 
 Each clip gets `<clip>.json` next to it: the cache key (text sent, lang, preset, speed, model) plus
-duration and seconds taken. A request whose key matches is skipped; `--force` re-synthesises.
+the backend, duration and seconds taken. A request whose key matches is skipped; `--force`
+re-synthesises. A clip made by the other backend doesn't match (its model differs), so it is redone.
 
 Module top level is standard library only, so `tools/storyboard.py check` can validate languages and
-presets and read sidecars on a default install; `mlx-audio` is imported inside `synthesize_many`.
+presets and read sidecars on a default install; the backend is imported inside `synthesize_many`.
 """
 
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
+import platform
 import re
 import sys
 import time
@@ -31,9 +38,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 MODEL_ID = "mlx-community/Kokoro-82M-bf16"
+TORCH_MODEL_ID = "hexgrad/Kokoro-82M"
 MODEL_LICENCE = "Apache-2.0"
 SAMPLE_RATE = 24000
 INSTALL_HINT = "uv sync --group gen"
+# backend → (weights, module it needs, how it runs)
+BACKENDS = {
+    "mlx": (MODEL_ID, "mlx_audio", "mlx-audio (MIT)"),
+    "torch": (TORCH_MODEL_ID, "kokoro", "kokoro (Apache-2.0) on PyTorch CPU (BSD-3)"),
+}
 
 # storyboard `lang` → (Kokoro language code, language name, default preset)
 # en and es defaults picked by ear from sample clips (2026-10-22); the others are Kokoro's best-rated voice
@@ -73,6 +86,32 @@ TRIM_KEEP_S = 0.04  # silence kept at each end; + one window of slack stays unde
 # with these silences (s) after the mark that ends each piece. Commas stay inside a piece.
 PAUSE_S = {".": 0.18, "!": 0.18, "?": 0.2, "…": 0.25, ":": 0.12, ";": 0.12}  # short: longer reads as hesitant
 PROSODY = 3  # bump when the chunking/pauses change, so cached clips are re-synthesised
+
+
+def _apple_silicon() -> bool:
+    return sys.platform == "darwin" and platform.machine() == "arm64"
+
+
+def pick_backend(requested: str | None) -> str:
+    """`mlx` on Apple Silicon macOS, `torch` everywhere else; `requested` overrides."""
+    if requested in (None, "auto"):
+        return "mlx" if _apple_silicon() else "torch"
+    if requested not in BACKENDS:
+        sys.exit(f"unknown voice backend {requested!r}; use auto, {', '.join(BACKENDS)}")
+    return requested
+
+
+def backend_missing(backend: str) -> str | None:
+    """None if `backend` can run here, else what to do about it."""
+    if backend == "mlx" and not _apple_silicon():
+        return "mlx needs Apple Silicon macOS; use --backend torch"
+    if importlib.util.find_spec(BACKENDS[backend][1]) is None or importlib.util.find_spec("misaki") is None:
+        return f"not installed; run: {INSTALL_HINT}"
+    return None
+
+
+def model_id(backend: str | None = None) -> str:
+    return BACKENDS[pick_backend(backend)][0]
 
 
 def presets_for(lang: str) -> list[str]:
@@ -120,15 +159,20 @@ class Job:
     lang: str
     preset: str | None = None
     speed: float = 1.0
+    backend: str | None = None  # None/"auto": the platform's (pick_backend)
 
     @property
     def voice(self) -> str:
         return self.preset or default_preset(self.lang)
 
     def key(self) -> dict:
-        return {"text": self.text, "lang": self.lang, "preset": self.voice,
-                "speed": round(float(self.speed), 3), "model": MODEL_ID, "prosody": PROSODY,
-                "phonemes": ESPEAK.get(self.lang)}
+        b = pick_backend(self.backend)
+        key = {"text": self.text, "lang": self.lang, "preset": self.voice,
+               "speed": round(float(self.speed), 3), "model": BACKENDS[b][0], "prosody": PROSODY,
+               "phonemes": ESPEAK.get(self.lang)}
+        # mlx keys stay exactly as before the torch backend existed, so Mac clips (and the word
+        # times keyed on them) stay cached
+        return key if b == "mlx" else {**key, "backend": b}
 
 
 def sidecar_path(wav: Path) -> Path:
@@ -202,13 +246,50 @@ def _write_wav(path: Path, audio, sr: int) -> None:
         w.writeframes(pcm.tobytes())
 
 
-def _load_model():
+class _TorchKokoro:
+    """The reference `kokoro` package behind the slice of mlx-audio's model `synthesize_many` uses:
+    `sample_rate`, `generate(text, voice, speed, lang_code)` yielding results with `.audio`, and
+    `_get_pipeline(lang_code)` (one KPipeline per language, whose `g2p` `_use_dialect` swaps)."""
+
+    sample_rate = SAMPLE_RATE
+
+    def __init__(self):
+        from kokoro import KModel
+
+        self.model = KModel(repo_id=TORCH_MODEL_ID).to("cpu").eval()
+        self.pipelines: dict = {}
+
+    def _get_pipeline(self, lang_code: str):
+        if lang_code not in self.pipelines:
+            from kokoro import KPipeline
+
+            self.pipelines[lang_code] = KPipeline(lang_code=lang_code, repo_id=TORCH_MODEL_ID, model=self.model)
+        return self.pipelines[lang_code]
+
+    def generate(self, text: str, voice: str, speed: float, lang_code: str):
+        import torch
+
+        with torch.inference_mode():
+            for r in self._get_pipeline(lang_code)(text, voice=voice, speed=speed):
+                if r.audio is not None:
+                    yield type("Result", (), {"audio": r.audio.numpy()})
+
+
+def _load_model(backend: str = "mlx"):
     import contextlib
     import io
     import os
 
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
     from huggingface_hub import snapshot_download
+
+    if backend == "torch":
+        try:  # no network call when the weights are already cached
+            snapshot_download(TORCH_MODEL_ID, allow_patterns=["config.json", "kokoro-v1_0.pth"], local_files_only=True)
+        except Exception:
+            print(f"  downloading {TORCH_MODEL_ID} (~330 MB, once)…", flush=True)
+        with contextlib.redirect_stdout(io.StringIO()):
+            return _TorchKokoro()
     from mlx_audio.tts.utils import load_model
 
     files = ["config.json", "kokoro-v1_0.safetensors"]  # voices download one by one, on first use
@@ -224,9 +305,9 @@ def _load_model():
 
 
 def _use_dialect(model, lang: str) -> None:
-    """Point the language's espeak phonemiser at its dialect (ESPEAK). mlx-audio caches one
-    pipeline per Kokoro language code and builds its EspeakG2P from a fixed table, so the cached
-    pipeline's g2p is replaced (private API: `_get_pipeline`, checked by `voice --list` users)."""
+    """Point the language's espeak phonemiser at its dialect (ESPEAK). mlx-audio (and the torch
+    adapter) cache one pipeline per Kokoro language code and build its EspeakG2P from a fixed table,
+    so the cached pipeline's g2p is replaced (private API: `_get_pipeline`, checked by `voice --list` users)."""
     variant = ESPEAK.get(lang)
     if not variant:
         return
@@ -250,18 +331,19 @@ def synthesize_many(jobs: list[Job], force: bool = False) -> list[dict]:
         if err := validate(j.lang, j.preset):
             sys.exit(f"{j.out.name}: {err}")
     todo = [j for j in jobs if force or not is_fresh(j)]
+    backends = {pick_backend(j.backend) for j in todo}
+    if len(backends) > 1:
+        sys.exit(f"one backend per run, got {sorted(backends)}")
+    backend = backends.pop() if backends else pick_backend(None)
     if todo:
-        try:
-            import mlx_audio  # noqa: F401
-            import misaki  # noqa: F401
-        except ImportError:
-            sys.exit(f"the voice dependencies aren't installed; run: {INSTALL_HINT}")
+        if err := backend_missing(backend):
+            sys.exit(f"voice backend {backend!r}: {err}")
         if any(LANGS[j.lang][0] not in "ab" for j in todo) and _phonemiser_missing():
             sys.exit(f"the espeak-ng phonemiser (bundled in espeakng-loader) is missing; run: {INSTALL_HINT}")
     import contextlib
     import io
 
-    model = _load_model() if todo else None
+    model = _load_model(backend) if todo else None
     results = []
     for j in jobs:
         if j not in todo:
@@ -285,21 +367,22 @@ def synthesize_many(jobs: list[Job], force: bool = False) -> list[dict]:
         _write_wav(j.out, audio, model.sample_rate)
         took = round(time.time() - t0, 2)
         dur = round(len(audio) / model.sample_rate, 3)
-        sidecar_path(j.out).write_text(json.dumps({**j.key(), "duration": dur, "seconds": took},
+        sidecar_path(j.out).write_text(json.dumps({**j.key(), "backend": backend, "duration": dur, "seconds": took},
                                                   indent=1, ensure_ascii=False))
         print(f"  voice: {j.out.name} ({dur:.2f}s audio in {took:.2f}s)")
         results.append({"out": j.out, "cached": False, "duration": dur, "seconds": took})
     return results
 
 
-def _languages_help() -> str:
+def _languages_help(backend: str | None = None) -> str:
+    b = pick_backend(backend)
     rows = [f"  {k:<6} {v[1]:<16} default {v[2]:<9} voices: {' '.join(presets_for(k))}" for k, v in LANGS.items()]
-    return (f"model: {MODEL_ID} (Kokoro-82M), licence {MODEL_LICENCE}, through mlx-audio (MIT)\n"
-            f"languages:\n" + "\n".join(rows))
+    return (f"model: {BACKENDS[b][0]} (Kokoro-82M), licence {MODEL_LICENCE}, through {BACKENDS[b][2]} "
+            f"[backend: {b}]\nlanguages:\n" + "\n".join(rows))
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Local text-to-speech (Kokoro-82M on MLX) → mono 24 kHz WAV + sidecar",
+    ap = argparse.ArgumentParser(description="Local text-to-speech (Kokoro-82M: MLX on Apple Silicon, PyTorch CPU elsewhere) → mono 24 kHz WAV + sidecar",
                                  epilog=_languages_help(), formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("text", nargs="?", help="the line to speak (`*` and `|` marks are stripped)")
     ap.add_argument("-o", "--out", type=Path, help="output WAV")
@@ -309,16 +392,18 @@ def main() -> None:
     ap.add_argument("--pronounce", help='JSON map of respellings, e.g. \'{"SaaS": "sass"}\'')
     ap.add_argument("--force", action="store_true", help="re-synthesise even if the clip is cached")
     ap.add_argument("--list", action="store_true", help="print languages and voice presets")
+    ap.add_argument("--backend", choices=["auto", *BACKENDS], default="auto",
+                    help="auto: mlx on Apple Silicon macOS, torch elsewhere")
     a = ap.parse_args()
     if a.list:
-        print(_languages_help())
+        print(_languages_help(a.backend))
         return
     if not a.text or not a.out:
         ap.error("text and -o/--out are required")
     if err := validate(a.lang, a.preset):
         sys.exit(err)
     text = spoken(a.text, json.loads(a.pronounce) if a.pronounce else None)
-    synthesize_many([Job(a.out.resolve(), text, a.lang, a.preset, a.speed)], force=a.force)
+    synthesize_many([Job(a.out.resolve(), text, a.lang, a.preset, a.speed, a.backend)], force=a.force)
 
 
 if __name__ == "__main__":

@@ -457,7 +457,7 @@ class Story:
                   f"{len(self.scenes)} scenes, {self.total:.2f}s")
             if self.vc is not None:
                 print(f"voice: {self.lang} {self.vc.get('preset') or V.default_preset(self.lang) if self.lang in V.LANGS else '?'}"
-                      f" speed {self.vc.get('speed', 1.0)}, {V.MODEL_ID}")
+                      f" speed {self.vc.get('speed', 1.0)}, {V.model_id()}")
             print(" #  start   dur  type          bg      in        vo@   words name")
             print("\n".join(rows))
             for x in warns:

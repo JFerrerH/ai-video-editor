@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "brand": "none",
+  "sources": {
+    "take1": {"file": "take1.mov", "face": [540, 900]}
+  },
+  "segments": [
+    {"take": "take1", "in": 0.0, "out": 5.0, "zoom": {"kind": "static", "scale": 1.0}, "note": "first line"}
+  ],
+  "captions": {"fixes": {}},
+  "emphasis": [],
+  "events": [
+    {"type": "HookTitle", "start": 0, "end": 3.0, "props": {"lines": [{"text": "Hook line one"}, {"text": "hook line two"}]}}
+  ],
+  "sfx": [
+    {"name": "click", "at": 0.06, "gain_db": -15}
+  ],
+  "public_files": {}
+}

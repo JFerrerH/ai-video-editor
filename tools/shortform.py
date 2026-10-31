@@ -39,6 +39,16 @@ FUNCTION_WORDS = {
 }
 
 
+def stage(src: Path, dst: Path) -> None:
+    """Copy `src` to `dst` unless `dst` is already that file (same size and mtime, which copy2 keeps).
+    Not "dst is newer": a different file staged under the same name (another kit's font) must be replaced."""
+    s = Path(src).stat()
+    if dst.exists() and (d := dst.stat()).st_size == s.st_size and abs(d.st_mtime - s.st_mtime) < 0.001:
+        return
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst)
+
+
 def run(cmd: list[str], cwd: Path | None = None) -> str:
     r = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
     if r.returncode != 0:
@@ -399,10 +409,7 @@ class Project:
         pub = self.edit_dir / "motion_public"
         pub.mkdir(exist_ok=True)
         for name, src in self.public_files.items():
-            dst = pub / name
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            if not dst.exists() or dst.stat().st_mtime < Path(src).stat().st_mtime:
-                shutil.copy2(src, dst)
+            stage(src, pub / name)
         events = [e for e in self.events if not e.get("props", {}).get("behind")]
         if self.caption_engine == "remotion":
             events.append(self.caption_event())  # LAST = top layer (captions above every overlay)

@@ -59,7 +59,7 @@ from pathlib import Path
 import narration as N
 from brand import load_brand
 from gen import voice as V
-from shortform import DELIVERY_X264, MOTION, REPO, SFX_DIR, loudness, loudnorm_2pass, run
+from shortform import DELIVERY_X264, MOTION, REPO, SFX_DIR, loudness, loudnorm_2pass, run, stage
 
 ASPECTS = {"9:16": (1080, 1920), "16:9": (1920, 1080), "1:1": (1080, 1080), "4:5": (1080, 1350)}
 # mirrors DEFAULT_TRANSITION_S in tools/motion/src/scenes/transitions.tsx
@@ -705,10 +705,7 @@ class Story:
                 if src := self._resolve(a):
                     files[a] = src
         for name, src in files.items():
-            dst = pub / name
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            if not dst.exists() or dst.stat().st_mtime < Path(src).stat().st_mtime:
-                shutil.copy2(src, dst)
+            stage(src, pub / name)
         keep = ("type", "duration", "bg", "grain", "transition", "props", "name")
         scenes = [{k: s[k] for k in keep if k in s} for s in self.scenes]
         for i, nv in self.narrated.items():  # the headline draws these

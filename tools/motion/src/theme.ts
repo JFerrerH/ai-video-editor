@@ -3,7 +3,7 @@ import { createContext, useContext } from "react";
 export type FontFile = {
   family: string;
   url: string; // path inside the --public-dir
-  weight?: string;
+  weight?: string; // "400" or a variable font's range "100 800"; may arrive as a number in hand-written props
   style?: "normal" | "italic";
 };
 
@@ -33,7 +33,12 @@ export const defaultBrand: Brand = {
     accent: "#D64545",
     success: "#2F7D5B",
   },
-  fonts: { serif: "Georgia", sans: "Helvetica Neue", mono: "Menlo" },
+  // CSS lists: the Mac face, then the Noto face the Linux image ships
+  fonts: {
+    serif: 'Georgia, "Noto Serif", serif',
+    sans: '"Helvetica Neue", "Noto Sans", sans-serif',
+    mono: 'Menlo, "Noto Sans Mono", monospace',
+  },
   fontFiles: [],
 };
 

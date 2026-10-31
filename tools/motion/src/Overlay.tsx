@@ -104,24 +104,25 @@ export const useBrandFonts = (brand: Brand) => {
   const [ready, setReady] = useState(false);
   useEffect(() => {
     Promise.all(
-      brand.fontFiles.map((f) =>
-        loadFont({
-          family: f.family,
-          url: staticFile(f.url),
-          weight: f.weight ?? "400",
-          style: f.style ?? "normal",
-        }),
-      ),
+      brand.fontFiles.map((f) => {
+        // props are untyped JSON: a weight can still arrive as a number
+        const weight = String(f.weight ?? "400");
+        const style = f.style ?? "normal";
+        const failed = () =>
+          new Error(`Font did not load: ${style} ${weight} "${f.family}" (${f.url.split("/").pop()})`);
+        return loadFont({ family: f.family, url: staticFile(f.url), weight, style }).then(
+          () => {
+            // Fonts fail silently into a fallback face — assert instead.
+            const desc = `${style === "italic" ? "italic " : ""}${weight.split(" ")[0]} 40px "${f.family}"`;
+            if (!document.fonts.check(desc)) throw failed();
+          },
+          () => {
+            throw failed();
+          },
+        );
+      }),
     )
       .then(() => {
-        // Fonts fail silently into a fallback face — assert instead.
-        for (const f of brand.fontFiles) {
-          const w = (f.weight ?? "400").split(" ")[0];
-          const desc = `${f.style === "italic" ? "italic " : ""}${w} 40px "${f.family}"`;
-          if (!document.fonts.check(desc)) {
-            throw new Error(`Font did not load: ${desc}`);
-          }
-        }
         setReady(true);
         continueRender(handle);
       })

@@ -24,10 +24,12 @@ sys.path.insert(0, str(TOOLS))
 import brand_files as B  # noqa: E402
 
 REPO = TOOLS.parent
+FIXTURE_FONTS = TOOLS / "tests" / "fixtures" / "fonts"  # OFL faces, licences next to them
 CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
 
-def make_font(family="Test Sans", weight=400, italic=False, flavor=None, cff=False) -> bytes:
+def make_font(family="Test Sans", weight=400, italic=False, flavor=None, cff=False, wght=None) -> bytes:
+    """A minimal font mapping A–Z a–z 0–9; `wght=(min, max)` makes it variable with that weight axis."""
     from fontTools.fontBuilder import FontBuilder
     from fontTools.pens.t2CharStringPen import T2CharStringPen
     from fontTools.pens.ttGlyphPen import TTGlyphPen
@@ -64,6 +66,10 @@ def make_font(family="Test Sans", weight=400, italic=False, flavor=None, cff=Fal
     fb.setupPost()
     if italic:
         fb.font["head"].macStyle |= 2
+    if wght:
+        fb.setupFvar([("wght", wght[0], min(max(weight, wght[0]), wght[1]), wght[1], "Weight")], [])
+        if not cff:
+            fb.setupGvar({})
     buf = io.BytesIO()
     fb.font.flavor = flavor
     fb.font.save(buf)
@@ -122,6 +128,18 @@ class Fonts(unittest.TestCase):
     def test_not_a_font(self):
         with self.assertRaisesRegex(B.Invalid, "not a TTF"):
             B.validate_font(png_bytes())
+
+    def test_variable_weight_range(self):
+        self.assertEqual(B.validate_font(make_font(wght=(100, 800)))[2]["weight"], "100 800")
+        self.assertEqual(B.validate_font(make_font(wght=(1, 1000)))[2]["weight"], "100 900")  # clamped
+
+    def test_fixture_fonts(self):
+        got = {p.name: B.validate_font(p.read_bytes())[2] for p in sorted(FIXTURE_FONTS.glob("*/*.ttf"))}
+        self.assertEqual(got, {
+            "Barlow-Light.ttf": {"family": "Barlow", "weight": 300, "style": "normal"},
+            "Outfit-VF.ttf": {"family": "Outfit", "weight": "100 900", "style": "normal"},
+            "RedHatMono-VF.ttf": {"family": "Red Hat Mono", "weight": "300 700", "style": "normal"},
+        })
 
 
 class Rasters(unittest.TestCase):
@@ -230,11 +248,11 @@ class Kit(unittest.TestCase):
 
     def kit(self, data: dict) -> list[str]:
         (self.d / "brand.json").write_text(json.dumps(data))
-        return B.check_kit(self.d)
+        return B.check_kit(self.d)[0]
 
     def test_template_passes(self):
         shutil.copytree(REPO / "brands" / "_template", self.d, dirs_exist_ok=True)
-        self.assertEqual(B.check_kit(self.d), [])
+        self.assertEqual(B.check_kit(self.d), ([], []))
 
     def test_invalid_colour(self):
         errs = self.kit({"colors": {"accent": "red"}})
@@ -252,7 +270,7 @@ class Kit(unittest.TestCase):
         self.assertIn("Brand-Bold.ttf", errs[0])
         (self.d / "fonts").mkdir()
         (self.d / "fonts" / "Brand-Bold.ttf").write_bytes(make_font())
-        self.assertEqual(B.check_kit(self.d), [])
+        self.assertEqual(B.check_kit(self.d), ([], []))
 
     def test_caption_ranges_and_weights(self):
         errs = self.kit({"captions": {"top": 5000, "mode": "karaoke", "emphCaps": "yes", "shade": 0.5,
@@ -260,6 +278,76 @@ class Kit(unittest.TestCase):
                          "fontFiles": [{"family": "X", "file": "../x.ttf", "weight": "100 900"}]})
         self.assertEqual(sorted(e.split(":")[0] for e in errs),
                          ["captions.emphCaps", "captions.mode", "captions.top", "fontFiles[0].file"])
+
+
+class FontEntries(unittest.TestCase):
+    """fontFiles entries compared with their files: warnings only, `errors` stays empty."""
+
+    def setUp(self):
+        self.d = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.d)
+        (self.d / "fonts").mkdir()
+
+    def check(self, *entries: tuple[str, bytes, dict]) -> list[str]:
+        files = []
+        for name, data, extra in entries:
+            (self.d / "fonts" / name).write_bytes(data)
+            files.append({"family": "Brand", "file": name, **extra})
+        (self.d / "brand.json").write_text(json.dumps({"fontFiles": files}))
+        errs, warns = B.check_kit(self.d)
+        self.assertEqual(errs, [])
+        return warns
+
+    def test_range_on_static(self):
+        w = self.check(("Brand-Light.ttf", make_font(weight=300), {"weight": "100 900"}))
+        self.assertEqual(w, ['fontFiles[0].weight: Brand-Light.ttf provides weight 300, not "100 900"'])
+
+    def test_weight_outside_variable_range(self):
+        w = self.check(("Brand-VF.ttf", make_font(wght=(400, 800)), {"weight": "100 800"}))
+        self.assertEqual(w, ['fontFiles[0].weight: Brand-VF.ttf provides the weight range "400 800", not "100 800"'])
+        w = self.check(("Brand-VF.ttf", make_font(wght=(400, 800)), {"weight": 900}))
+        self.assertEqual(len(w), 1)
+
+    def test_single_weight_on_static(self):
+        self.assertEqual(len(self.check(("Brand.ttf", make_font(weight=400), {"weight": "700"}))), 1)
+
+    def test_matching_entries(self):
+        w = self.check(("Brand-VF.ttf", make_font(wght=(100, 900)), {}),
+                       ("Brand.ttf", make_font(weight=400), {"weight": 400}),
+                       ("Brand-Mid.ttf", make_font(wght=(100, 900)), {"weight": "300 700"}),
+                       ("Brand-It.ttf", make_font(italic=True), {"style": "italic", "weight": "400"}))
+        self.assertEqual(w, [])
+
+    def test_italic_on_upright(self):
+        w = self.check(("Brand.ttf", make_font(), {"style": "italic"}))
+        self.assertEqual(w, ["fontFiles[0].style: Brand.ttf is upright, not italic"])
+
+    def test_file_that_no_longer_loads(self):
+        font = make_font()
+        w = self.check(("Brand.ttf", font[: len(font) // 2], {"weight": 400}))
+        self.assertEqual(len(w), 1)
+        self.assertTrue(w[0].startswith("fontFiles[0].file: Brand.ttf doesn't load ("), w[0])
+
+    def test_fixture_kit(self):
+        for name in ("outfit/Outfit-VF.ttf", "barlow/Barlow-Light.ttf", "redhatmono/RedHatMono-VF.ttf"):
+            shutil.copy(FIXTURE_FONTS / name, self.d / "fonts")
+        (self.d / "brand.json").write_text(json.dumps({"fontFiles": [
+            {"family": "Outfit", "file": "Outfit-VF.ttf", "weight": 400},
+            {"family": "Barlow", "file": "Barlow-Light.ttf", "weight": "100 900"},
+            {"family": "Red Hat Mono", "file": "RedHatMono-VF.ttf", "weight": "100 800"}]}))
+        errs, warns = B.check_kit(self.d)
+        self.assertEqual(errs, [])
+        self.assertEqual([w.split(":")[0] for w in warns], ["fontFiles[1].weight", "fontFiles[2].weight"])
+
+    def test_check_dir_ok_with_warnings(self):
+        sub = self.d / "kit"
+        (sub / "incoming").mkdir(parents=True)
+        (sub / "incoming" / "Brand-Light.ttf").write_bytes(make_font(weight=300))
+        (sub / "brand.json").write_text(json.dumps({"fontFiles": [{"family": "Brand", "file": "Brand-Light.ttf",
+                                                                   "weight": "100 900"}]}))
+        res = B.check_dir(sub)
+        self.assertEqual(res["errors"], [])
+        self.assertEqual(len(res["warnings"]), 1)
 
 
 class CheckDir(unittest.TestCase):
@@ -288,7 +376,7 @@ class CheckDir(unittest.TestCase):
         self.assertEqual(sorted(p.name for p in (self.d / "fonts").iterdir()), ["Brand-Regular.ttf"])
         self.assertEqual(sorted(p.name for p in (self.d / "logos").iterdir()), ["logo.png"])
         self.assertEqual(list((self.d / "incoming").iterdir()), [])
-        self.assertEqual(res["errors"], [])
+        self.assertEqual((res["errors"], res["warnings"]), ([], []))
 
     def test_replaced_and_svg_kept_as_png_only(self):
         (self.d / "fonts").mkdir()

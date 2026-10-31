@@ -101,8 +101,10 @@ Examples below are illustrative. They show the technique, not a style to copy.
    propose the cut → **approval**. Aim for ~60 s, but never clip speech to get there.
 2. **Gather visuals the user owns:** `uv run tools/site_capture.py <url> -o <edit>/downloads/site`
    (viewport + full-page PNG). Also download the site's own images and fonts (look at `<img src>` and
-   `@font-face`). New brand? Copy `brands/_template/` to `brands/<slug>/`, save fonts in its `fonts/`,
-   and fill in `brand.md` + `brand.json`.
+   `@font-face`). New brand? Copy `brands/_template/` to `brands/<slug>/`, put fonts and logos in its
+   `incoming/`, fill in `brand.md` + `brand.json`, then run `uv run tools/brand_check.py brands/<slug>`.
+   Resolve its `warnings` (set each `fontFiles` weight or range to what the file provides) before a
+   final render.
 3. **Plan the visuals as a table:** time | spoken line | what is on screen | SFX. Present it, ask
    only what you can't decide (permission for people photos, B&W low point, missing
    API keys). **Wait for approval.**
@@ -235,7 +237,11 @@ from `useBrand()`, respect `SAFE` zones, and add a row to this table.
 - **Freeze frames:** `-t` must be an *input* option, or tpad/apad get truncated.
 - **Remotion `--scale`** must give integer dimensions. The overlay is always rendered at 1080p and
   ffmpeg scales it for previews.
-- **Fonts fail silently:** `Overlay` asserts `document.fonts.check()` for every brand font.
+- **Fonts fail silently:** `Overlay` asserts `document.fonts.check()` for every brand font and fails
+  with `Font did not load: <style> <weight> "<family>" (<file>)`.
+- **Brand font weights:** `400`, `"400"` or a variable font's range `"100 800"` (give the range, or bold
+  is faked instead of drawn from the weight axis). A role the kit leaves unset uses the kit's `sans`,
+  else its first font file.
 - Filenames from iPhone exports can contain U+202F (narrow no-break space). Rename sources first.
 - Remotion is free for teams of up to 3. Larger companies need a licence.
 

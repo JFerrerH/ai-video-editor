@@ -3,8 +3,9 @@
     uv run tools/brand_check.py brands/<slug>       # checks brands/<slug>/incoming/* and brand.json
 
 Fonts move into fonts/ (WOFF/WOFF2 unwrapped), images and SVGs into logos/ as PNG; invalid files
-are deleted. Prints the same JSON the `brand` job op returns (`files`, `errors`); exits 1 when
-brand.json has errors. Rules: tools/brand_files.py.
+are deleted. Prints the same JSON the `brand` job op returns (`files`, `errors`, `warnings`); exits 1
+when brand.json has errors. Warnings (a fontFiles weight or style its file doesn't have) don't fail
+it. Rules: tools/brand_files.py.
 """
 
 from __future__ import annotations
@@ -31,6 +32,8 @@ def main() -> None:
         print(f"  {f['status']:<8} {f['name']}: {detail}", file=sys.stderr)
     for e in res["errors"]:
         print(f"  ERROR    {e}", file=sys.stderr)
+    for w in res["warnings"]:
+        print(f"  WARNING  {w}", file=sys.stderr)
     print(json.dumps(res, ensure_ascii=False))
     sys.exit(1 if res["errors"] else 0)
 

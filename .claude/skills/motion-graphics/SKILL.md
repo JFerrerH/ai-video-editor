@@ -18,6 +18,13 @@ an idea alone. Everything here runs locally and costs nothing.
 Read that brand's `brand.md` before planning. Its taste overrides the defaults below. With
 `"brand": "none"`, use the neutral look and ask the user about style.
 
+**Brand fonts.** A `fontFiles` weight is `400`, `"400"` or a variable font's range `"100 800"`. Give a
+variable font its range, so bold uses the font's own weight axis instead of a faked bold; `brand check`
+reports each file's weight or range. A role the kit leaves unset (`serif`, `sans`, `mono`) uses the
+kit's `sans`, else its first font file; the neutral faces only apply when the kit names no font. Before
+a final render, resolve `brand check` `warnings` (set the weight or range the file provides). A font
+that doesn't load fails the render with `Font did not load: <style> <weight> "<family>" (<file>)`.
+
 ## Workflow: a video from scratch
 
 1. **Project.** Run `uv run tools/new_project.py <name> --brand <slug|none> --type generated --platforms <list> --language <code>`.

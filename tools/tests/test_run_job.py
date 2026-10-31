@@ -3,6 +3,8 @@
     uv run python -m unittest tools.tests.test_run_job      (or: uv run --with pytest pytest tools/tests/test_run_job.py)
 """
 
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -306,6 +308,15 @@ class BrandOp(Base):
         self.assertEqual(sorted(res["outputs"]), ["brand/fonts/Brand-Regular.ttf", "brand/logos/logo.png"])
         self.assertEqual(list(self.inc.iterdir()), [])
 
+    def test_warnings_dont_fail_the_job(self):
+        self.fill()
+        (self.root / "brand" / "brand.json").write_text(json.dumps(
+            {"fontFiles": [{"family": "Brand Sans", "file": "Brand-Regular.ttf", "weight": "100 900"}]}))
+        res, code = R.run({"op": "brand", "project": "demo", "args": {"cmd": "check"}})
+        self.assertEqual(code, 0, res)
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["warnings"], ['fontFiles[0].weight: Brand-Regular.ttf provides weight 400, not "100 900"'])
+
     def test_kit_error_fails_the_job(self):
         (self.root / "brand" / "brand.json").write_text(json.dumps({"colors": {"accent": "red"}}))
         res, code = R.run({"op": "brand", "project": "demo", "args": {"cmd": "check"}})
@@ -334,11 +345,64 @@ class BrandOp(Base):
         drop = lambda fs: [{k: v for k, v in f.items() if k != "replaced"} for f in fs]  # noqa: E731
         self.assertEqual(drop(cli["files"]), drop(res["files"]))
         self.assertEqual(cli["errors"], res["errors"])
+        self.assertEqual(cli["warnings"], res["warnings"])
 
     def test_help_lists_brand_and_site(self):
         r = subprocess.run([sys.executable, str(TOOLS / "run_job.py"), "--help"], capture_output=True, text=True)
         for op in ("site ", "brand "):
             self.assertIn(f"\n  {op}", r.stdout)
+
+
+# Failure text as tools.shortform.run raises it (captured from real runs; `{R}` is the engine root)
+REMOTION_FAIL = """FAILED: npx remotion still Overlay {R}/footage/demo/edit/stills/ov_002.00.png --props={R}/footage/demo/edit/overlay_props.json --frame=60 --scale=0.5 --log=error
+ TypeError  Cannot read properties of null (reading 'map')"""
+FFMPEG_FAIL = """FAILED: ffmpeg -hide_banner -y -i {R}/footage/demo/missing.mov -t 1 {R}/footage/demo/edit/o.mp4
+[in#0 @ 0xc08c24000] Error opening input: No such file or directory
+Error opening input file {R}/footage/demo/missing.mov.
+Error opening input files: No such file or directory"""
+
+
+class Failures(Base):
+    def fail_with(self, msg):
+        def op(root, a):
+            raise SystemExit(msg)
+
+        err = io.StringIO()
+        with mock.patch.dict(R.OPS, {"inventory": R.Op(op, {})}), contextlib.redirect_stderr(err):
+            res, code = R.run({"op": "inventory", "project": "demo", "args": {}})
+        self.assertEqual(code, 1)
+        self.assertFalse(res["ok"])
+        return res["error"], err.getvalue()
+
+    def test_remotion_type_error(self):
+        msg = REMOTION_FAIL.format(R=R.REPO)
+        error, stderr = self.fail_with(msg)
+        self.assertEqual(error, "TypeError  Cannot read properties of null (reading 'map')")
+        self.assertIn(msg, stderr)
+
+    def test_ffmpeg_failure(self):
+        error, _ = self.fail_with(FFMPEG_FAIL.format(R=R.REPO))
+        self.assertEqual(error, "Error opening input files: No such file or directory")
+
+    def test_engine_paths_relative(self):
+        error, _ = self.fail_with(f"FAILED: npx remotion still …\nError: cannot read {R.REPO}/footage/demo/edit/overlay_props.json")
+        self.assertEqual(error, "Error: cannot read footage/demo/edit/overlay_props.json")
+
+    def test_font_did_not_load(self):
+        error, _ = self.fail_with('FAILED: npx remotion still …\n Font did not load: normal 400 "Brand Sans" (Brand.ttf)\n    at x (y.js:1)')
+        self.assertEqual(error, 'Font did not load: normal 400 "Brand Sans" (Brand.ttf)')
+
+    def test_one_line_unchanged(self):
+        error, _ = self.fail_with("no edit/short.json (copy templates/short.json)")
+        self.assertEqual(error, "no edit/short.json (copy templates/short.json)")
+
+    def test_no_error_line_keeps_first(self):
+        error, _ = self.fail_with("FAILED: auto-editor in.mp4\nsome output\nmore output")
+        self.assertEqual(error, "FAILED: auto-editor in.mp4")
+
+    def test_capped(self):
+        error, _ = self.fail_with("FAILED: x\nError: " + "y" * 900)
+        self.assertEqual(len(error), 500)
 
 
 if __name__ == "__main__":

@@ -8,7 +8,8 @@ A job names one operation from a fixed list, the project it works in and its arg
     {"op": "inventory", "project": "acme-launch", "args": {}}
 
 stdout gets exactly one JSON object: {"ok", "op", "project", "outputs", "seconds"} plus "error" on
-failure (one line; the traceback goes to stderr) and any op-specific fields. `outputs` lists files
+failure (one line: the most specific line of the failure, engine paths made relative; the full
+failure text or traceback goes to stderr) and any op-specific fields. `outputs` lists files
 created or changed under footage/<project>/ during the job, relative to it. Every log line, including
 ffmpeg/Remotion output, goes to stderr. Exit code: 0 ok, 1 the op failed, 2 the job was rejected.
 
@@ -33,7 +34,8 @@ Ops (args in brackets are optional):
   site             url → site/viewport.png + capture.json (+ images/, fonts/): one page's measured
                    colours, fonts, image candidates and text; every request goes through a network guard
   brand            cmd=check [dir] → validates <dir>/incoming/* (default dir: brand) into fonts/ and
-                   logos/ (invalid files deleted) and checks <dir>/brand.json; one entry per file
+                   logos/ (invalid files deleted) and checks <dir>/brand.json; one entry per file,
+                   `errors` (fail the job) and `warnings` (font entries their file can't honour)
   shortform.build  [preview] → runs footage/<project>/edit/build.py. It EXECUTES the project's Python:
                    trusted input only; never let end users author build.py for a hosted runner.
 
@@ -464,6 +466,18 @@ def _one_line(msg: str) -> str:
     return (lines[0] if lines else "failed")[:500]
 
 
+CAUSE = re.compile(r"Error|error:|Font did not load|Exception")
+
+
+def _cause_line(msg: str) -> str:
+    """The most specific line of a multi-line failure (a tool's stderr under `FAILED: <cmd>`): the last
+    line naming an error, else the first; paths under the engine root made relative."""
+    lines = [ln.strip() for ln in str(msg).splitlines() if ln.strip()]
+    hits = [ln for ln in lines if CAUSE.search(ln)]
+    line = hits[-1] if hits else lines[0] if lines else "failed"
+    return line.replace(f"{REPO}/", "")[:500]
+
+
 def validate(job: Any) -> tuple[Op, Path, dict]:
     if not isinstance(job, dict):
         raise JobError("the job must be a JSON object")
@@ -504,8 +518,11 @@ def run(job: Any) -> tuple[dict, int]:
     except SystemExit as e:  # the tools report user errors with sys.exit("message")
         if e.code in (None, 0):
             res["ok"], code = True, 0
+        elif isinstance(e.code, str):
+            print(e.code, file=sys.stderr)  # the whole failure, e.g. a tool's stderr after its command
+            res["error"] = _cause_line(e.code)
         else:
-            res["error"] = _one_line(e.code if isinstance(e.code, str) else f"exit status {e.code}")
+            res["error"] = f"exit status {e.code}"
     except Exception as e:  # noqa: BLE001 - every failure becomes a result
         traceback.print_exc(file=sys.stderr)
         res["error"] = _one_line(f"{type(e).__name__}: {e}")

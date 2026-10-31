@@ -8,7 +8,7 @@
 
 brand.json:
     {"name", "colors": {bg, tint1, tint2, ink, muted, accent, success},
-     "fonts": {serif, sans, mono}, "fontFiles": [{family, file, weight?, style?}],
+     "fonts": {serif, sans, mono}, "fontFiles": [{family, file, weight? (400 | "400" | "100 800"), style?}],
      "captions": {size?, emphSize?, emphColor?, top?}}
 Font `file`s live in `brands/<slug>/fonts/`.
 """
@@ -23,10 +23,14 @@ REPO = Path(__file__).resolve().parent.parent
 BRANDS = REPO / "brands"
 
 # Mirrors `defaultBrand` in tools/motion/src/theme.ts: a plain look that belongs to no one.
+# Fonts are CSS lists: the Mac face, then the Noto face the Linux image ships (Chromium there
+# ignores fontconfig's substitutes and would draw every role in its default serif).
 NEUTRAL = {
     "colors": {"bg": "#F4F4F2", "tint1": "#E4E4E0", "tint2": "#D9DEE4", "ink": "#1A1A1A",
                "muted": "#6B6B6B", "accent": "#D64545", "success": "#2F7D5B"},
-    "fonts": {"serif": "Georgia", "sans": "Helvetica Neue", "mono": "Menlo"},
+    "fonts": {"serif": 'Georgia, "Noto Serif", serif',
+              "sans": '"Helvetica Neue", "Noto Sans", sans-serif',
+              "mono": 'Menlo, "Noto Sans Mono", monospace'},
 }
 
 
@@ -57,9 +61,15 @@ def load_brand(slug: str | None) -> BrandKit:
             raise FileNotFoundError(f"brand font missing: {src}")
         name = f"fonts/{f['file']}"
         public[name] = src
+        # a weight may be 400, "400" or "100 800" in the kit; Remotion gets a string either way
         font_files.append({"family": f["family"], "url": name,
-                           **{k: f[k] for k in ("weight", "style") if k in f}})
+                           **({"weight": str(f["weight"])} if "weight" in f else {}),
+                           **({"style": f["style"]} if "style" in f else {})})
+    # A role the kit leaves unset uses the kit's own face (its sans, else its first font file);
+    # a neutral face only when the kit names no font at all.
+    kit_fonts = raw.get("fonts", {})
+    own = kit_fonts.get("sans") or (font_files[0]["family"] if font_files else None)
     theme = {"colors": {**NEUTRAL["colors"], **raw.get("colors", {})},
-             "fonts": {**NEUTRAL["fonts"], **raw.get("fonts", {})},
+             "fonts": {r: kit_fonts.get(r) or own or NEUTRAL["fonts"][r] for r in NEUTRAL["fonts"]},
              "fontFiles": font_files}
     return BrandKit(slug, theme, public, dict(raw.get("captions", {})))

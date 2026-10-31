@@ -5,11 +5,13 @@
 
     res == {"files": [{"name", "kind", "status": "valid"|"invalid", "reason"?, "stored"?, "replaced"?,
                        "family"?, "weight"?, "style"?, "width"?, "height"?}],
-            "errors": ["colors.accent: …", …]}      # brand.json shape errors (empty when fine)
+            "errors": ["colors.accent: …", …],      # brand.json shape errors (empty when fine)
+            "warnings": ["fontFiles[0].weight: …"]} # fontFiles entries their file can't honour; never fail the check
 
 Kinds come from the bytes, not the name; the extension only says whether a font or an image was
 expected. Fonts (TTF/OTF/WOFF/WOFF2, ≤ 5 MB) must parse completely and map A–Z a–z 0–9; WOFF/WOFF2
-are unwrapped to TTF/OTF. Raster images (PNG/JPEG, ≤ 20 MB, ≤ 8000 px a side) are size-checked
+are unwrapped to TTF/OTF. A font's `weight` is a number (100–900), or "<min> <max>" for a variable
+font with a weight axis. Raster images (PNG/JPEG, ≤ 20 MB, ≤ 8000 px a side) are size-checked
 from the header before decoding, then re-encoded as PNG without metadata. SVGs (≤ 2 MB) are parsed
 without DTDs or entities, refused on scripts, event handlers, foreignObject/iframe/embed/object or
 any external reference, and kept only as a PNG rasterized in the headless browser (image context,
@@ -77,7 +79,13 @@ def safe_stem(name: str) -> str:
 
 # ── fonts ─────────────────────────────────────────────────────────────────
 def validate_font(data: bytes) -> tuple[bytes, str, dict]:
-    """→ (stored bytes, extension, {family, weight, style}); Invalid if it doesn't parse completely."""
+    """→ (stored bytes, extension, {family, weight, style}); Invalid if it doesn't parse completely.
+    `weight` is a number for a static font and "<min> <max>" for a variable font with a weight axis."""
+    return _read_font(data)[:3]
+
+
+def _read_font(data: bytes) -> tuple[bytes, str, dict, bool]:
+    """validate_font's work, plus whether an `ital`/`slnt` axis can make the face italic."""
     from fontTools.pens.boundsPen import ControlBoundsPen
     from fontTools.ttLib import TTFont
 
@@ -104,8 +112,13 @@ def validate_font(data: bytes) -> tuple[bytes, str, dict]:
         family = str(name.getDebugName(16) or name.getDebugName(1) or "").strip()
         if not family:
             raise Invalid("font has no family name")
-        weight = min(900, max(100, int(f["OS/2"].usWeightClass)))
+        clamp = lambda v: min(900, max(100, round(v)))  # noqa: E731
+        axes = {a.axisTag: a for a in f["fvar"].axes} if "fvar" in f else {}
+        weight: int | str = clamp(f["OS/2"].usWeightClass)
+        if "wght" in axes:
+            weight = f"{clamp(axes['wght'].minValue)} {clamp(axes['wght'].maxValue)}"
         italic = bool(f["OS/2"].fsSelection & 1) or bool(f["head"].macStyle & 2)
+        slant_axis = "ital" in axes or "slnt" in axes
         ext = ".ttf" if outlines == "glyf" else ".otf"
         if kind == "font":
             out = data  # parsed completely; re-saving could alter hinting
@@ -118,7 +131,7 @@ def validate_font(data: bytes) -> tuple[bytes, str, dict]:
         raise
     except Exception as e:  # noqa: BLE001 - any parser failure is a refusal
         raise Invalid(f"font doesn't parse: {type(e).__name__}: {str(e)[:120]}") from None
-    return out, ext, {"family": family[:80], "weight": weight, "style": "italic" if italic else "normal"}
+    return out, ext, {"family": family[:80], "weight": weight, "style": "italic" if italic else "normal"}, slant_axis
 
 
 # ── raster images ─────────────────────────────────────────────────────────
@@ -295,18 +308,44 @@ def validate_file(src: Path, raster: Rasterizer) -> tuple[str, bytes, str, dict]
 
 
 # ── brand.json shape ──────────────────────────────────────────────────────
-def check_kit(d: Path) -> list[str]:
-    """Shape errors of `<d>/brand.json`, each naming its field; [] when fine or absent."""
+def _font_mismatch(at: str, entry: dict, path: Path) -> list[str]:
+    """What a fontFiles entry claims (`weight`, `style`) that its file can't provide."""
+    try:
+        _, _, facts, slant_axis = _read_font(path.read_bytes())
+    except Invalid as e:
+        return [f"{at}.file: {path.name} doesn't load ({e})"]
+    out = []
+    have = facts["weight"]
+    if "weight" in entry:
+        want = [int(p) for p in str(entry["weight"]).split()]
+        if isinstance(have, str):  # variable: the claim must sit inside the axis
+            lo, hi = map(int, have.split())
+            ok = all(lo <= w <= hi for w in want)
+        else:
+            ok = want == [have]
+        if not ok:
+            what = f'the weight range "{have}"' if isinstance(have, str) else f"weight {have}"
+            out.append(f"{at}.weight: {path.name} provides {what}, not {json.dumps(entry['weight'])}")
+    if entry.get("style") == "italic" and facts["style"] != "italic" and not slant_axis:
+        out.append(f"{at}.style: {path.name} is upright, not italic")
+    return out
+
+
+def check_kit(d: Path) -> tuple[list[str], list[str]]:
+    """→ (errors, warnings) of `<d>/brand.json`, each naming its field; ([], []) when fine or absent.
+    Errors are shape problems; warnings are fontFiles entries whose weight or style their file lacks
+    (harmless to the render: the browser clamps the weight or fakes the bold/italic)."""
     p = d / "brand.json"
     if not p.exists():
-        return []
+        return [], []
     try:
         kit = json.loads(p.read_text())
     except (OSError, ValueError) as e:
-        return [f"brand.json: not valid JSON ({e})"]
+        return [f"brand.json: not valid JSON ({e})"], []
     if not isinstance(kit, dict):
-        return ["brand.json: must be an object"]
+        return ["brand.json: must be an object"], []
     errs: list[str] = []
+    warns: list[str] = []
     errs += [f"{k}: unknown key" for k in kit if k not in ("name", "colors", "fonts", "fontFiles", "captions")]
     if "name" in kit and not (isinstance(kit["name"], str) and 0 < len(kit["name"]) <= 80):
         errs.append("name: must be text of 1–80 characters")
@@ -340,6 +379,7 @@ def check_kit(d: Path) -> list[str]:
         errs += [f"{at}.{k}: unknown key" for k in f if k not in ("family", "file", "weight", "style")]
         if not (isinstance(f.get("family"), str) and 0 < len(f["family"]) <= 80):
             errs.append(f"{at}.family: must be a family name of 1–80 characters")
+        n = len(errs)
         name = f.get("file")
         if not (isinstance(name, str) and name and Path(name).name == name and not name.startswith(".")):
             errs.append(f"{at}.file: must be a file name in fonts/")
@@ -352,6 +392,8 @@ def check_kit(d: Path) -> list[str]:
                 errs.append(f"{at}.weight: must be 100–900 or a range like \"400 700\"")
         if "style" in f and f["style"] not in ("normal", "italic"):
             errs.append(f"{at}.style: must be normal or italic")
+        if len(errs) == n:  # a well-formed entry: compare it with its file
+            warns += _font_mismatch(at, f, d / "fonts" / name)
     caps = kit.get("captions", {})
     if not isinstance(caps, dict):
         errs.append("captions: must be an object")
@@ -373,7 +415,7 @@ def check_kit(d: Path) -> list[str]:
                 errs.append(f"{at}: must be true or false")
         else:
             errs.append(f"{at}: unknown caption option")
-    return errs
+    return errs, warns
 
 
 # ── a whole kit directory ─────────────────────────────────────────────────
@@ -412,4 +454,5 @@ def check_dir(d: Path) -> dict:
                 else:
                     src.unlink(missing_ok=True)
             entries.append(e)
-    return {"files": entries, "errors": check_kit(d)}
+    errors, warns = check_kit(d)
+    return {"files": entries, "errors": errors, "warnings": warns}

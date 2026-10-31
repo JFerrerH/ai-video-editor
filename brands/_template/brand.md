@@ -7,7 +7,9 @@ Anything left blank falls back to the neutral defaults in the skills.
 
 - Brand / channel: name, one-line description, URL, social handle.
 - Colours (hex): background, ink/text, muted, two soft tints for backdrops, accent (warnings), success. Mirror them in `brand.json`.
-- Typography: serif / sans / mono families and what each is used for. Font files in `fonts/`, listed in `brand.json` `fontFiles`.
+- Typography: serif / sans / mono families and what each is used for. Font files in `fonts/`, listed in `brand.json` `fontFiles`
+  (weight `400`, or a variable font's range like `"100 800"`, as `brand_check.py` reports it; fix any `warnings` it prints).
+  A role left unset uses the kit's `sans`.
 - Caption style: font, weight, size, case, placement, key-phrase treatment (`brand.json` `captions`: size, emphSize, emphColor, top).
 - Hook rules: tone, what's off-limits.
 - Look: grade, when B&W or other looks are allowed.

@@ -28,7 +28,7 @@ ProRes 4444 with alpha is large, roughly 0.5–1 GB per minute at 1080x1920, so 
 }
 ```
 
-`brand` comes from `brands/<slug>/brand.json` via `tools/brand.py`. If there's no brand, `defaultBrand` in `src/theme.ts` gives a neutral look. Fonts are loaded from the public dir, and the render fails if one doesn't load.
+`brand` comes from `brands/<slug>/brand.json` via `tools/brand.py`. If there's no brand, `defaultBrand` in `src/theme.ts` gives a neutral look; its fonts are CSS lists (the Mac face, then Noto for Linux), kept in sync with `NEUTRAL` in `tools/brand.py`. A kit role left unset uses the kit's `sans`, else its first font file. Font files are loaded from the public dir; each `weight` reaches the overlay as a string (`"400"`, or a variable font's range `"100 800"`), and `useBrandFonts` also accepts a number. The render fails with `Font did not load: <style> <weight> "<family>" (<file>)` if one doesn't load.
 
 ## Preview and render
 

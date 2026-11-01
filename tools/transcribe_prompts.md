@@ -10,7 +10,7 @@ punctuated sentence in the language).
 **Takes:** the synthetic take per language (`tools/tests/synthetic_takes.py`: known script, a false start,
 5 s of silence then ~20 s of speech) and real talking-head takes kept on the measuring machine (only
 numbers are recorded). Spanish: synthetic + 3 real (110 s, 116 s, 20 s; all with fillers). English:
-synthetic + 1 real (29 s); a second real English take is still to be added.
+synthetic + 2 real (29 s; 243 s, a public-domain interview with fillers and intro/outro music).
 
 **Metrics:** words; recall (against the script for synthetic takes, against the fullest candidate on the
 same backend for real takes, which have no script); sentence-end marks; holes = seconds of speech no word
@@ -23,19 +23,22 @@ words (a prompt that keeps disfluencies helps the edit).
 
 | backend × language | verbatim (holes s / mean recall) | none | plain | chosen |
 |---|---|---|---|---|
-| mlx × en | 0.0 / 1.000 | 0.0 / 1.000 | 0.0 / 1.000 | **verbatim** |
+| mlx × en | 51.6 / 1.000 | 51.6 / 1.000 | 51.6 / 1.000 | **verbatim** |
 | mlx × es | 23.1 / 0.916 | 1.9 / 0.986 | 1.9 / 0.997 | **plain** |
-| faster-whisper × en | 0.0 / 1.000 | 0.0 / 1.000 | 0.0 / 1.000 | **verbatim** |
+| faster-whisper × en | 53.3 / 1.000 | 53.3 / 1.000 | 53.3 / 1.000 | **verbatim** |
 | faster-whisper × es | 23.2 / 0.918 | 6.8 / 0.997 | 23.2 / 0.918 | **none** |
 
 - **Spanish, both backends:** the verbatim prompt makes Whisper skip ~21 s of speech in real take A (110 s), on
   mlx and on faster-whisper. On faster-whisper the plain prompt does too, so that backend uses no prompt; on mlx
   plain and none tie on holes and plain has the better recall.
-- **The 1.9–2.0 s left in real take B** appear under every candidate on both backends: sound at speech level
+- **The 1.9–2.0 s left in Spanish real take B** appear under every candidate on both backends: sound at speech level
   between two sentences that gets no words even when transcribed alone. The transcriber reports it as
   `untranscribed`. **faster-whisper/es with no prompt** still leaves a 4.8 s hole in take A; the hole check
   re-transcribes it.
-- **English:** every candidate scores the same; verbatim keeps the false start ("I was- I was").
+- **English:** every candidate scores the same on every take; verbatim keeps the false start ("I was- I was").
+- **English real take B** shows ~52 s of holes under every candidate on both backends: its intro and outro
+  music (speech runs 27.8–216.2 s; Whisper labels the intro "Music"). Energy can't tell music from speech when
+  a take has digital silence; the transcriber reports those stretches as `untranscribed`.
 
 ## All rows
 
@@ -59,6 +62,9 @@ words (a prompt that keeps disfluencies helps the edit).
 | mlx | en real A (29 s) | verbatim | 95 | 1.000 | 9 | 0 |
 | mlx | en real A (29 s) | none | 95 | 1.000 | 9 | 0 |
 | mlx | en real A (29 s) | plain | 95 | 1.000 | 9 | 0 |
+| mlx | en real B (243 s) | verbatim | 518 | 1.000 | 20 | 51.6 |
+| mlx | en real B (243 s) | none | 518 | 1.000 | 20 | 51.6 |
+| mlx | en real B (243 s) | plain | 518 | 1.000 | 20 | 51.6 |
 | faster-whisper | en synthetic A (31 s) | verbatim | 92 | 1.000 | 6 | 0 |
 | faster-whisper | en synthetic A (31 s) | none | 91 | 1.000 | 6 | 0 |
 | faster-whisper | en synthetic A (31 s) | plain | 91 | 1.000 | 6 | 0 |
@@ -77,3 +83,6 @@ words (a prompt that keeps disfluencies helps the edit).
 | faster-whisper | en real A (29 s) | verbatim | 95 | 1.000 | 9 | 0 |
 | faster-whisper | en real A (29 s) | none | 95 | 1.000 | 9 | 0 |
 | faster-whisper | en real A (29 s) | plain | 95 | 1.000 | 9 | 0 |
+| faster-whisper | en real B (243 s) | verbatim | 514 | 1.000 | 20 | 53.3 |
+| faster-whisper | en real B (243 s) | none | 514 | 1.000 | 20 | 53.3 |
+| faster-whisper | en real B (243 s) | plain | 514 | 1.000 | 20 | 53.3 |

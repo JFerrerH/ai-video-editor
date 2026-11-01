@@ -89,7 +89,7 @@ DETECT_S = 30.0  # seconds of speech the language is detected from
 COVER_CAP, COVER_PAD, MIN_HOLE, PATCH_PAD = 1.5, 0.3, 1.5, 0.5
 # what Whisper says over silence or noise; a patch made of these (or of low-confidence words) is dropped
 HALLUCINATIONS = ("subtítulos", "subtitulos", "amara.org", "thanks for watching", "thank you for watching",
-                  "gracias por ver", "suscríbete", "subscribe", "please like", "music", "música")
+                  "gracias por ver", "suscríbete", "subscribe", "please like", "music", "música", "thank you")
 
 
 def _apple_silicon() -> bool:

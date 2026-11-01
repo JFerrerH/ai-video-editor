@@ -36,6 +36,7 @@ import argparse
 import importlib.util
 import json
 import platform
+import re
 import subprocess
 import sys
 import tempfile
@@ -87,7 +88,8 @@ SR = 16000
 DETECT_S = 30.0  # seconds of speech the language is detected from
 # a word "covers" its first COVER_CAP s (± COVER_PAD); uncovered speech of MIN_HOLE s or more is re-transcribed
 COVER_CAP, COVER_PAD, MIN_HOLE, PATCH_PAD = 1.5, 0.3, 1.5, 0.5
-# what Whisper says over silence or noise; a patch made of these (or of low-confidence words) is dropped
+# what Whisper says over silence or noise; a patch made of these (plus one stray word at most, or of
+# low-confidence words) is dropped
 HALLUCINATIONS = ("subtítulos", "subtitulos", "amara.org", "thanks for watching", "thank you for watching",
                   "gracias por ver", "suscríbete", "subscribe", "please like", "music", "música", "thank you")
 
@@ -238,10 +240,19 @@ def uncovered(words: list[dict], runs: list[tuple[float, float]]) -> list[tuple[
     return [(round(a, 2), round(b, 2)) for a, b in out if b - a >= MIN_HOLE]
 
 
+def _norm(text: str) -> str:
+    return " ".join(re.sub(r"[^\w\s]", " ", text.lower()).split())
+
+
 def _hallucination(words: list[dict]) -> bool:
-    text = " ".join(w["text"] for w in words).lower()
+    """Only listed phrases (whole words) plus at most one stray word, or low confidence. A real sentence that
+    happens to contain "thank you" or "music" is kept."""
+    text = _norm(" ".join(w["text"] for w in words))
+    rest = text
+    for h in sorted(HALLUCINATIONS, key=len, reverse=True):
+        rest = re.sub(rf"(?<!\w){re.escape(_norm(h))}(?!\w)", " ", rest)
     probs = [w["logprob"] for w in words if w.get("logprob") is not None]
-    return (len(words) <= 12 and any(h in text for h in HALLUCINATIONS)) or bool(probs and sum(probs) / len(probs) < 0.3)
+    return (rest != text and len(rest.split()) <= 1) or bool(probs and sum(probs) / len(probs) < 0.3)
 
 
 def fill_holes(words: list[dict], runs: list[tuple[float, float]], retranscribe, duration: float):

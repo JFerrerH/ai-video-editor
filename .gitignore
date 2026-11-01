@@ -28,3 +28,6 @@ node_modules/
 vendor/
 
 .DS_Store
+
+# generated at image build: uv run tools/overlay_schema.py --export
+tools/motion/overlay_schema.json

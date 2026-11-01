@@ -14,6 +14,7 @@ Pipeline:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -21,7 +22,9 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from audio_env import envelope
 from brand import load_brand
+from errors import ToolError, cause_line
 from person_matte import make_matte
 
 REPO = Path(__file__).resolve().parent.parent
@@ -52,8 +55,15 @@ def stage(src: Path, dst: Path) -> None:
 def run(cmd: list[str], cwd: Path | None = None) -> str:
     r = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
     if r.returncode != 0:
-        raise SystemExit(f"FAILED: {' '.join(map(str, cmd))}\n{(r.stderr or r.stdout)[-4000:]}")
+        raise ToolError(cmd, r.stderr or r.stdout)
     return r.stderr
+
+
+# legibility probe: an event whose text adds fewer changed pixels than this share of the frame "shows
+# almost no text" (≈ 1,000 px at 1080x1920; a channel must change by more than PROBE_DELTA to count)
+PROBE_SHARE, PROBE_DELTA = 0.0005, 16
+# caption placement around a full-layout scene's measured content (1080x1920 px)
+CAP_GAP, SAFE_TOP, SAFE_BOTTOM = 60, 290, 1536  # gap: the caption shade reaches ~46 px above the line
 
 
 # ── zoom expressions (zoompan `it` = segment-local seconds) ───────────────
@@ -233,33 +243,33 @@ class Project:
 
     # ── edge refinement (never clip a word) ───────────────────────────────
     def _env(self, take: str):
-        """RMS envelope in dB, 5 ms hop / 20 ms window, cached per take."""
-        import numpy as np
+        """RMS envelope in dB, 5 ms hop / 20 ms window, cached per take (tools/audio_env.py)."""
         cache = getattr(self, "_env_cache", {})
         if take not in cache:
-            raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(self.sources[take]), "-ac", "1",
-                                  "-ar", "16000", "-f", "s16le", "-"], capture_output=True, check=True).stdout
-            x = np.frombuffer(raw, "<i2").astype(np.float32) / 32768
-            hop, win = 80, 320
-            n = max(1, (len(x) - win) // hop)
-            frames = np.lib.stride_tricks.sliding_window_view(x, win)[::hop][:n]
-            db = 20 * np.log10(np.sqrt((frames ** 2).mean(axis=1)) + 1e-9)
-            floor = float(np.percentile(db, 10))
-            cache[take] = (db, floor)
+            cache[take] = envelope(self.sources[take])
             self._env_cache = cache
         return cache[take]
 
     def refine_edges(self, pre: float = 0.10, post: float = 0.12, min_sil: float = 0.06,
-                     above_floor: float = 9.0, apply: bool = True) -> list[str]:
+                     above_floor: float = 9.0, apply: bool = True, joins: list[tuple[int, int]] = (),
+                     detail: bool = False):
         """Snap every in/out point to measured silence so no word is clipped.
 
         Speech = envelope above (noise floor + `above_floor` dB; breaths/room tone sit below). In-points move into the silence
         just before the onset (`pre` s of air); out-points move past the word's decay
         (`post` s of air) but never into the next sound. Edges with no usable silence
         within reach are left alone and reported as WARN — check those by ear/eye.
+
+        `joins`: (i, j) pairs of same-take segments where segment i's out sits just before segment j's in
+        in the source (contiguous cuts). Each edge is refined on its own; only when that would carry i's out
+        past j's in (the audio between them would play twice) both go to the quietest 5 ms frame between the
+        original edges, reported as `joined`. A trimmed pause between them stays trimmed. A locked edge wins:
+        the other one stops at it.
+        `detail=True` also returns [{"seg", "edge": "in"|"out", "tag", "t", "locked"}] per edge.
         """
         hop = 0.005
-        report = []
+        report, details = [], []
+        new: dict[tuple[int, str], tuple[float, str]] = {}
         for i, s in enumerate(self.segments):
             db, floor = self._env(s.take)
             quiet = db < floor + above_floor
@@ -312,16 +322,38 @@ class Project:
                 new_in, tag_in = s.t_in, "locked"
             if s.lock_out:
                 new_out, tag_out = s.t_out, "locked"
+            new[(i, "in")], new[(i, "out")] = (new_in, tag_in), (new_out, tag_out)
+
+        for i, j in joins:  # contiguous cuts whose refined edges would cross
+            a, b = self.segments[i], self.segments[j]
+            out_t, in_t = new[(i, "out")][0], new[(j, "in")][0]
+            if out_t <= in_t or (a.lock_out and b.lock_in):
+                continue  # apart, or both hand-placed (the overlap check reports it)
+            if a.lock_out:
+                new[(j, "in")] = (out_t, "joined")
+            elif b.lock_in:
+                new[(i, "out")] = (in_t, "joined")
+            else:
+                db, _ = self._env(a.take)
+                lo, hi = max(0, int((a.t_out - 0.05) / hop)), min(len(db), int((b.t_in + 0.05) / hop) + 1)
+                t = (lo + int(db[lo:hi].argmin())) * hop if hi > lo else (a.t_out + b.t_in) / 2
+                new[(i, "out")] = new[(j, "in")] = (t, "joined")
+
+        for i, s in enumerate(self.segments):
+            (new_in, tag_in), (new_out, tag_out) = new[(i, "in")], new[(i, "out")]
             line = (f"seg {i:02d} {s.take} in {s.t_in:6.2f}→{new_in:6.2f} [{tag_in}]  "
                     f"out {s.t_out:6.2f}→{new_out:6.2f} [{tag_out}]  {s.note[:40]}")
             report.append(line)
+            details += [{"seg": i, "edge": "in", "tag": tag_in, "t": round(new_in, 3), "locked": s.lock_in},
+                        {"seg": i, "edge": "out", "tag": tag_out, "t": round(new_out, 3), "locked": s.lock_out}]
             if apply:
                 s.t_in, s.t_out = round(new_in, 3), round(new_out, 3)
-        return report
+        return (report, details) if detail else report
 
-    def edge_energy(self) -> list[str]:
-        """dB above noise floor in the 30 ms just inside each edge (should be ~0 = silence)."""
-        out = []
+    def edge_energy(self, detail: bool = False):
+        """dB above noise floor in the 30 ms just inside each edge (should be ~0 = silence).
+        `detail=True` also returns [{"seg", "head_db", "tail_db"}]."""
+        out, rows = [], []
         for i, s in enumerate(self.segments):
             db, floor = self._env(s.take)
             a, b = int(s.t_in / 0.005), int(s.t_out / 0.005)
@@ -329,7 +361,8 @@ class Project:
             tail = float(db[max(0, b - 6):b].max() - floor)
             flag = "  <-- check" if head > 9 or tail > 9 else ""
             out.append(f"seg {i:02d} head +{head:4.1f} dB  tail +{tail:4.1f} dB{flag}")
-        return out
+            rows.append({"seg": i, "head_db": round(head, 1), "tail_db": round(tail, 1)})
+        return (out, rows) if detail else out
 
     def word(self, take: str, text: str, after: float = 0.0, end: bool = False) -> float:
         """Output time of the first word matching `text` at/after source time `after`."""
@@ -431,29 +464,157 @@ class Project:
             paths.append(p)
         return paths
 
-    def stills(self, times: list[float] | None = None, preview: bool = True) -> list[Path]:
+    # ── Remotion stills and failures that name the event ─────────────────
+    def _ev_label(self, e: dict, k: int) -> str:
+        return f"events[{e.get('index', k)}] ({e['type']})" if e["type"] != "Captions" else "captions"
+
+    def _props_file(self, events: list[dict], path: Path) -> Path:
+        path.write_text(json.dumps({"durationInSeconds": round(self.offsets()[-1], 3), "brand": self.brand,
+                                    "events": events}, ensure_ascii=False))
+        return path
+
+    def _still(self, props: Path, t: float, dst: Path, scale: float, pub: Path) -> None:
+        total = self.offsets()[-1]
+        run(["npx", "remotion", "still", "Overlay", str(dst.resolve()), f"--props={props}", f"--public-dir={pub}",
+             f"--frame={min(round(t * self.fps), round(total * self.fps) - 1)}", f"--scale={scale:g}", "--log=error"],
+            cwd=MOTION)
+
+    def _blame(self, err: ToolError, events: list[dict], t: float, scale: float, pub: Path, tmp: Path) -> ToolError:
+        """Which event made Remotion fail at output time `t`: the only one on screen, else the first that
+        fails when drawn alone. Returns the error to raise, its summary naming the event."""
+        on = [(k, e) for k, e in enumerate(events) if e["start"] <= t < e["start"] + e["duration"]]
+        culprit = on[0] if len(on) == 1 else None
+        for k, e in on if len(on) > 1 else ():
+            try:
+                self._still(self._props_file([e], tmp / f"_blame_{k}.json"), t, tmp / f"_blame_{k}.png", scale, pub)
+            except ToolError:
+                culprit = (k, e)
+                break
+        who = self._ev_label(culprit[1], culprit[0]) if culprit else "the overlay"
+        return ToolError(err.cmd, err.output, f"{who} failed at {t:.2f} s: {cause_line(err.output)}")
+
+    def _overlay_events(self) -> list[dict]:
+        """The events in the main overlay layer, as stage_overlay() writes them (captions last)."""
+        return json.loads((self.edit_dir / "overlay_props.json").read_text())["events"]
+
+    def _still_time(self, e: dict) -> float:
+        """When an event's entrance has finished: start + min(1.2 s, 60 % of it), or later when its schema's
+        cues (a list's last item, a count's label) finish later; inside the event and the short."""
+        import overlay_schema as O
+        t = min(1.2, 0.6 * e["duration"])
+        if e["type"] in O.schemas():
+            cues = [end for _, _, end in O.cue_finish(e["type"], e.get("props", {}), self.fps, e["duration"])]
+            t = max([t] + [end + 1 / self.fps for end in cues if end < e["duration"]])
+        t = min(t, e["duration"] - 1 / self.fps)
+        return round(min(e["start"] + t, self.offsets()[-1] - 1 / self.fps), 2)
+
+    # ── legibility probe and measured content boxes ──────────────────────
+    def _box_key(self, e: dict) -> str:
+        e = {k: e[k] for k in ("type", "duration", "props")}
+        return hashlib.sha1(json.dumps([e, self.brand], sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:16]
+
+    def _boxes(self) -> dict:
+        p = self.edit_dir / "overlay_boxes.json"
+        return json.loads(p.read_text()) if p.exists() else {}
+
+    @staticmethod
+    def _rgba(png: Path):
+        import numpy as np
+        info = json.loads(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=width,height", "-of", "json",
+                                          str(png)], capture_output=True, text=True).stdout)["streams"][0]
+        raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(png), "-f", "rawvideo", "-pix_fmt", "rgba", "-"],
+                             capture_output=True, check=True).stdout
+        return np.frombuffer(raw, np.uint8).reshape(info["height"], info["width"], 4)
+
+    def measure_events(self, scale: float = 0.5, probe: bool = True, missing_only: bool = False,
+                       warnings: list[str] | None = None) -> None:
+        """Draw each event alone at its still time: full-layout events' content boxes (1080x1920 px,
+        cached in edit/overlay_boxes.json, read by caption_event()) and, with `probe`, a warning for
+        any text-bearing event whose text adds almost no pixels (out of frame, masked, not yet in)."""
+        import overlay_schema as O
+        warnings = warnings if warnings is not None else []
+        boxes = self._boxes()
+        pub = self.edit_dir / "motion_public"
+        for name, src in self.public_files.items():
+            stage(src, pub / name)
+        tmp = self.edit_dir / "stills" / "_probe"
+        tmp.mkdir(parents=True, exist_ok=True)
+        for k, e in enumerate(self.events):
+            full = e["type"] in O.schemas() and O.layout(e["type"]) == "full"
+            texts = O.text_fields(e["type"], e.get("props", {})) if e["type"] in O.schemas() else []
+            key = self._box_key(e)
+            need_box = full and not (missing_only and key in boxes)
+            if not (need_box or (probe and texts)):
+                continue
+            t, label = self._still_time(e), self._ev_label(e, k)
+            alone = {**e, "props": {**e.get("props", {}), "full": False}}
+            png = tmp / f"ev{k}.png"
+            try:
+                self._still(self._props_file([alone], tmp / f"ev{k}.json"), t, png, scale, pub)
+            except ToolError as err:
+                raise ToolError(err.cmd, err.output, f"{label} failed at {t:.2f} s: {cause_line(err.output)}") from None
+            img = self._rgba(png)
+            if need_box:
+                ys, xs = (img[:, :, 3] > 8).nonzero()
+                if len(ys):
+                    f = 1080 / img.shape[1]
+                    boxes[key] = {"box": [round(xs.min() * f), round(ys.min() * f), round((xs.max() + 1) * f),
+                                          round((ys.max() + 1) * f)], "t": t, "event": e.get("index", k), "type": e["type"]}
+                else:
+                    boxes.pop(key, None)
+            if probe and texts:
+                blank = json.loads(json.dumps(alone))
+                for _, _, parent, key_ in O.text_fields(e["type"], blank["props"]):
+                    parent[key_] = ""
+                try:
+                    self._still(self._props_file([blank], tmp / f"ev{k}_blank.json"), t, tmp / f"ev{k}_blank.png", scale, pub)
+                except ToolError:
+                    continue  # the component needs its text to draw at all: nothing to compare
+                diff = (abs(img.astype(int) - self._rgba(tmp / f"ev{k}_blank.png").astype(int)) > PROBE_DELTA).any(axis=2)
+                if diff.sum() < PROBE_SHARE * diff.size:
+                    warnings.append(f"{label} shows almost no text at {t:.2f} s ({int(diff.sum())} px of text; "
+                                    f"is it off screen, masked, or not in yet?)")
+        (self.edit_dir / "overlay_boxes.json").write_text(json.dumps(boxes, indent=1))
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    def stills(self, times: list[float] | None = None, preview: bool = True,
+               warnings: list[str] | None = None) -> list[dict]:
         """Frames of the FINISHED short (cut + zoom/look, overlays, captions, behind-the-speaker
         layers) at output times, without rendering the video: one source frame through the
         segment's own filter, one Remotion still per layer, one ffmpeg composite each.
-        Default: the middle of every segment. → edit/stills/short_<t>.png (540x960 preview, else 1080x1920)."""
+        Default times: the middle of every segment → edit/stills/short_<t>.png. Always, one still per
+        overlay event once its entrance has finished → edit/stills/ev<NN>_<Type>_<t>.png (540x960 preview,
+        else 1080x1920). Returns [{"path", "t", "event"?, "type"?}]; legibility and caption-placement
+        warnings are appended to `warnings`."""
+        warnings = warnings if warnings is not None else []
         offs = self.offsets()
         total = offs[-1]
         times = times if times else [round(offs[i] + s.out_dur / 2, 3) for i, s in enumerate(self.segments)]
         if bad := [t for t in times if not 0 <= t < total]:
             raise ValueError(f"still time(s) {bad} outside the short (0–{total:.2f} s)")
+        shots = [{"t": t, "name": f"short_{t:06.2f}.png"} for t in times]
+        for k, e in enumerate(self.events):
+            t, n = self._still_time(e), e.get("index", k)
+            shots.append({"t": t, "name": f"ev{n:02d}_{e['type']}_{t:06.2f}.png", "event": n, "type": e["type"]})
         w, h = (540, 960) if preview else (1080, 1920)
+        scale = 0.5 if preview else 1
+        self.measure_events(scale=scale, warnings=warnings)
+        warnings += self.caption_warnings()
         out_dir = self.edit_dir / "stills"
         tmp = out_dir / "_layers"
         tmp.mkdir(parents=True, exist_ok=True)
         pub, pj = self.stage_overlay()
-        scale = "--scale=0.5" if preview else "--scale=1"
+        layer = self._overlay_events()
 
-        def remotion_still(props: Path, t: float, dst: Path) -> None:
-            run(["npx", "remotion", "still", "Overlay", str(dst.resolve()), f"--props={props}", f"--public-dir={pub}",
-                 f"--frame={min(round(t * self.fps), round(total * self.fps) - 1)}", scale, "--log=error"], cwd=MOTION)
+        def remotion_still(props: Path, t: float, dst: Path, events: list[dict]) -> None:
+            try:
+                self._still(props, t, dst, scale, pub)
+            except ToolError as err:
+                raise self._blame(err, events, t, scale, pub, tmp) from None
 
-        paths = []
-        for t in times:
+        out = []
+        for shot in shots:
+            t = shot["t"]
             i = max(k for k in range(len(self.segments)) if offs[k] <= t + 1e-9)
             s = self.segments[i]
             local = min(t - offs[i], max(0.0, s.dur - 1 / self.fps))  # inside a freeze: its held frame
@@ -461,7 +622,7 @@ class Project:
             run(["ffmpeg", "-y", "-ss", f"{s.t_in:.3f}", "-t", f"{s.dur:.3f}", "-i", str(self.sources[s.take]),
                  "-vf", f"{self._vf(s, w, h)},trim=start={local:.4f}", "-frames:v", "1", str(base)])
             ov = tmp / f"ov_{t:06.2f}.png"
-            remotion_still(pj, t, ov)
+            remotion_still(pj, t, ov, layer)
             inputs, parts, cur = ["-i", str(base)], [], "[0:v]"
             behind = [e for e in self.events if e.get("props", {}).get("behind")
                       and e["start"] <= t < e["start"] + e["duration"]]
@@ -471,30 +632,51 @@ class Project:
                 inputs += ["-i", str(matte)]
                 parts += [f"[1:v]scale={w}:{h},format=gray[m]", "[0:v]format=yuva420p[sp]", "[sp][m]alphamerge[pm]"]
                 for k, e in enumerate(behind):
-                    pk = tmp / f"behind_{t:06.2f}_{k}.json"
-                    pk.write_text(json.dumps({"durationInSeconds": round(total, 3), "brand": self.brand, "events": [e]},
-                                             ensure_ascii=False))
-                    layer = tmp / f"behind_{t:06.2f}_{k}.png"
-                    remotion_still(pk, t, layer)
-                    inputs += ["-i", str(layer)]
+                    pk = self._props_file([e], tmp / f"behind_{t:06.2f}_{k}.json")
+                    lay = tmp / f"behind_{t:06.2f}_{k}.png"
+                    remotion_still(pk, t, lay, [e])
+                    inputs += ["-i", str(lay)]
                     parts.append(f"{cur}[{len(inputs) // 2 - 1}:v]overlay=0:0:format=auto[b{k}]")
                     cur = f"[b{k}]"
                 parts.append(f"{cur}[pm]overlay=0:0:format=auto[sp2]")
                 cur = "[sp2]"
             inputs += ["-i", str(ov)]
             parts.append(f"{cur}[{len(inputs) // 2 - 1}:v]overlay=0:0:format=auto")
-            dst = out_dir / f"short_{t:06.2f}.png"
+            dst = out_dir / shot["name"]
             run(["ffmpeg", "-y", *inputs, "-filter_complex", ";".join(parts), "-frames:v", "1", str(dst)])
-            paths.append(dst)
+            out.append({"path": dst, "t": t, **{k: shot[k] for k in ("event", "type") if k in shot}})
         shutil.rmtree(tmp, ignore_errors=True)
-        return paths
+        return out
 
     def render_overlay(self, preview: bool, out: Path) -> None:
         pub, pj = self.stage_overlay()
         cmd = ["npx", "remotion", "render", "Overlay", str(out), f"--props={pj}",
                f"--public-dir={pub}", "--codec=prores", "--prores-profile=4444",
                "--pixel-format=yuva444p10le", "--image-format=png", "--log=error"]
-        run(cmd, cwd=MOTION)  # always 1080x1920; ffmpeg scales it to the base for previews
+        try:
+            run(cmd, cwd=MOTION)  # always 1080x1920; ffmpeg scales it to the base for previews
+        except ToolError as err:
+            raise self._blame_render(err, pub) from None
+
+    def _blame_render(self, err: ToolError, pub: Path) -> ToolError:
+        """A failed overlay render: blame the event on screen at the frame Remotion names, else the first
+        event that fails drawn alone at its still time (only runs after a failure)."""
+        events = self._overlay_events()
+        tmp = self.edit_dir / "stills" / "_blame"
+        tmp.mkdir(parents=True, exist_ok=True)
+        try:
+            if m := re.search(r"\b[Ff]rame (\d+)\b", err.output):
+                return self._blame(err, events, int(m.group(1)) / self.fps, 0.5, pub, tmp)
+            for k, e in enumerate(events):
+                t = self._still_time(e)
+                try:
+                    self._still(self._props_file([e], tmp / f"_ev{k}.json"), t, tmp / f"_ev{k}.png", 0.5, pub)
+                except ToolError as one:
+                    return ToolError(err.cmd, err.output, f"{self._ev_label(e, k)} failed at {t:.2f} s: "
+                                                          f"{cause_line(one.output)}")
+            return err
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
     def render_behind(self, base: Path, tag: str, reuse_layer: bool, reuse_matte: bool) -> list[tuple[float, float, Path, Path]]:
         """Events with `props.behind: true` go UNDER the speaker: each is rendered on its own
@@ -577,12 +759,28 @@ class Project:
         core = re.sub(r"[.,]+$", "", word.strip())
         return self.caption_fixes.get(core.lower(), core)
 
+    def _lowercase_words(self) -> set[str]:
+        """Every word any take's transcript writes in lowercase somewhere (cached). A capitalised word
+        missing from this set is a name ("Lisboa"), not a sentence start Whisper ran into the last one."""
+        if not hasattr(self, "_lower_cache"):
+            self._lower_cache = {_norm(w["text"]) for k in self.sources for w in self._words(k)
+                                 if w["text"].strip()[:1].islower()}
+        return self._lower_cache
+
+    def _sentence_join(self, w: dict, nxt: dict) -> bool:
+        """`nxt` starts a sentence glued to `w` (a Whisper segment join that lost its full stop):
+        capitalised after an unpunctuated lowercase word, and not a name or "I"."""
+        a, b = w["text"].strip(), nxt["text"].strip()
+        return (b[:1].isupper() and a[:1].islower() and a[-1:].isalnum() and b != "I"
+                and _norm(b) in self._lowercase_words())
+
     def chunks(self, words: list[dict], max_words: int = 4, max_chars: int = 17) -> list[list[dict]]:
         phrases: list[list[dict]] = [[]]
         for i, w in enumerate(words):
             phrases[-1].append(w)
             nxt = words[i + 1] if i + 1 < len(words) else None
-            if nxt and (re.search(r"[.,?!]$", w["text"]) or nxt["start"] - w["end"] >= 0.25
+            if nxt and (re.search(r"[.,?!;:…]$", w["text"]) or nxt["start"] - w["end"] >= 0.25
+                        or self._sentence_join(w, nxt)
                         or nxt["seg"] != w["seg"]
                         # a key phrase is always alone on screen: break on entering/leaving it
                         or (w.get("emph") or 0) != (nxt.get("emph") or 0)):
@@ -665,8 +863,40 @@ class Project:
         light = [[e["start"], round(e["start"] + e["duration"], 3)] for e in self.events
                  if e.get("props", {}).get("full") and not e["props"].get("dark")]
         total = round(self.offsets()[-1], 3)
+        avoid, _ = self._caption_moves()
         return {"type": "Captions", "start": 0, "duration": total, "name": "Captions",
-                "props": {"words": cap_words, "chunks": cap_chunks, "lightRanges": light, **self.caption_props}}
+                "props": {"words": cap_words, "chunks": cap_chunks, "lightRanges": light, **self.caption_props,
+                          **({"avoid": avoid} if avoid else {})}}
+
+    def _caption_moves(self) -> tuple[list[list[float]], list[str]]:
+        """Where captions go while a full-layout scene's measured content (measure_events) reaches their
+        band: below it if two lines still end above the bottom safe zone, else above it if they start
+        below the top one. Returns ([[start, end, top px]], warnings for scenes they fit around neither way)."""
+        top = self.caption_props.get("top", 1300)
+        cap_h = round(2.65 * max(self.caption_props.get("size", 58), self.caption_props.get("emphSize", 68)))
+        boxes = self._boxes()
+        avoid, warns = [], []
+        for k, e in enumerate(self.events):
+            b = boxes.get(self._box_key(e))
+            if not b:
+                continue
+            y0, y1 = b["box"][1], b["box"][3]
+            if y1 <= top - 60 or y0 >= top + cap_h:
+                continue  # clear of the caption band
+            below, above = y1 + CAP_GAP, y0 - CAP_GAP - cap_h
+            span = [round(e["start"], 3), round(e["start"] + e["duration"], 3)]
+            if below + cap_h <= SAFE_BOTTOM:
+                avoid.append(span + [below])
+            elif above >= SAFE_TOP:
+                avoid.append(span + [above])
+            else:
+                warns.append(f"{self._ev_label(e, k)}: its content ({y0}–{y1} px) reaches the captions at {top} px, "
+                             f"and they fit neither below it (would end at {below + cap_h} px, past {SAFE_BOTTOM}) "
+                             f"nor above it (would start at {above} px, above {SAFE_TOP}); they stay over it")
+        return avoid, warns
+
+    def caption_warnings(self) -> list[str]:
+        return self._caption_moves()[1]
 
     # text keys whose content a viewer reads on screen (code lines / emails are decoration)
     ECHO_KEYS = {"label", "stamp", "title", "chip", "note", "kicker", "year", "text", "docTitle",
@@ -748,6 +978,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         self.concat(paths, base)
         overlay = self.edit_dir / "overlay.mov"  # same 1080p render for preview and final
         if not (skip_overlay and overlay.exists()):
+            self.measure_events(probe=False, missing_only=True)  # scene content boxes → caption placement
             print("  rendering Remotion overlay…")
             self.render_overlay(preview, overlay)
         behind = self.render_behind(base, tag, reuse_layer=skip_overlay, reuse_matte=skip_extract)
@@ -851,8 +1082,11 @@ def main() -> None:
         sys.exit("\n".join(f"ERROR {x}" for x in e.errors))
     print("\n".join(rep["edges"]))
     if a.cmd == "stills":
-        for path in p.stills(a.at, preview=True):
-            print(f"wrote {path}")
+        warnings = list(rep["warnings"])
+        for st in p.stills(a.at, preview=True, warnings=warnings):
+            print(f"wrote {st['path']}")
+        for w in warnings:
+            print(f"WARN  {w}")
     else:
         out = p.build(a.preview)
         print("loudness: {:.1f} LUFS, {:.1f} dBTP".format(*loudness(out)))

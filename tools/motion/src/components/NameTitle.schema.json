@@ -1,0 +1,69 @@
+{
+  "title": "NameTitle",
+  "description": "Big serif title with no card; pair with behind: true so it sits behind the head.",
+  "x-layout": "float",
+  "type": "object",
+  "properties": {
+    "text": {
+      "type": "string",
+      "x-text": true
+    },
+    "lines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "x-text": true
+          },
+          "at": {
+            "type": "number",
+            "x-time": "event"
+          }
+        }
+      }
+    },
+    "color": {
+      "type": "string",
+      "description": "CSS colour"
+    },
+    "size": {
+      "type": "number",
+      "minimum": 8,
+      "maximum": 600,
+      "default": 210
+    },
+    "weight": {
+      "type": "number",
+      "minimum": 100,
+      "maximum": 1000,
+      "default": 600
+    },
+    "top": {
+      "type": "number",
+      "minimum": -400,
+      "maximum": 1920,
+      "description": "px from the top of the 1080x1920 frame",
+      "default": 470
+    },
+    "italic": {
+      "type": "boolean"
+    }
+  },
+  "x-cues": [
+    {
+      "path": "lines[].at",
+      "default": {
+        "first": 0,
+        "step": 0
+      },
+      "entrance": {
+        "frames": 14
+      }
+    }
+  ]
+}

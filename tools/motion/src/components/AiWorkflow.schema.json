@@ -1,0 +1,52 @@
+{
+  "title": "AiWorkflow",
+  "description": "A robot hub wires up emoji tool nodes one by one; optional content pile at pileAt. Pair with full.",
+  "x-layout": "float",
+  "type": "object",
+  "required": [
+    "nodes"
+  ],
+  "properties": {
+    "hub": {
+      "type": "string",
+      "default": "🤖"
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "emoji",
+          "at"
+        ],
+        "properties": {
+          "emoji": {
+            "type": "string"
+          },
+          "at": {
+            "type": "number",
+            "x-time": "event"
+          }
+        }
+      }
+    },
+    "pileAt": {
+      "type": "number",
+      "x-time": "event"
+    },
+    "pileCount": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 40,
+      "default": 11
+    }
+  },
+  "x-cues": [
+    {
+      "path": "nodes[].at",
+      "entrance": {
+        "frames": 14
+      }
+    }
+  ]
+}

@@ -1,0 +1,99 @@
+{
+  "title": "BarChart",
+  "description": "Horizontal bar chart; bars grow one after another from start, stagger apart.",
+  "x-layout": "full",
+  "type": "object",
+  "required": [
+    "bars"
+  ],
+  "properties": {
+    "bg": {
+      "type": "string",
+      "enum": [
+        "light",
+        "dark",
+        "accent",
+        "none"
+      ]
+    },
+    "kicker": {
+      "type": "string",
+      "x-text": true
+    },
+    "title": {
+      "type": "string",
+      "x-text": true
+    },
+    "bars": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "label",
+          "value"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "x-text": true
+          },
+          "value": {
+            "type": "number"
+          },
+          "highlight": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "unit": {
+      "type": "string",
+      "x-text": true
+    },
+    "prefix": {
+      "type": "string",
+      "x-text": true
+    },
+    "decimals": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 6,
+      "default": 0
+    },
+    "max": {
+      "type": "number"
+    },
+    "start": {
+      "type": "number",
+      "x-time": "event",
+      "default": 0.35
+    },
+    "stagger": {
+      "type": "number",
+      "x-time": "duration",
+      "minimum": 0,
+      "default": 0.18
+    },
+    "grow": {
+      "type": "number",
+      "x-time": "duration",
+      "minimum": 0,
+      "default": 0.8
+    }
+  },
+  "x-cues": [
+    {
+      "path": "bars[].at",
+      "default": {
+        "first": 0.35,
+        "step": 0.18,
+        "first_prop": "start",
+        "step_prop": "stagger"
+      },
+      "entrance": {
+        "seconds": 0.8,
+        "seconds_prop": "grow"
+      }
+    }
+  ]
+}

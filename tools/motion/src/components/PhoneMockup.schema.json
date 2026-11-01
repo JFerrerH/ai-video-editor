@@ -1,0 +1,96 @@
+{
+  "title": "PhoneMockup",
+  "description": "Phone with product screens swiping in at their at, or a scrolling page capture.",
+  "x-layout": "float",
+  "type": "object",
+  "properties": {
+    "variant": {
+      "type": "string",
+      "enum": [
+        "center",
+        "side"
+      ],
+      "default": "center"
+    },
+    "side": {
+      "type": "string",
+      "enum": [
+        "left",
+        "right"
+      ],
+      "default": "left"
+    },
+    "screens": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "src",
+          "at"
+        ],
+        "properties": {
+          "src": {
+            "type": "string",
+            "description": "a staged public file (short.json public_files / storyboard assets)"
+          },
+          "at": {
+            "type": "number",
+            "x-time": "event"
+          },
+          "label": {
+            "type": "string",
+            "x-text": true
+          }
+        }
+      }
+    },
+    "scroll": {
+      "type": "object",
+      "required": [
+        "src",
+        "srcWidth",
+        "from",
+        "to",
+        "start",
+        "end"
+      ],
+      "properties": {
+        "src": {
+          "type": "string",
+          "description": "a staged public file (short.json public_files / storyboard assets)"
+        },
+        "srcWidth": {
+          "type": "number"
+        },
+        "from": {
+          "type": "number",
+          "description": "source px"
+        },
+        "to": {
+          "type": "number",
+          "description": "source px"
+        },
+        "start": {
+          "type": "number",
+          "x-time": "event"
+        },
+        "end": {
+          "type": "number",
+          "x-time": "event"
+        },
+        "url": {
+          "type": "string",
+          "x-text": true
+        }
+      }
+    }
+  },
+  "x-cues": [
+    {
+      "path": "screens[].at",
+      "entrance": {
+        "frames": 8
+      }
+    }
+  ]
+}

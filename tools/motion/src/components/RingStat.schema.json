@@ -1,0 +1,48 @@
+{
+  "title": "RingStat",
+  "description": "Ring that fills to value % at fillAt and pulses at pulseAt.",
+  "x-layout": "float",
+  "type": "object",
+  "required": [
+    "value"
+  ],
+  "properties": {
+    "value": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "percent"
+    },
+    "label": {
+      "type": "string",
+      "x-text": true
+    },
+    "fillAt": {
+      "type": "number",
+      "x-time": "event",
+      "default": 0.1
+    },
+    "pulseAt": {
+      "type": "number",
+      "x-time": "event"
+    },
+    "mono": {
+      "type": "boolean"
+    }
+  },
+  "x-cues": [
+    {
+      "path": "fillAt",
+      "default": 0.1,
+      "entrance": {
+        "frames": 12
+      }
+    },
+    {
+      "path": "pulseAt",
+      "entrance": {
+        "frames": 8
+      }
+    }
+  ]
+}

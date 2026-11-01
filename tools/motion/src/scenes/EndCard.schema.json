@@ -1,0 +1,43 @@
+{
+  "title": "EndCard",
+  "description": "Closing card: logo, title, tagline, CTA pill and url rise in.",
+  "x-layout": "full",
+  "type": "object",
+  "properties": {
+    "bg": {
+      "type": "string",
+      "enum": [
+        "light",
+        "dark",
+        "accent",
+        "none"
+      ]
+    },
+    "logo": {
+      "type": "string",
+      "description": "a staged public file (short.json public_files / storyboard assets)"
+    },
+    "logoHeight": {
+      "type": "number",
+      "minimum": 10,
+      "maximum": 800,
+      "description": "px"
+    },
+    "title": {
+      "type": "string",
+      "x-text": true
+    },
+    "tagline": {
+      "type": "string",
+      "x-text": true
+    },
+    "button": {
+      "type": "string",
+      "x-text": true
+    },
+    "url": {
+      "type": "string",
+      "x-text": true
+    }
+  }
+}

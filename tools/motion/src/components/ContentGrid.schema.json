@@ -1,0 +1,44 @@
+{
+  "title": "ContentGrid",
+  "description": "A vague brief → an empty grid at gridAt, tiles fill from fillAt, the card wobbles at missAt.",
+  "x-layout": "float",
+  "type": "object",
+  "required": [
+    "gridAt",
+    "fillAt"
+  ],
+  "properties": {
+    "gridAt": {
+      "type": "number",
+      "x-time": "event"
+    },
+    "fillAt": {
+      "type": "number",
+      "x-time": "event"
+    },
+    "missAt": {
+      "type": "number",
+      "x-time": "event"
+    },
+    "top": {
+      "type": "number",
+      "minimum": -400,
+      "maximum": 1920,
+      "description": "px from the top of the 1080x1920 frame"
+    }
+  },
+  "x-cues": [
+    {
+      "path": "gridAt",
+      "entrance": {
+        "frames": 14
+      }
+    },
+    {
+      "path": "missAt",
+      "entrance": {
+        "frames": 7
+      }
+    }
+  ]
+}

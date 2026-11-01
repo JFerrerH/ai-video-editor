@@ -1,0 +1,79 @@
+{
+  "title": "ImageScene",
+  "description": "A still with a slow camera move (Ken Burns); optional lower-third.",
+  "x-layout": "full",
+  "type": "object",
+  "required": [
+    "src"
+  ],
+  "properties": {
+    "bg": {
+      "type": "string",
+      "enum": [
+        "light",
+        "dark",
+        "accent",
+        "none"
+      ]
+    },
+    "src": {
+      "type": "string",
+      "description": "a staged public file (short.json public_files / storyboard assets)"
+    },
+    "move": {
+      "type": "string",
+      "enum": [
+        "none",
+        "in",
+        "out",
+        "left",
+        "right",
+        "up",
+        "down"
+      ],
+      "default": "in"
+    },
+    "amount": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 0.5,
+      "default": 0.12
+    },
+    "focus": {
+      "type": "object",
+      "required": [
+        "x",
+        "y"
+      ],
+      "properties": {
+        "x": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "y": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "kicker": {
+      "type": "string",
+      "x-text": true
+    },
+    "title": {
+      "type": "string",
+      "x-text": true
+    },
+    "darken": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0
+    },
+    "mono": {
+      "type": "boolean"
+    }
+  }
+}

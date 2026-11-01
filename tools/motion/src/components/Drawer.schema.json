@@ -1,0 +1,28 @@
+{
+  "title": "Drawer",
+  "description": "A document drops into a drawer that slams shut at closeAt.",
+  "x-layout": "float",
+  "type": "object",
+  "required": [
+    "docTitle",
+    "closeAt"
+  ],
+  "properties": {
+    "docTitle": {
+      "type": "string",
+      "x-text": true
+    },
+    "closeAt": {
+      "type": "number",
+      "x-time": "event"
+    }
+  },
+  "x-cues": [
+    {
+      "path": "closeAt",
+      "entrance": {
+        "frames": 6
+      }
+    }
+  ]
+}

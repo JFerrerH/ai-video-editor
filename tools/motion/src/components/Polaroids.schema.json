@@ -1,0 +1,59 @@
+{
+  "title": "Polaroids",
+  "description": "Polaroid photos drop in one by one, plus an optional chip.",
+  "x-layout": "float",
+  "type": "object",
+  "required": [
+    "photos"
+  ],
+  "properties": {
+    "photos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "src",
+          "label",
+          "at"
+        ],
+        "properties": {
+          "src": {
+            "type": "string",
+            "description": "a staged public file (short.json public_files / storyboard assets)"
+          },
+          "label": {
+            "type": "string",
+            "x-text": true
+          },
+          "at": {
+            "type": "number",
+            "x-time": "event"
+          },
+          "rotate": {
+            "type": "number",
+            "minimum": -45,
+            "maximum": 45,
+            "description": "degrees"
+          }
+        }
+      }
+    },
+    "chip": {
+      "type": "string",
+      "x-text": true
+    },
+    "chipAt": {
+      "type": "number",
+      "x-time": "event",
+      "default": 0
+    }
+  },
+  "x-cues": [
+    {
+      "path": "photos[].at",
+      "entrance": {
+        "frames": 14
+      }
+    }
+  ]
+}

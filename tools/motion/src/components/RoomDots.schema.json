@@ -1,0 +1,40 @@
+{
+  "title": "RoomDots",
+  "description": "A row of people; at highlightAt one (highlight index) turns accent and lifts.",
+  "x-layout": "float",
+  "type": "object",
+  "required": [
+    "highlightAt"
+  ],
+  "properties": {
+    "count": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20,
+      "default": 7
+    },
+    "highlight": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 3
+    },
+    "highlightAt": {
+      "type": "number",
+      "x-time": "event"
+    },
+    "top": {
+      "type": "number",
+      "minimum": -400,
+      "maximum": 1920,
+      "description": "px from the top of the 1080x1920 frame"
+    }
+  },
+  "x-cues": [
+    {
+      "path": "highlightAt",
+      "entrance": {
+        "frames": 10
+      }
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "title": "TitleCard",
+  "description": "Chapter / opening title: kicker, big serif title, an accent rule, a supporting line.",
+  "x-layout": "full",
+  "type": "object",
+  "required": [
+    "title"
+  ],
+  "properties": {
+    "bg": {
+      "type": "string",
+      "enum": [
+        "light",
+        "dark",
+        "accent",
+        "none"
+      ]
+    },
+    "kicker": {
+      "type": "string",
+      "x-text": true
+    },
+    "title": {
+      "type": "string",
+      "x-text": true
+    },
+    "emphasis": {
+      "type": "string",
+      "description": "substring of title set in the accent colour"
+    },
+    "sub": {
+      "type": "string",
+      "x-text": true
+    },
+    "align": {
+      "type": "string",
+      "enum": [
+        "center",
+        "left"
+      ]
+    },
+    "size": {
+      "type": "number"
+    }
+  }
+}

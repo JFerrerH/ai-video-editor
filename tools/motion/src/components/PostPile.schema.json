@@ -1,0 +1,36 @@
+{
+  "title": "PostPile",
+  "description": "Blank social-post cards pile up between pileStart and pileEnd. Pair with full.",
+  "x-layout": "float",
+  "type": "object",
+  "properties": {
+    "count": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 40,
+      "default": 10
+    },
+    "pileStart": {
+      "type": "number",
+      "x-time": "event",
+      "default": 0.1
+    },
+    "pileEnd": {
+      "type": "number",
+      "x-time": "event",
+      "default": 2.2
+    },
+    "seed": {
+      "type": "string"
+    }
+  },
+  "x-cues": [
+    {
+      "path": "pileEnd",
+      "default": 2.2,
+      "entrance": {
+        "frames": 14
+      }
+    }
+  ]
+}

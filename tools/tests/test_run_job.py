@@ -204,6 +204,70 @@ class DataOnly(Base):
         self.assertFalse(marker.exists())
 
 
+class ResultFields(Base):
+    def test_schema_op(self):
+        before = self.tree()
+        res, code = R.run({"op": "schema", "args": {}})
+        self.assertEqual(code, 0, res)
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["outputs"], [])
+        for k in ("KineticType", "ListScene", "StatScene", "event"):
+            self.assertIn(k, res["schema"])
+        self.assertEqual(self.tree(), before)
+        res, code = R.run({"op": "schema", "project": "demo", "args": {}})
+        self.assertEqual(code, 2)
+
+    def test_help_lists_schema(self):
+        r = subprocess.run([sys.executable, str(TOOLS / "run_job.py"), "--help"], capture_output=True, text=True)
+        self.assertIn("\n  schema ", r.stdout)
+
+    def test_transcribe_fields(self):
+        (self.root / "clip.mov").write_text("")
+
+        def fake(video, edit_dir, model, language, track, backend):
+            out = edit_dir / "transcripts" / "clip.json"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps({"language_code": "es", "language_detected": "es", "words": [],
+                                       "untranscribed": [[4.0, 7.0]],
+                                       "source": {"patched": [{"from": 0.5, "to": 30.0, "words": 61}]}}))
+            return out
+        with mock.patch("transcribe_local.transcribe_one", side_effect=fake):
+            res, code = R.run({"op": "transcribe", "project": "demo", "args": {"source": "clip.mov"}})
+        self.assertEqual(code, 0, res)
+        self.assertEqual(res["language_detected"], "es")
+        self.assertEqual(res["untranscribed"], [[4.0, 7.0]])
+        self.assertEqual(res["patched"], [{"from": 0.5, "to": 30.0, "words": 61}])
+
+    def test_stills_fields(self):
+        edit = self.root / "edit"
+        edit.mkdir()
+        (edit / "short.json").write_text("{}")
+        project = mock.Mock()
+
+        def stills(at, preview, warnings):
+            warnings.append("events[0] (KineticType) shows almost no text at 1.20 s")
+            return [{"path": edit / "stills" / f"short_{t:06.2f}.png", "t": t} for t in (1.0, 3.0)] + \
+                [{"path": edit / "stills" / "ev00_KineticType_001.20.png", "t": 1.2, "event": 0, "type": "KineticType"}]
+        project.stills.side_effect = stills
+        with mock.patch("short_spec.load", return_value=(project, {"duration": 4.0, "edges": [], "warnings": []})):
+            res, code = R.run({"op": "shortform", "project": "demo", "args": {"cmd": "stills"}})
+        self.assertEqual(code, 0, res)
+        self.assertEqual(len(res["stills"]), 3)
+        ev = [s for s in res["stills"] if "event" in s]
+        self.assertEqual(ev, [{"path": "edit/stills/ev00_KineticType_001.20.png", "t": 1.2, "event": 0, "type": "KineticType"}])
+        self.assertEqual(res["warnings"], ["events[0] (KineticType) shows almost no text at 1.20 s"])
+
+    def test_render_failure_names_the_event(self):
+        from errors import ToolError
+
+        def op(root, a):
+            raise ToolError(["npx", "remotion", "still"], "Error: inputRange must contain only finite numbers",
+                            "events[2] (ListScene) failed at 1.55 s: Error: inputRange must contain only finite numbers")
+        with mock.patch.dict(R.OPS, {"inventory": R.Op(op, {})}), contextlib.redirect_stderr(io.StringIO()):
+            res, code = R.run({"op": "inventory", "project": "demo", "args": {}})
+        self.assertEqual(res["error"], "events[2] (ListScene) failed at 1.55 s: Error: inputRange must contain only finite numbers")
+
+
 class Confinement(Base):
     def setUp(self):
         super().setUp()

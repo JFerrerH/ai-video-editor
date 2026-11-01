@@ -1,0 +1,54 @@
+{
+  "title": "DocumentCard",
+  "description": "Big year stamp plus a paper document card.",
+  "x-layout": "float",
+  "type": "object",
+  "required": [
+    "kicker",
+    "title"
+  ],
+  "properties": {
+    "year": {
+      "type": "string",
+      "x-text": true
+    },
+    "kicker": {
+      "type": "string",
+      "x-text": true
+    },
+    "title": {
+      "type": "string",
+      "x-text": true
+    },
+    "emphasis": {
+      "type": "string",
+      "description": "substring of title set in the accent colour"
+    },
+    "author": {
+      "type": "string",
+      "x-text": true
+    },
+    "cardAt": {
+      "type": "number",
+      "x-time": "event",
+      "default": 0.35
+    },
+    "enterFrom": {
+      "type": "string",
+      "enum": [
+        "below",
+        "above"
+      ],
+      "default": "below"
+    }
+  },
+  "x-cues": [
+    {
+      "path": "cardAt",
+      "default": 0.35,
+      "entrance": {
+        "frames": 14
+      }
+    }
+  ]
+}

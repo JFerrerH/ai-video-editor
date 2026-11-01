@@ -89,6 +89,7 @@ export type OverlayEvent = {
   duration: number;
   props?: Record<string, unknown>;
   name?: string;
+  index?: number; // the event's position in the short-form spec (error messages); not read here
 };
 
 export type OverlayProps = {

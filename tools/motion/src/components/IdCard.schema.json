@@ -1,0 +1,72 @@
+{
+  "title": "IdCard",
+  "description": "Identity card; subtitle and rows pop in on cue.",
+  "x-layout": "float",
+  "type": "object",
+  "required": [
+    "title"
+  ],
+  "properties": {
+    "kicker": {
+      "type": "string",
+      "x-text": true
+    },
+    "title": {
+      "type": "string",
+      "x-text": true
+    },
+    "subtitle": {
+      "type": "string",
+      "x-text": true
+    },
+    "subtitleAt": {
+      "type": "number",
+      "x-time": "event",
+      "default": 0
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "text",
+          "at"
+        ],
+        "properties": {
+          "icon": {
+            "type": "string",
+            "description": "pin | swap | dot | an emoji"
+          },
+          "text": {
+            "type": "string",
+            "x-text": true
+          },
+          "at": {
+            "type": "number",
+            "x-time": "event"
+          }
+        }
+      }
+    },
+    "top": {
+      "type": "number",
+      "minimum": -400,
+      "maximum": 1920,
+      "description": "px from the top of the 1080x1920 frame"
+    },
+    "width": {
+      "type": "number",
+      "minimum": 200,
+      "maximum": 1080,
+      "default": 720
+    }
+  },
+  "x-cues": [
+    {
+      "path": "rows[].at",
+      "entrance": {
+        "frames": 14
+      }
+    }
+  ]
+}

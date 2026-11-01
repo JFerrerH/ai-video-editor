@@ -122,18 +122,37 @@ Examples below are illustrative. They show the technique, not a style to copy.
    A `base.mov` from `tools/shotcut.py` (character videos, `character-video` skill) is also a valid
    single source: one locked segment over it, as in `templates/character_build.py`.
 5a. `uv run tools/shortform.py check <edit>/short.json` → timeline, edge report, echo/SFX warnings and
-   errors; it writes no video. Fix every error; read every warning.
-5. **Edge pass (non-negotiable; clipped words are the #1 complaint).** Read the
-   edge report from `check`. Every `WARN` and every edge-energy "check" needs an
-   envelope plot (±0.6 s, words overlaid, current vs refined edge: plot the RMS envelope with
-   matplotlib, mark word starts/ends and both edges, save a PNG and Read it). If a word can't be cut cleanly because the next word
-   follows with no gap, **keep the longer phrase**. Clean audio beats hitting 60 s.
-   Use `lock_in`/`lock_out` only for edges you verified by eye. Watch for widened edges that **overlap the next segment** on continuous
-   boundaries (duplicated audio): check each segment's refined out ≤ the next one's in and lock both at the dip.
+   errors; it writes no video. Fix every error (each says what to change); read every warning. `check` fails on:
+   - **repeated audio:** two segments of one take covering the same source time, before or after edge
+     refinement (`segments[4] (…) overlaps segments[3] (…) by 0.76 s: "…" would play twice`). Start the later one
+     where the earlier ends, or set `"repeat": true` on it when the repeat is deliberate. Contiguous cuts of one take
+     (next in ≤ 0.6 s after an out) whose refined edges would cross are `[joined]` at the quietest point between them;
+     a pause you trimmed between them stays trimmed.
+   - **an edge inside a word** that refinement couldn't move to silence (`segments[7].in 57.50 is inside "empezar"
+     (57.28–57.64): use 57.28 or 57.64`). With `lock_in`/`lock_out` it is a warning instead.
+   - **an edge on sound:** more than `above_floor` + 3 dB (default 12 dB) over the room tone (`… starts in the middle
+     of sound: +20.9 dB over the room tone`). Above `above_floor` (default 9 dB), or on a locked edge, it is a warning.
+   - **event props** that don't match the component's schema (`tools/motion/src/**/<Type>.schema.json`; all of them:
+     `uv run tools/overlay_schema.py --export`): unknown keys, missing required ones, wrong types (a number given as a
+     string: `"value": "400.000"`), values outside an enum or range.
+   - **prop times outside the event:** prop times are seconds from the EVENT's start (or a word/segment anchor,
+     resolved for you). An output time there gets `… 18.2 s is outside the event (it starts at 17.50 s and lasts 3.0 s); prop times are seconds from the event's start: did you mean 0.7?`. Every
+     entrance (a line, item or word appearing, explicit or default cue) must also finish before the event ends.
+5. **Edge pass (non-negotiable; clipped words are the #1 complaint).** Read the edge report and the edge warnings
+   from `check`. Every edge warning needs an envelope plot (±0.6 s, words overlaid, current vs refined edge:
+   plot the RMS envelope with matplotlib, mark word starts/ends and both edges, save a PNG and Read it). If a word
+   can't be cut cleanly because the next word follows with no gap, **keep the longer phrase**. Clean audio beats
+   hitting 60 s. Use `lock_in`/`lock_out` only for edges you verified by eye.
    A drawn-out filler ("y…") you drop at an in-point can still get captioned from Whisper's stretched
-   stamp: list it in `captions.skip`.
+   stamp: list it in `captions.skip`. Check the transcript's `untranscribed` ranges first: speech the
+   transcriber couldn't put words to has no captions and no word anchors.
 6. `uv run tools/shortform.py stills <edit>/short.json [--at t …]` → finished-look frames (cut, zoom, overlays,
-   captions, behind-the-speaker layers) in `edit/stills/`, ~3 s each, no render. Read them and fix layout first.
+   captions, behind-the-speaker layers) in `edit/stills/`, ~3 s each, no render: the segment midpoints (or your
+   `--at` times) plus one `ev<NN>_<Type>_<t>.png` per overlay event once its entrance has finished. Read every one
+   and fix layout first. `stills` also warns when an event's text barely shows (`events[2] (KineticType) shows almost
+   no text`: off screen, masked, not in yet) and when captions can't clear a full-layout scene's text; it moves
+   them below the scene's measured content (or above it) for that event on its own. A Remotion failure names the
+   event: `events[N] (<Type>) failed at <t> s: <error>`.
 7. `uv run tools/shortform.py render <edit>/short.json --preview` (~1 min for 60 s). Then verify (below), iterate,
    and render the final without `--preview`. Copy to `exports/<project>_<platform>_<YYYYMMDD>.mp4`.
    The final uses `DELIVERY_X264` (Instagram/TikTok master): source frame rate (don't upsample 30→60),
@@ -146,7 +165,8 @@ Examples below are illustrative. They show the technique, not a style to copy.
 
 | Tool | What it does |
 |---|---|
-| `tools/short_spec.py` | Loads `edit/short.json` into the engine: validates every field (paths stay inside the project, grades are preset names, overlay `src` must be a `public_files` name), refines edges, resolves anchors. `check()` plans without rendering. Limits: 180 s, 120 segments, 200 events, 200 SFX. |
+| `tools/short_spec.py` | Loads `edit/short.json` into the engine: validates every field (paths stay inside the project, grades are preset names, overlay `src` must be a `public_files` name, event props against their component's schema), refines edges, checks overlaps and edges, resolves anchors (prop times too). `check()` plans without rendering. Limits: 180 s, 120 segments, 200 events, 200 SFX. |
+| `tools/overlay_schema.py` | Props schemas of every overlay component and scene (`<Name>.schema.json` beside it): validation, time fields, reveal cues, viewer text. `--export` prints them all (also the `schema` job op). |
 | `tools/shortform.py` | CLI `check\|stills\|render <spec>`. `Seg(take, in, out, zoom, look, freeze_after)`, `Project(..., brand="<slug>").build(preview)`. Zooms: `("static", s)`, `("push", a, b)`, `("punch", base, peak, src_t)`, `("outpunch", a, b, peak, src_t)`. Looks: `None`, `"bw"`. `p.word()` / `p.at()` map source times → output timeline. Karaoke ASS, attack-aligned SFX mix, two-pass loudnorm, overlay composite, captions LAST. |
 | `tools/brand.py` | `load_brand(slug)` → Remotion theme, font `public_files`, caption props from `brands/<slug>/brand.json`; `None` → neutral. |
 | `tools/motion/` | Remotion project. Composition `Overlay` reads `{durationInSeconds, brand, events[]}` and renders one transparent ProRes 4444 layer. Studio: `cd tools/motion && npx remotion studio --props=<edit>/overlay_props.json --public-dir=<edit>/motion_public`. |
@@ -159,7 +179,8 @@ Examples below are illustrative. They show the technique, not a style to copy.
 Every event is `{type, start, duration, props}` in output seconds. `props.full: true` draws the
 brand `Backdrop` (a cutaway); `props.frame: {scale, x, y}` shrinks/moves any component (origin top
 centre) to float it over the footage; `mono`/`dark` restyle it. Times inside props are seconds **relative to
-the event start**.
+the event start** (in `short.json` also a word or segment anchor); `check` rejects any that land outside the event.
+The full prop list of each component is its schema (`uv run tools/overlay_schema.py --export`).
 
 | type | use for | key props |
 |---|---|---|

@@ -1,0 +1,25 @@
+{
+  "title": "StatScene",
+  "description": "Hero number counting from `from` to `value` between countStart and countEnd, then the label rises in.",
+  "x-layout": "full",
+  "type": "object",
+  "required": ["value"],
+  "properties": {
+    "bg": {"type": "string", "enum": ["light", "dark", "accent", "none"]},
+    "value": {"type": "number", "description": "the number itself; formatting (thousands separators) comes from `locale` and `decimals`"},
+    "from": {"type": "number", "default": 0},
+    "prefix": {"type": "string", "maxLength": 12},
+    "suffix": {"type": "string", "maxLength": 24},
+    "decimals": {"type": "integer", "minimum": 0, "maximum": 6, "default": 0},
+    "locale": {"type": "string", "maxLength": 20, "default": "en-US", "description": "BCP 47 tag, e.g. es-ES for 400.000"},
+    "kicker": {"type": "string", "x-text": true, "maxLength": 80},
+    "label": {"type": "string", "x-text": true, "maxLength": 200},
+    "max": {"type": "number", "description": "draws a bar under the number filled to value/max"},
+    "countStart": {"type": "number", "x-time": "event", "minimum": 0, "default": 0.15, "description": "s from the event's start"},
+    "countEnd": {"type": "number", "x-time": "event", "minimum": 0, "default": 1.3, "description": "s from the event's start"},
+    "size": {"type": "number", "minimum": 8, "maximum": 800, "description": "px"}
+  },
+  "x-cues": [
+    {"path": "countEnd", "default": 1.3, "entrance": {"frames": 10}}
+  ]
+}

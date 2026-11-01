@@ -1,0 +1,20 @@
+{
+  "title": "Event props",
+  "description": "Props the overlay layer itself reads on every event, accepted next to each component's own props.",
+  "type": "object",
+  "properties": {
+    "full": {"type": "boolean", "description": "Draw the brand backdrop under the component (a cutaway). Captions switch to their light-background colours unless `dark`."},
+    "dark": {"type": "boolean", "description": "Backdrop in the brand's ink colour instead of its background colour."},
+    "mono": {"type": "boolean", "description": "Backdrop in greyscale."},
+    "behind": {"type": "boolean", "description": "Draw the event under the speaker (person matte); short-form only."},
+    "frame": {
+      "type": "object",
+      "description": "Shrink and move the component (origin: top centre) to float a full-layout graphic over the footage.",
+      "properties": {
+        "scale": {"type": "number", "minimum": 0.1, "maximum": 3},
+        "x": {"type": "number", "minimum": -4000, "maximum": 4000, "description": "px"},
+        "y": {"type": "number", "minimum": -4000, "maximum": 4000, "description": "px"}
+      }
+    }
+  }
+}

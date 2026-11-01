@@ -19,7 +19,8 @@ There is no free-form command: unknown ops or arguments are rejected before anyt
 
 Ops (args in brackets are optional):
   inventory        ffprobe every media file directly under the project → edit/inventory.json
-  transcribe       source [language model audio_track backend] → edit/transcripts/<stem>.json
+  transcribe       source [language model audio_track backend] → edit/transcripts/<stem>.json; returns
+                   language_detected (no language given), patched and untranscribed speech ranges
   voice            text out [lang preset speed pronounce force backend] → <out>.wav + sidecar
   matte            source start dur out [fps backend] → grey person matte video
   storyboard       cmd=check|voice|sheet|stills|render [storyboard what aspect bg at preview export force]
@@ -28,7 +29,9 @@ Ops (args in brackets are optional):
   frames           source at [sheet] → edit/frames/<stem>_<t>.png (+ _sheet.png), ≤ 24, ≤ 720 px
   face             sources → suggested face centre + confidence per take (also edit/face.json)
   shortform        cmd=check|stills|render [spec at preview] → from edit/short.json (data only; safe for
-                   specs written by untrusted users): check returns errors/warnings/duration, renders loudness
+                   specs written by untrusted users): check returns errors/warnings/duration, stills one
+                   entry per still (event stills: event index and type) plus legibility and caption
+                   warnings, renders loudness
   cut              cmd=check|render [edl preview subtitles] → plain EDL cut at the sources' orientation
                    (video-use render.py), EDL validated first: no raw ffmpeg filters, no outside paths
   site             url → site/viewport.png + capture.json (+ images/, fonts/): one page's measured
@@ -36,6 +39,9 @@ Ops (args in brackets are optional):
   brand            cmd=check [dir] → validates <dir>/incoming/* (default dir: brand) into fonts/ and
                    logos/ (invalid files deleted) and checks <dir>/brand.json; one entry per file,
                    `errors` (fail the job) and `warnings` (font entries their file can't honour)
+  schema           (no project, no args) → `schema`: every overlay component's props schema, keyed by
+                   component, plus the shared event props under "event" (also tools/motion/overlay_schema.json
+                   in the image)
   shortform.build  [preview] → runs footage/<project>/edit/build.py. It EXECUTES the project's Python:
                    trusted input only; never let end users author build.py for a hosted runner.
 
@@ -64,6 +70,7 @@ FOOTAGE = REPO / "footage"
 ASSETS = REPO / "assets"
 EXPORTS = REPO / "exports"
 sys.path.insert(0, str(TOOLS))
+from errors import ToolError, cause_line  # noqa: E402
 
 PROJECT_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 MEDIA_EXT = {".mp4", ".mov", ".mkv", ".m4v", ".webm", ".avi", ".mxf", ".wav", ".mp3", ".m4a", ".aac",
@@ -176,7 +183,16 @@ def op_transcribe(root: Path, a: dict) -> dict:
     from transcribe_local import transcribe_one
 
     out = transcribe_one(a["source"], root / "edit", a["model"], a["language"], a["audio_track"], a["backend"])
-    return {"transcript": str(out.relative_to(root))}
+    t = json.loads(out.read_text())
+    return {"transcript": str(out.relative_to(root)),
+            **({"language_detected": t["language_detected"]} if "language_detected" in t else {}),
+            "patched": t.get("source", {}).get("patched", []), "untranscribed": t.get("untranscribed", [])}
+
+
+def op_schema(root: Path | None, a: dict) -> dict:
+    import overlay_schema
+
+    return {"schema": overlay_schema.export()}
 
 
 def op_voice(root: Path, a: dict) -> dict:
@@ -297,8 +313,11 @@ def op_shortform(root: Path, a: dict) -> dict:
     except S.SpecError as e:
         return {"errors": e.errors, "error": f"{len(e.errors)} spec error(s): {e.errors[0]}"}
     if a["cmd"] == "stills":
-        p.stills(a["at"] or None, preview=True)
-        return {"duration": rep["duration"]}
+        warnings = list(rep["warnings"])
+        stills = p.stills(a["at"] or None, preview=True, warnings=warnings)
+        return {"duration": rep["duration"], "warnings": warnings,
+                "stills": [{"path": str(st["path"].resolve().relative_to(root)), "t": st["t"],
+                            **{k: st[k] for k in ("event", "type") if k in st}} for st in stills]}
     out = p.build(a["preview"])
     lufs, tp = loudness(out)
     return {"duration": rep["duration"], "video": str(out.resolve().relative_to(root)), "lufs": lufs, "true_peak": tp}
@@ -439,6 +458,7 @@ OPS: dict[str, Op] = {
         "cmd": Arg("str", required=True, choices=("check",)),
         "dir": Arg("str", default="brand", path="out"),
     }),
+    "schema": Op(op_schema, {}),
     "shortform.build": Op(op_shortform_build, {
         "preview": Arg("bool", default=False),
     }),
@@ -466,19 +486,13 @@ def _one_line(msg: str) -> str:
     return (lines[0] if lines else "failed")[:500]
 
 
-CAUSE = re.compile(r"Error|error:|Font did not load|Exception")
+_cause_line = cause_line  # tools/errors.py: shared with the engine's own failure messages
 
 
-def _cause_line(msg: str) -> str:
-    """The most specific line of a multi-line failure (a tool's stderr under `FAILED: <cmd>`): the last
-    line naming an error, else the first; paths under the engine root made relative."""
-    lines = [ln.strip() for ln in str(msg).splitlines() if ln.strip()]
-    hits = [ln for ln in lines if CAUSE.search(ln)]
-    line = hits[-1] if hits else lines[0] if lines else "failed"
-    return line.replace(f"{REPO}/", "")[:500]
+NO_PROJECT = {"schema"}
 
 
-def validate(job: Any) -> tuple[Op, Path, dict]:
+def validate(job: Any) -> tuple[Op, Path | None, dict]:
     if not isinstance(job, dict):
         raise JobError("the job must be a JSON object")
     if unknown := sorted(set(job) - {"op", "project", "args"}):
@@ -486,6 +500,10 @@ def validate(job: Any) -> tuple[Op, Path, dict]:
     op, project = job.get("op"), job.get("project")
     if op not in OPS:
         raise JobError(f"unknown op {op!r}; use one of: {', '.join(OPS)}")
+    if op in NO_PROJECT:  # reads engine files only: no project, nothing written
+        if project is not None:
+            raise JobError(f"`{op}` takes no project")
+        return OPS[op], None, check_args(OPS[op].schema, job.get("args", {}), REPO)
     if not isinstance(project, str) or not PROJECT_RE.fullmatch(project):
         raise JobError(f"invalid project name {project!r} (kebab-case ASCII, e.g. acme-launch)")
     root = (FOOTAGE / project).resolve()
@@ -505,8 +523,8 @@ def run(job: Any) -> tuple[dict, int]:
     except JobError as e:
         res.update(error=_one_line(str(e)), seconds=round(time.time() - t0, 3))
         return res, 2
-    print(f"[run_job] {op} in footage/{project}", file=sys.stderr, flush=True)
-    before = _snapshot(root, EXPORTS)
+    print(f"[run_job] {op} in footage/{project}" if root else f"[run_job] {op}", file=sys.stderr, flush=True)
+    before = _snapshot(root, EXPORTS) if root else {}
     code = 1
     try:
         extra = spec.fn(root, args) or {}
@@ -520,15 +538,15 @@ def run(job: Any) -> tuple[dict, int]:
             res["ok"], code = True, 0
         elif isinstance(e.code, str):
             print(e.code, file=sys.stderr)  # the whole failure, e.g. a tool's stderr after its command
-            res["error"] = _cause_line(e.code)
+            res["error"] = e.summary if isinstance(e, ToolError) else _cause_line(e.code)
         else:
             res["error"] = f"exit status {e.code}"
     except Exception as e:  # noqa: BLE001 - every failure becomes a result
         traceback.print_exc(file=sys.stderr)
         res["error"] = _one_line(f"{type(e).__name__}: {e}")
-    after = _snapshot(root, EXPORTS)
+    after = _snapshot(root, EXPORTS) if root else {}
     changed = sorted(p for p, sig in after.items() if before.get(p) != sig)
-    res["outputs"] = [str(p.relative_to(root)) for p in changed if p.is_relative_to(root)]
+    res["outputs"] = [str(p.relative_to(root)) for p in changed if p.is_relative_to(root)] if root else []
     if exported := [str(p.relative_to(REPO)) for p in changed if p.is_relative_to(EXPORTS)]:
         res["exports"] = exported
     res["seconds"] = round(time.time() - t0, 3)
@@ -616,6 +634,18 @@ def self_check() -> list[dict]:
     helpers = REPO / "vendor" / "video-use" / "helpers"
     add("video-use helpers", (helpers / "pack_transcripts.py").exists(),
         str(helpers.relative_to(REPO)) if helpers.is_dir() else "missing: run scripts/setup.sh (or the Docker build)")
+    bundle = TOOLS / "motion" / "overlay_schema.json"  # written by the Docker build (overlay_schema.py --export)
+    if bundle.exists():
+        try:
+            n = len(json.loads(bundle.read_text())) - 1  # minus the shared "event" props
+            add("overlay schema", n > 0, f"{bundle.relative_to(REPO)}: {n} components")
+        except ValueError as e:
+            add("overlay schema", False, f"{bundle.relative_to(REPO)}: {e}")
+    else:
+        import overlay_schema
+
+        n = len(overlay_schema.COMPONENTS & set(overlay_schema.schemas()))
+        add("overlay schema", n == len(overlay_schema.COMPONENTS), f"{n} component schemas (no bundled file)")
     for name, mod in (("transcription backend", "transcribe_local"), ("voice backend", "gen.voice"),
                       ("matte backend", "person_matte")):
         try:

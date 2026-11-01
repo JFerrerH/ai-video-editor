@@ -1,0 +1,23 @@
+{
+  "title": "HandleCard",
+  "description": "End card: optional kicker plus a big pill (@handle or a CTA).",
+  "x-layout": "float",
+  "type": "object",
+  "required": [
+    "handle"
+  ],
+  "properties": {
+    "kicker": {
+      "type": "string",
+      "x-text": true
+    },
+    "handle": {
+      "type": "string",
+      "x-text": true
+    },
+    "logo": {
+      "type": "string",
+      "description": "a staged public file (short.json public_files / storyboard assets)"
+    }
+  }
+}

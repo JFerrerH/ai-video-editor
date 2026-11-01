@@ -1,0 +1,67 @@
+{
+  "title": "SkillSlots",
+  "description": "Numbered slots that fill with a line icon on cue; active highlights one.",
+  "x-layout": "float",
+  "type": "object",
+  "required": [
+    "slots"
+  ],
+  "properties": {
+    "slots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "icon"
+        ],
+        "properties": {
+          "icon": {
+            "type": "string",
+            "enum": [
+              "speech",
+              "bulb",
+              "mail",
+              "receipt",
+              "calendar",
+              "search",
+              "person",
+              "check",
+              "spark",
+              "send",
+              "chart",
+              "cv",
+              "plane",
+              "book",
+              "cart",
+              "heart",
+              "brain",
+              "moon"
+            ]
+          },
+          "at": {
+            "type": "number",
+            "x-time": "event"
+          }
+        }
+      }
+    },
+    "active": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "top": {
+      "type": "number",
+      "minimum": -400,
+      "maximum": 1920,
+      "description": "px from the top of the 1080x1920 frame"
+    }
+  },
+  "x-cues": [
+    {
+      "path": "slots[].at",
+      "entrance": {
+        "frames": 11
+      }
+    }
+  ]
+}

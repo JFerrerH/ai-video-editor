@@ -85,5 +85,78 @@ class Adapter(unittest.TestCase):
         self.assertEqual(words[0]["logprob"], 0.9)
 
 
+def result(*words) -> dict:
+    """A Whisper result (mlx-whisper's shape) holding (text, start, end[, probability]) words."""
+    return {"segments": [{"words": [{"word": f" {w[0]}", "start": w[1], "end": w[2],
+                                     "probability": w[3] if len(w) > 3 else 0.9} for w in words]}]}
+
+
+def scribe(*words) -> list[dict]:
+    return T.to_scribe_words(result(*words))
+
+
+class Holes(unittest.TestCase):
+    """Speech that no word covers is re-transcribed alone (a stubbed backend stands in for Whisper)."""
+
+    def stub(self, words_by_window):
+        calls = []
+
+        def retranscribe(lo, hi):
+            calls.append((lo, hi))
+            return result(*[(t, a - lo, b - lo) for t, a, b in words_by_window if lo <= a <= hi])
+        return retranscribe, calls
+
+    def test_hole_filled(self):
+        spoken = [(f"w{i}", i + 0.6, i + 0.9) for i in range(0, 40)]  # one word a second, speech 0.5–40
+        first = scribe(*[w for w in spoken if w[1] >= 30])  # the backend dropped 0–30 s
+        retranscribe, calls = self.stub(spoken)
+        words, patched, untranscribed = T.fill_holes(first, [(0.5, 40.0)], retranscribe, 41.0)
+        self.assertEqual(len(calls), 1)
+        self.assertLess(calls[0][0], 0.6)
+        got = [w for w in words if w["type"] == "word"]
+        self.assertEqual([w["text"] for w in got], [w[0] for w in spoken])
+        self.assertTrue(all(a["start"] <= b["start"] and a["end"] <= b["start"] for a, b in zip(got, got[1:])))
+        gaps = [w for w in words if w["type"] == "spacing"]
+        self.assertEqual(len(gaps), len(got) - 1)  # spacing rebuilt between every pair
+        self.assertEqual(len(patched), 1)
+        self.assertLessEqual(patched[0]["from"], 0.6)
+        self.assertGreaterEqual(patched[0]["to"], 29.0)
+        self.assertEqual(patched[0]["words"], 30)
+        self.assertEqual(untranscribed, [])
+
+    def test_stray_words_dont_hide_a_hole(self):
+        spoken = [("a", 0.1, 0.3), ("b", 0.4, 0.6), ("c", 0.7, 30.0)] + [(f"w{i}", i + 0.2, i + 0.6) for i in range(1, 40)]
+        first = scribe(spoken[0], spoken[1], spoken[2], *[w for w in spoken[3:] if w[1] >= 32])
+        retranscribe, calls = self.stub([w for w in spoken[3:] if w[1] < 32])
+        words, patched, _ = T.fill_holes(first, [(0.0, 40.0)], retranscribe, 40.0)
+        self.assertEqual(len(patched), 1)
+        self.assertLess(patched[0]["from"], 2.6)  # "c" covers only its first 1.5 s
+        self.assertGreater(patched[0]["to"], 31.0)
+
+    def test_unintelligible_run_reported(self):
+        first = scribe(("hello", 0.5, 1.0), ("world", 10.0, 10.5))
+        retranscribe, calls = self.stub([])  # Whisper hears nothing in 4–7 s, twice
+        words, patched, untranscribed = T.fill_holes(first, [(0.4, 1.1), (4.0, 7.0), (9.9, 10.6)], retranscribe, 11.0)
+        self.assertEqual(patched, [])
+        self.assertEqual(untranscribed, [[4.0, 7.0]])
+        self.assertEqual(len(calls), 1)
+
+    def test_hallucination_dropped(self):
+        first = scribe(("hello", 0.5, 1.0))
+        retranscribe, _ = self.stub([("Subtítulos", 3.0, 3.5), ("por", 3.5, 3.7), ("Amara.org", 3.7, 4.2)])
+        words, patched, untranscribed = T.fill_holes(first, [(0.4, 1.1), (2.5, 5.0)], retranscribe, 6.0)
+        self.assertEqual(patched, [])
+        self.assertEqual(untranscribed, [[2.5, 5.0]])
+        self.assertEqual([w["text"] for w in words if w["type"] == "word"], ["hello"])
+
+    def test_short_gaps_are_not_holes(self):
+        first = scribe(("uno", 0.5, 0.9), ("dos", 2.0, 2.4))
+        self.assertEqual(T.uncovered(first, [(0.5, 2.4)]), [])  # 0.9 → 2.0 is under MIN_HOLE once padded
+
+    def test_no_prompt_for_other_languages(self):
+        self.assertIsNone(T.prompt_for("mlx", "fr"))
+        self.assertIsNone(T.prompt_for("mlx", None))
+
+
 if __name__ == "__main__":
     unittest.main()

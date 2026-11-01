@@ -453,6 +453,24 @@ scene types, **only in 9:16**. `check` rejects them in other aspects.
 Icons: `LineIcon` kinds in `components/icons.tsx` (book, cart, heart, brain, moon, speech, bulb, mail, receipt, calendar, search,
 person, check, spark, send, chart, cv, plane). Use line icons, not emoji.
 
+### Every component ships a props schema
+
+Each scene and overlay component has `<Name>.schema.json` beside its `.tsx` (`Captions` excepted: the
+engine builds it). Short-form `check` validates event props against it, resolves and range-checks its time
+props, and checks every entrance finishes before the event ends; `stills` uses it for the legibility probe and
+caption placement; the `schema` job op exports it for callers. When you add a component or change its props,
+update the schema in the same change:
+
+- Draft one from the TypeScript types: `cd tools/motion && node scripts/prop_keys.mjs --skeleton <Name> >
+  src/<dir>/<Name>.schema.json`, then annotate it (format in `tools/overlay_schema.py`):
+  `x-layout: "full"` (draws across the safe area: scenes) or `"float"`; `x-time: "event"` on every prop that is
+  seconds from the event's start, `"duration"` for a length in seconds, `"frames"` for frames; `x-text: true` on
+  every string the viewer reads; `x-cues` for entrances (the default cue times and entrance length, copied from
+  the component's own defaults); ranges and `default`s where the component has them.
+- `uv run python -m unittest tools.tests.test_overlay_schema` fails, naming the component and key, when a
+  declared prop is missing from the schema or the schema has a key the component doesn't declare, and when a
+  registry or scene component has no schema. Pin new default cues with a test there, as for `ListScene`.
+
 ### Promo scenes
 
 Every time below is seconds from the scene start or an `@word` cue. `check` rejects ids that don't

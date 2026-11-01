@@ -1,0 +1,56 @@
+{
+  "title": "ProgressCard",
+  "description": "Progress bar card filling from → to between fillStart and fillEnd; stall stutters it.",
+  "x-layout": "float",
+  "type": "object",
+  "required": [
+    "label",
+    "to"
+  ],
+  "properties": {
+    "label": {
+      "type": "string",
+      "x-text": true
+    },
+    "from": {
+      "type": "number",
+      "default": 0
+    },
+    "to": {
+      "type": "number"
+    },
+    "fillStart": {
+      "type": "number",
+      "x-time": "event",
+      "default": 0.15
+    },
+    "fillEnd": {
+      "type": "number",
+      "x-time": "event",
+      "default": 0.9
+    },
+    "stall": {
+      "type": "boolean"
+    },
+    "note": {
+      "type": "string",
+      "x-text": true
+    },
+    "mono": {
+      "type": "boolean"
+    },
+    "showValue": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "x-cues": [
+    {
+      "path": "fillEnd",
+      "default": 0.9,
+      "entrance": {
+        "frames": 0
+      }
+    }
+  ]
+}

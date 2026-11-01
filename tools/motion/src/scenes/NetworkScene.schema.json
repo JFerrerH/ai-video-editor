@@ -1,0 +1,187 @@
+{
+  "title": "NetworkScene",
+  "description": "Nodes drift in chaos, then ring a hub at connect; chips, messages and a log on cue.",
+  "x-layout": "full",
+  "type": "object",
+  "required": [
+    "nodes"
+  ],
+  "properties": {
+    "bg": {
+      "type": "string",
+      "enum": [
+        "light",
+        "dark",
+        "accent",
+        "none"
+      ]
+    },
+    "kicker": {
+      "type": "string",
+      "x-text": true
+    },
+    "title": {
+      "type": "string",
+      "x-text": true
+    },
+    "emphasis": {
+      "type": "string"
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string",
+            "x-text": true
+          },
+          "color": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string",
+            "enum": [
+              "speech",
+              "bulb",
+              "mail",
+              "receipt",
+              "calendar",
+              "search",
+              "person",
+              "check",
+              "spark",
+              "send",
+              "chart",
+              "cv",
+              "plane",
+              "book",
+              "cart",
+              "heart",
+              "brain",
+              "moon"
+            ]
+          }
+        }
+      }
+    },
+    "hub": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string",
+          "enum": [
+            "speech",
+            "bulb",
+            "mail",
+            "receipt",
+            "calendar",
+            "search",
+            "person",
+            "check",
+            "spark",
+            "send",
+            "chart",
+            "cv",
+            "plane",
+            "book",
+            "cart",
+            "heart",
+            "brain",
+            "moon"
+          ]
+        },
+        "color": {
+          "type": "string"
+        }
+      }
+    },
+    "chaos": {
+      "type": "number",
+      "x-time": "event"
+    },
+    "connect": {
+      "type": "number",
+      "x-time": "event"
+    },
+    "chips": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "node",
+          "text"
+        ],
+        "properties": {
+          "node": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string",
+            "x-text": true
+          },
+          "at": {
+            "type": "number",
+            "x-time": "event"
+          }
+        }
+      }
+    },
+    "messages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "at"
+        ],
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "at": {
+            "type": "number",
+            "x-time": "event"
+          },
+          "lock": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "log": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "text",
+          "at"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "x-text": true
+          },
+          "at": {
+            "type": "number",
+            "x-time": "event"
+          }
+        }
+      }
+    }
+  }
+}

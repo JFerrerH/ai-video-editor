@@ -1,0 +1,18 @@
+{
+  "title": "ProgressBar",
+  "description": "Thin accent bar along the top edge: the elapsed fraction of its event.",
+  "x-layout": "float",
+  "type": "object",
+  "properties": {
+    "height": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 100,
+      "description": "px"
+    },
+    "color": {
+      "type": "string",
+      "description": "CSS colour"
+    }
+  }
+}

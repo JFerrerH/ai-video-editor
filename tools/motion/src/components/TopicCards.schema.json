@@ -1,0 +1,73 @@
+{
+  "title": "TopicCards",
+  "description": "A row of small topic cards, each popping in on its own cue.",
+  "x-layout": "float",
+  "type": "object",
+  "required": [
+    "cards"
+  ],
+  "properties": {
+    "cards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "icon",
+          "title",
+          "at"
+        ],
+        "properties": {
+          "icon": {
+            "type": "string",
+            "enum": [
+              "speech",
+              "bulb",
+              "mail",
+              "receipt",
+              "calendar",
+              "search",
+              "person",
+              "check",
+              "spark",
+              "send",
+              "chart",
+              "cv",
+              "plane",
+              "book",
+              "cart",
+              "heart",
+              "brain",
+              "moon"
+            ]
+          },
+          "kicker": {
+            "type": "string",
+            "x-text": true
+          },
+          "title": {
+            "type": "string",
+            "x-text": true
+          },
+          "at": {
+            "type": "number",
+            "x-time": "event"
+          }
+        }
+      }
+    },
+    "top": {
+      "type": "number",
+      "minimum": -400,
+      "maximum": 1920,
+      "description": "px from the top of the 1080x1920 frame"
+    }
+  },
+  "x-cues": [
+    {
+      "path": "cards[].at",
+      "entrance": {
+        "frames": 12
+      }
+    }
+  ]
+}

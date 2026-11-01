@@ -1,0 +1,40 @@
+{
+  "title": "SearchBar",
+  "description": "A search pill types query; skeleton results stack up from resultsAt.",
+  "x-layout": "float",
+  "type": "object",
+  "required": [
+    "query"
+  ],
+  "properties": {
+    "query": {
+      "type": "string",
+      "x-text": true
+    },
+    "typeEnd": {
+      "type": "number",
+      "x-time": "event",
+      "default": 0.8
+    },
+    "resultsAt": {
+      "type": "number",
+      "x-time": "event",
+      "default": 0.9
+    },
+    "top": {
+      "type": "number",
+      "minimum": -400,
+      "maximum": 1920,
+      "description": "px from the top of the 1080x1920 frame"
+    }
+  },
+  "x-cues": [
+    {
+      "path": "typeEnd",
+      "default": 0.8,
+      "entrance": {
+        "frames": 0
+      }
+    }
+  ]
+}

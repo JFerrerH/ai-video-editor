@@ -1,0 +1,197 @@
+{
+  "title": "WorldScene",
+  "description": "A continuous world under a moving camera (storyboard engine merges WorldScene beats).",
+  "x-layout": "full",
+  "type": "object",
+  "required": [
+    "world"
+  ],
+  "properties": {
+    "grain": {
+      "type": "number"
+    },
+    "words": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "text",
+          "t",
+          "emph",
+          "phrase"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "x-text": true
+          },
+          "t": {
+            "type": "number",
+            "x-time": "event"
+          },
+          "emph": {
+            "type": "boolean"
+          },
+          "phrase": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "headline": {
+      "type": "boolean"
+    },
+    "world": {
+      "type": [
+        "object",
+        "string"
+      ],
+      "required": [
+        "objects"
+      ],
+      "properties": {
+        "terrain": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "snow"
+              ]
+            },
+            "slope": {
+              "type": "number"
+            }
+          }
+        },
+        "objects": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": true,
+      "description": "a world definition; in a storyboard, the id of one of its worlds"
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "at",
+          "target",
+          "do"
+        ],
+        "properties": {
+          "at": {
+            "type": "number",
+            "x-time": "event"
+          },
+          "target": {
+            "type": "string"
+          },
+          "do": {
+            "type": "string"
+          },
+          "to": {
+            "type": [
+              "string",
+              "number"
+            ]
+          },
+          "arrive": {
+            "type": "number",
+            "x-time": "event"
+          },
+          "dur": {
+            "type": "number",
+            "x-time": "duration"
+          },
+          "by": {
+            "type": "number"
+          },
+          "v": {
+            "type": "number"
+          },
+          "chip": {
+            "type": "string"
+          },
+          "into": {
+            "type": "string"
+          },
+          "dx": {
+            "type": "number"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "pose": {
+            "type": "string",
+            "enum": [
+              "stand",
+              "wave",
+              "cheer",
+              "point",
+              "shrug",
+              "slump",
+              "think",
+              "type",
+              "push",
+              "shout",
+              "read",
+              "wait",
+              "reach",
+              "scared",
+              "walk"
+            ]
+          },
+          "prop": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "desk",
+              "megaphone",
+              "box",
+              "book",
+              "phone",
+              "bag",
+              null
+            ]
+          },
+          "x": {
+            "type": "number"
+          },
+          "item": {
+            "type": "string"
+          },
+          "on": {
+            "type": "string"
+          },
+          "follow": {
+            "type": "string"
+          },
+          "zoom": {
+            "type": "number"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "until": {
+            "type": "number",
+            "x-time": "event"
+          }
+        }
+      }
+    },
+    "burst": {
+      "type": "string",
+      "x-text": true
+    }
+  }
+}

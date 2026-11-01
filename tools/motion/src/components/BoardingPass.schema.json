@@ -1,0 +1,81 @@
+{
+  "title": "BoardingPass",
+  "description": "Boarding pass; the plane flies from → to between flyStart and flyEnd.",
+  "x-layout": "float",
+  "type": "object",
+  "required": [
+    "from",
+    "to"
+  ],
+  "properties": {
+    "kicker": {
+      "type": "string",
+      "x-text": true
+    },
+    "carrier": {
+      "type": "string",
+      "x-text": true
+    },
+    "from": {
+      "type": "string",
+      "x-text": true
+    },
+    "to": {
+      "type": "string",
+      "x-text": true
+    },
+    "fromCity": {
+      "type": "string",
+      "x-text": true
+    },
+    "toCity": {
+      "type": "string",
+      "x-text": true
+    },
+    "details": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "k",
+          "v"
+        ],
+        "properties": {
+          "k": {
+            "type": "string",
+            "x-text": true
+          },
+          "v": {
+            "type": "string",
+            "x-text": true
+          }
+        }
+      }
+    },
+    "flyStart": {
+      "type": "number",
+      "x-time": "event",
+      "default": 0.4
+    },
+    "flyEnd": {
+      "type": "number",
+      "x-time": "event",
+      "default": 2.2
+    },
+    "top": {
+      "type": "number",
+      "minimum": -400,
+      "maximum": 1920,
+      "description": "px from the top of the 1080x1920 frame"
+    }
+  },
+  "x-cues": [
+    {
+      "path": "flyEnd",
+      "default": 2.2,
+      "entrance": {
+        "frames": 0
+      }
+    }
+  ]
+}

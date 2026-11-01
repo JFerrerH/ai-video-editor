@@ -1,0 +1,12 @@
+{
+  "title": "Flash",
+  "description": "Hard flash that decays: marks a turn in the story.",
+  "x-layout": "float",
+  "type": "object",
+  "properties": {
+    "color": {
+      "type": "string",
+      "description": "CSS colour"
+    }
+  }
+}

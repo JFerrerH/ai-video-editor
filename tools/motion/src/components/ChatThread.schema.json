@@ -1,0 +1,79 @@
+{
+  "title": "ChatThread",
+  "description": "Chat bubbles (no readable text) stacking up as they arrive. Pair with full, or floating.",
+  "x-layout": "float",
+  "type": "object",
+  "required": [
+    "messages"
+  ],
+  "properties": {
+    "messages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "from",
+          "at"
+        ],
+        "properties": {
+          "from": {
+            "type": "string",
+            "enum": [
+              "me",
+              "ai"
+            ]
+          },
+          "at": {
+            "type": "number",
+            "x-time": "event"
+          },
+          "icon": {
+            "type": "string",
+            "enum": [
+              "speech",
+              "bulb",
+              "mail",
+              "receipt",
+              "calendar",
+              "search",
+              "person",
+              "check",
+              "spark",
+              "send",
+              "chart",
+              "cv",
+              "plane",
+              "book",
+              "cart",
+              "heart",
+              "brain",
+              "moon"
+            ]
+          },
+          "lines": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 6
+          }
+        }
+      }
+    },
+    "floating": {
+      "type": "boolean"
+    },
+    "bottom": {
+      "type": "number",
+      "minimum": -400,
+      "maximum": 1920,
+      "description": "px from the top of the 1080x1920 frame"
+    }
+  },
+  "x-cues": [
+    {
+      "path": "messages[].at",
+      "entrance": {
+        "frames": 14
+      }
+    }
+  ]
+}

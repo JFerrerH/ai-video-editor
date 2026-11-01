@@ -1,0 +1,198 @@
+{
+  "title": "IsoOffice",
+  "description": "Isometric office: agents appear, walk between desks and show bubbles; optional replay.",
+  "x-layout": "full",
+  "type": "object",
+  "required": [
+    "agents"
+  ],
+  "properties": {
+    "bg": {
+      "type": "string",
+      "enum": [
+        "light",
+        "dark",
+        "accent",
+        "none"
+      ]
+    },
+    "kicker": {
+      "type": "string",
+      "x-text": true
+    },
+    "title": {
+      "type": "string",
+      "x-text": true
+    },
+    "emphasis": {
+      "type": "string"
+    },
+    "cols": {
+      "type": "number"
+    },
+    "rows": {
+      "type": "number"
+    },
+    "desks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "u",
+          "v"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "u": {
+            "type": "number"
+          },
+          "v": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "agents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "pos"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string",
+            "x-text": true
+          },
+          "color": {
+            "type": "string"
+          },
+          "at": {
+            "type": "number",
+            "x-time": "event"
+          },
+          "pos": {
+            "type": [
+              "string",
+              "array"
+            ]
+          }
+        }
+      }
+    },
+    "walks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "agent",
+          "to",
+          "at"
+        ],
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "to": {
+            "type": [
+              "string",
+              "array"
+            ]
+          },
+          "at": {
+            "type": "number",
+            "x-time": "event"
+          },
+          "dur": {
+            "type": "number",
+            "x-time": "duration",
+            "minimum": 0
+          },
+          "carry": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "bubbles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "agent",
+          "at"
+        ],
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string",
+            "x-text": true
+          },
+          "icon": {
+            "type": "string",
+            "enum": [
+              "speech",
+              "bulb",
+              "mail",
+              "receipt",
+              "calendar",
+              "search",
+              "person",
+              "check",
+              "spark",
+              "send",
+              "chart",
+              "cv",
+              "plane",
+              "book",
+              "cart",
+              "heart",
+              "brain",
+              "moon"
+            ]
+          },
+          "at": {
+            "type": "number",
+            "x-time": "event"
+          },
+          "until": {
+            "type": "number",
+            "x-time": "event"
+          }
+        }
+      }
+    },
+    "replay": {
+      "type": "object",
+      "required": [
+        "at",
+        "dur"
+      ],
+      "properties": {
+        "at": {
+          "type": "number",
+          "x-time": "event"
+        },
+        "dur": {
+          "type": "number",
+          "x-time": "duration",
+          "minimum": 0
+        },
+        "to": {
+          "type": "number",
+          "x-time": "event"
+        }
+      }
+    }
+  }
+}

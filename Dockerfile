@@ -70,7 +70,8 @@ RUN git clone --quiet https://github.com/browser-use/video-use vendor/video-use 
 
 COPY --chown=engine:engine . .
 RUN mkdir -p footage exports brands assets/music assets/sfx \
-    && uv run --no-sync tools/sfx_synth.py >/dev/null
+    && uv run --no-sync tools/sfx_synth.py >/dev/null \
+    && uv run --no-sync tools/overlay_schema.py --export > tools/motion/overlay_schema.json
 
 RUN if [ "${WITH_MODELS}" = "1" ]; then uv run --no-sync tools/run_job.py --prefetch; fi
 ENV HF_HUB_OFFLINE=${WITH_MODELS}

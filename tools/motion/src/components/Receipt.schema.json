@@ -1,0 +1,77 @@
+{
+  "title": "Receipt",
+  "description": "Quote / receipt: items tick in one by one, total, then a rubber stamp.",
+  "x-layout": "float",
+  "type": "object",
+  "required": [
+    "title",
+    "items",
+    "total"
+  ],
+  "properties": {
+    "title": {
+      "type": "string",
+      "x-text": true
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "text",
+          "at"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "x-text": true
+          },
+          "at": {
+            "type": "number",
+            "x-time": "event"
+          },
+          "amount": {
+            "type": "string",
+            "x-text": true
+          }
+        }
+      }
+    },
+    "total": {
+      "type": "string",
+      "x-text": true
+    },
+    "stamp": {
+      "type": "string",
+      "x-text": true
+    },
+    "stampAt": {
+      "type": "number",
+      "x-time": "event",
+      "default": 0
+    },
+    "enterFrom": {
+      "type": "string",
+      "enum": [
+        "below",
+        "above"
+      ],
+      "default": "below"
+    }
+  },
+  "x-cues": [
+    {
+      "path": "items[].at",
+      "entrance": {
+        "frames": 5
+      }
+    },
+    {
+      "path": "stampAt",
+      "default": 0,
+      "entrance": {
+        "frames": 9
+      }
+    }
+  ]
+}

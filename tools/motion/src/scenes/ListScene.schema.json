@@ -1,0 +1,29 @@
+{
+  "title": "ListScene",
+  "description": "Steps, reasons or features revealed one per cue; earlier items dim when a new one lands.",
+  "x-layout": "full",
+  "type": "object",
+  "required": ["items"],
+  "properties": {
+    "bg": {"type": "string", "enum": ["light", "dark", "accent", "none"]},
+    "kicker": {"type": "string", "x-text": true, "maxLength": 80},
+    "title": {"type": "string", "x-text": true, "maxLength": 200},
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "text": {"type": "string", "x-text": true, "maxLength": 200},
+          "icon": {"type": "string", "description": "line icon name (components/icons.tsx), used with marker \"icon\""},
+          "at": {"type": "number", "x-time": "event", "minimum": 0, "description": "s from the event's start when the item enters"}
+        }
+      }
+    },
+    "marker": {"type": "string", "enum": ["number", "check", "icon", "dot"], "default": "number"},
+    "dimPrevious": {"type": "boolean", "default": true}
+  },
+  "x-cues": [
+    {"path": "items[].at", "default": {"first": 0.5, "step": 0.6}, "entrance": {"frames": 14}}
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "title": "KineticType",
+  "description": "Kinetic typography: lines that build word by word (rise | pop | fade | blur), slam one at a time, or type out.",
+  "x-layout": "full",
+  "type": "object",
+  "required": ["lines"],
+  "properties": {
+    "bg": {"type": "string", "enum": ["light", "dark", "accent", "none"]},
+    "lines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "text": {"type": "string", "x-text": true, "maxLength": 400},
+          "at": {"type": "number", "x-time": "event", "minimum": 0, "description": "s from the event's start when the line starts entering"},
+          "emphasis": {"type": "string", "description": "substring of text set in the accent colour"},
+          "size": {"type": "number", "minimum": 8, "maximum": 600, "description": "px"}
+        }
+      }
+    },
+    "style": {"type": "string", "enum": ["rise", "pop", "fade", "blur", "slam", "type"], "default": "rise"},
+    "font": {"type": "string", "enum": ["serif", "sans"], "default": "serif"},
+    "size": {"type": "number", "minimum": 8, "maximum": 600, "description": "px"},
+    "weight": {"type": "number", "minimum": 100, "maximum": 1000},
+    "align": {"type": "string", "enum": ["center", "left"], "default": "center"},
+    "stagger": {"type": "number", "x-time": "frames", "minimum": 0, "maximum": 30, "description": "frames between words"},
+    "uppercase": {"type": "boolean"}
+  },
+  "x-cues": [
+    {"path": "lines[].at", "when": {"style": ["rise", "fade", "blur"]}, "default": {"first": 0.1, "step": 0.35},
+     "entrance": {"frames": 14, "per_word": {"prop": "stagger", "default": 2}, "text": "text"}},
+    {"path": "lines[].at", "when": {"style": ["pop"]}, "default": {"first": 0.1, "step": 0.35},
+     "entrance": {"frames": 14, "per_word": {"prop": "stagger", "default": 3}, "text": "text"}},
+    {"path": "lines[].at", "when": {"style": ["slam"]}, "default": "even", "entrance": {"frames": 12}},
+    {"path": "lines[].at", "when": {"style": ["type"]}, "default": {"first": 0, "step": 0.9},
+     "entrance": {"per_char_s": 0.0455, "text": "text"}}
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "title": "HookTitle",
+  "description": "Opening hook: serif headline on a card above the speaker's head.",
+  "x-layout": "float",
+  "type": "object",
+  "required": [
+    "lines"
+  ],
+  "properties": {
+    "lines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "x-text": true
+          },
+          "emphasis": {
+            "type": "string",
+            "description": "substring of text set in the accent"
+          }
+        }
+      }
+    }
+  }
+}

@@ -12,7 +12,7 @@ someone untrusted is safe to check and render. Shape (all keys optional unless n
     {"version": 1, "brand": "none" | "<slug>",
      "sources": {"take1": {"file": "edit/conformed/take1.mov", "face": [540, 900]}},         required
      "segments": [{"take", "in", "out", "zoom": {"kind": "static", "scale": 1.0}, "look": null | "bw",
-                   "freeze_after": 0, "lock_in": false, "lock_out": false, "note": ""}],        required
+                   "freeze_after": 0, "lock_in": false, "lock_out": false, "repeat": false, "note": ""}], required
      "captions": {"fixes": {"heard": "said"}, "word_fixes": [{"take", "at", "text"}],
                   "skip": [{"take", "at"}], "props": {}, "style": {}, "engine": "remotion" | "ass"},
      "emphasis": [{"take", "phrase", "after"}],
@@ -24,22 +24,35 @@ someone untrusted is safe to check and render. Shape (all keys optional unless n
 
 `edges.above_floor` 28 suits very low noise floors (iPhone voice isolation): see short-form-pro gotchas.
 
+Timeline rules (errors): two segments of one take may not cover the same source time, before or after edge
+refinement (it would play twice), unless the later one says `"repeat": true`. Contiguous cuts of one take
+(the next in ≤ 0.6 s after an out) are joined at the quietest point between them. An unlocked edge that
+can't reach silence may not sit inside a word, and an unlocked edge may not land on sound louder than
+`above_floor` + 3 dB over the room tone (above `above_floor`, or on a locked edge, it is a warning).
+
 Zooms: static {scale} | push {from, to} | punch {base, peak, at} | outpunch {from, to, peak, at}, where a
 punch's `at` is a SOURCE time in the segment's take: seconds, or {"word", "after"?, "edge"?, "offset"?}.
 A time T (event start/end, sfx at) is OUTPUT seconds, or an anchor resolved after edge refinement:
     {"word": "launch", "take": "take1", "after": 12.0, "edge": "start" | "end", "offset": 0.2}
     {"seg": 2, "edge": "start" | "end", "offset": -0.1}
+
+An event's props follow its component's schema (tools/motion/src/**/<Type>.schema.json, all of them:
+`uv run tools/overlay_schema.py --export`). Time props (`lines[].at`, `countEnd`…) are seconds from the
+EVENT's start, or an anchor as above, and must land inside the event with every entrance finished
+before it ends.
 """
 
 from __future__ import annotations
 
+import copy
 import json
 import re
 import sys
 from pathlib import Path
 from typing import Any
 
-from shortform import LOOKS, MOTION, REPO, SFX_DIR, Project, Seg, _norm
+import overlay_schema
+from shortform import LOOKS, REPO, SFX_DIR, Project, Seg, _norm
 
 ASSETS = REPO / "assets"
 BRANDS = REPO / "brands"
@@ -63,14 +76,8 @@ EDGE_LIMITS = {"above_floor": (3, 40), "pre": (0, 0.5), "post": (0, 0.5), "min_s
 CAPTION_STYLE = {"font": str, "size": int, "outline": int, "shadow": int, "margin_v": int, "active": str, "base": str}
 
 
-def _registry(path: Path, block: str) -> set[str]:  # same parse as storyboard.py's
-    m = re.search(block + r"[^{]*\{([^}]*)\}", path.read_text())
-    return set(re.findall(r"\b([A-Z]\w+)\b", m.group(1))) if m else set()
-
-
 # overlay components and scene primitives both render as events; captions come from the engine
-OVERLAY_TYPES = (_registry(MOTION / "src/Overlay.tsx", r"export const REGISTRY")
-                 | _registry(MOTION / "src/scenes/index.ts", r"export const SCENES")) - {"Captions"}
+OVERLAY_TYPES = overlay_schema.COMPONENTS
 FILE_KEYS = {"src", "logo"}  # the props tools/motion loads with staticFile(): must name a staged public file
 SFX_NAMES = {p.stem for p in SFX_DIR.glob("*.wav")}
 
@@ -192,6 +199,16 @@ def _check_json(V: _V, v: Any, where: str, public: set[str], depth: int = 0) -> 
         V.err(where, "string longer than 4000 characters")
 
 
+def _check_props(V: _V, type_: str, props: dict, where: str, takes: set[str], n_segs: int) -> None:
+    """Event props against the component's schema (tools/motion/src/**/<type>.schema.json). Time props
+    are seconds from the event's start, or an anchor (same shapes as an event's `start`)."""
+    for path, msg in overlay_schema.validate(type_, props, anchors=True):
+        V.err(f"{where}.{path} ({type_})" if path else f"{where} ({type_})", msg)
+    for path, v, _, _ in overlay_schema.time_fields(type_, props):
+        if isinstance(v, dict):
+            _check_time(V, v, f"{where}.{path}", takes, n_segs)
+
+
 def validate(spec: Any, root: Path, edit_dir: Path) -> list[str]:
     """Every shape error in the spec (empty = valid). Reads no media."""
     V = _V()
@@ -245,8 +262,8 @@ def validate(spec: Any, root: Path, edit_dir: Path) -> list[str]:
         planned = 0.0
         for i, s in enumerate(segs):
             w = f"segments[{i}]"
-            if not V.obj(s, w, {"take", "in", "out", "zoom", "look", "freeze_after", "lock_in", "lock_out", "note"},
-                         {"take", "in", "out"}):
+            if not V.obj(s, w, {"take", "in", "out", "zoom", "look", "freeze_after", "lock_in", "lock_out", "note",
+                                "repeat"}, {"take", "in", "out"}):
                 continue
             if V.str_(s["take"], f"{w}.take") and s["take"] not in takes:
                 V.err(f"{w}.take", f"unknown take {s['take']!r}")
@@ -258,7 +275,7 @@ def validate(spec: Any, root: Path, edit_dir: Path) -> list[str]:
                 planned += s["freeze_after"]
             if s.get("look") is not None:
                 V.str_(s["look"], f"{w}.look", choices={k for k in LOOKS if k})
-            for k in ("lock_in", "lock_out"):
+            for k in ("lock_in", "lock_out", "repeat"):
                 if k in s:
                     V.bool_(s[k], f"{w}.{k}")
             if "note" in s:
@@ -351,8 +368,11 @@ def validate(spec: Any, root: Path, edit_dir: Path) -> list[str]:
                 V.num(e["duration"], f"{w}.duration", 0.05, MAX_DURATION)
             if "name" in e:
                 V.str_(e["name"], f"{w}.name")
-            if "props" in e and V.obj(e["props"], f"{w}.props", set(e["props"]) if isinstance(e["props"], dict) else set()):
-                _check_json(V, e["props"], f"{w}.props", public)
+            props = e.get("props", {})
+            if V.obj(props, f"{w}.props", set(props) if isinstance(props, dict) else set()):
+                _check_json(V, props, f"{w}.props", public)
+                if e["type"] in OVERLAY_TYPES:
+                    _check_props(V, e["type"], props, f"{w}.props", takes, n_segs)
 
     sfx = spec.get("sfx", [])
     if not isinstance(sfx, list):
@@ -419,6 +439,157 @@ def _zoom(z: dict, at: float | None) -> tuple:
     return ("outpunch", z["from"], z["to"], z["peak"], at)
 
 
+# ── timeline integrity ────────────────────────────────────────────────────
+JOIN_GAP = 0.6  # s: same-take cuts closer than this in the source are one continuous cut
+
+
+def _plain(text: str) -> str:
+    return re.sub(r"[.,;:!?…]+$", "", text.strip())
+
+
+def _overlaps(p: Project, raw: list[dict], refined: bool, skip: set[tuple[int, int]] = frozenset()) -> tuple[list[str], set]:
+    """Errors for same-take segments covering the same source time (the later one in output order may
+    say `repeat: true`). Returns (errors, pairs reported)."""
+    errors, pairs = [], set()
+    segs = p.segments
+    for j, b in enumerate(segs):
+        for i in range(j):
+            a = segs[i]
+            if a.take != b.take or raw[j].get("repeat") or (i, j) in skip:
+                continue
+            lo, hi = max(a.t_in, b.t_in), min(a.t_out, b.t_out)
+            if hi - lo <= 0.001:
+                continue
+            words = " ".join(_plain(w["text"]) for w in p._words(a.take) if lo <= (w["start"] + w["end"]) / 2 <= hi)
+            said = f'"{words}" would play twice' if words else "that audio would play twice"
+            when = "after edge refinement, " if refined else ""
+            fix = (f'lock the edges ("lock_in"/"lock_out") or leave a gap between them' if refined else
+                   f"start segments[{j}] at {a.t_out:.2f}" if b.t_in >= a.t_in else f"end segments[{j}] at {a.t_in:.2f}")
+            errors.append(f"{when}segments[{j}] ({b.take} {b.t_in:.2f}–{b.t_out:.2f}) overlaps segments[{i}] "
+                          f"({a.take} {a.t_in:.2f}–{a.t_out:.2f}) by {hi - lo:.2f} s: {said}; {fix}, "
+                          f'or set "repeat": true on segments[{j}] if the repeat is deliberate')
+            pairs.add((i, j))
+    return errors, pairs
+
+
+def _joins(p: Project) -> list[tuple[int, int]]:
+    """(i, j): segment i's out is followed in the same take, within JOIN_GAP s, by segment j's in."""
+    out, used = [], set()
+    for i, a in enumerate(p.segments):
+        for j, b in enumerate(p.segments):
+            if i != j and a.take == b.take and 0 <= b.t_in - a.t_out <= JOIN_GAP and (j, "in") not in used:
+                out.append((i, j))
+                used.add((j, "in"))
+                break
+    return out
+
+
+def _pause_near(p: Project, take: str, t: float, edge: str, above_floor: float, reach: float = 3.0) -> float | None:
+    """The nearest pause (≥ 60 ms under floor + above_floor) on the outward side of an edge: before an
+    in-point, after an out-point; its end next to the speech the cut keeps, with a little air. None within
+    `reach` s."""
+    db, floor = p._env(take)
+    quiet = db < floor + above_floor
+    hop, n = 0.005, len(db)
+    k, step, stop = int(t / hop), (-1 if edge == "in" else 1), int((t + (-reach if edge == "in" else reach)) / hop)
+    run = 0
+    while 0 <= k < n and (k > stop if edge == "in" else k < stop):
+        run = run + 1 if quiet[k] else 0
+        if run * hop >= 0.06:
+            # back toward the edge: the end of this pause nearest the speech the cut keeps
+            j = k
+            while 0 <= j - step < n and quiet[j - step]:
+                j -= step
+            return round(j * hop - 0.05 if edge == "in" else j * hop + 0.1, 2)
+        k += step
+    return None
+
+
+def _on_sound(p: Project, take: str, t: float, above_floor: float) -> bool:
+    db, floor = p._env(take)
+    k = int(t / 0.005)
+    return float(db[max(0, k - 3):k + 3].max() - floor) > above_floor + 3
+
+
+def _edge_rules(p: Project, details: list[dict], above_floor: float) -> tuple[list[str], list[str], list[dict]]:
+    """(errors, warnings, energies): edges inside a word and edges on sound, in words."""
+    errors, warnings = [], []
+    _, energy = p.edge_energy(detail=True)
+    in_word = set()
+    for d in details:
+        if d["tag"] == "joined" or not (d["locked"] or d["tag"].startswith("WARN")):
+            continue
+        s = p.segments[d["seg"]]
+        w = next((w for w in p._words(s.take) if w["start"] + 0.02 < d["t"] < w["end"] - 0.02), None)
+        where = f"segments[{d['seg']}].{d['edge']} {d['t']:.2f}"
+        if w:
+            msg = f'{where} is inside "{_plain(w["text"])}" ({w["start"]:.2f}–{w["end"]:.2f}): use {w["start"]:.2f} or {w["end"]:.2f}'
+            if _on_sound(p, s.take, w["start"], above_floor) and _on_sound(p, s.take, w["end"], above_floor):
+                x = _pause_near(p, s.take, d["t"], d["edge"], above_floor)
+                msg += (f"; both run into the next word with no pause, the nearest pause {'before' if d['edge'] == 'in' else 'after'}"
+                        f" it is at {x:.2f}" if x is not None else "; both run into the next word with no pause")
+            (warnings if d["locked"] else errors).append(msg)
+            in_word.add((d["seg"], d["edge"]))
+        elif not d["locked"]:
+            side = "before" if d["edge"] == "in" else "after"
+            warnings.append(f"{where}: no silence {side} it within reach, so edge refinement left it where it is")
+    by_edge = {(d["seg"], d["edge"]): d for d in details}
+    for e in energy:
+        for edge, db, verb in (("in", e["head_db"], "starts"), ("out", e["tail_db"], "ends")):
+            d = by_edge[(e["seg"], edge)]
+            if db <= above_floor or (e["seg"], edge) in in_word or d["tag"] == "joined":
+                continue
+            where = f"segments[{e['seg']}].{edge} {d['t']:.2f}"
+            lock = f'"lock_{edge}"'
+            if db > above_floor + 3 and not d["locked"]:
+                x = _pause_near(p, p.segments[e["seg"]].take, d["t"], edge, above_floor)
+                near = f" (the nearest is at {x:.2f})" if x is not None else ""
+                errors.append(f"{where} {verb} in the middle of sound: +{db:.1f} dB over the room tone; "
+                              f"move it into a pause{near}, or set {lock}: true if the sound is meant to be cut")
+            elif d["locked"] and db > above_floor + 3:
+                warnings.append(f"{where} {verb} in the middle of sound: +{db:.1f} dB over the room tone (locked)")
+            else:
+                warnings.append(f"{where} {verb} on a quiet sound, +{db:.1f} dB over the room tone "
+                                f"(a breath or the tail of a word?)")
+    return errors, warnings, energy
+
+
+def _event_props(p: Project, i: int, type_: str, props: dict, start: float, dur: float, offs: list[float],
+                 errors: list[str]) -> dict:
+    """Props with every time prop resolved to seconds from the event's start (anchors → numbers), each
+    checked to land inside the event, and every entrance checked to finish before the event ends."""
+    where = f"events[{i}].props"
+    bad: list[str] = []
+    for path, v, parent, key in overlay_schema.time_fields(type_, props):
+        if isinstance(v, dict):
+            try:
+                out = _out_time(p, v, offs)
+            except ValueError as e:
+                errors.append(f"{where}.{path} ({type_}): {e}")
+                bad.append(path)
+                continue
+            t = round(out - start, 3)
+            if not 0 <= t < dur:
+                errors.append(f"{where}.{path} ({type_}): the anchor lands at {out:.2f} s, which is outside the event "
+                              f"(it starts at {start:.2f} s and lasts {dur:.1f} s)")
+                bad.append(path)
+                continue
+            parent[key] = t
+        elif not 0 <= v < dur:
+            hint = f"; prop times are seconds from the event's start: did you mean {v - start:.1f}?" \
+                if start <= v < start + dur else ""
+            errors.append(f"{where}.{path} ({type_}): {v:g} s is outside the event "
+                          f"(it starts at {start:.2f} s and lasts {dur:.1f} s){hint}")
+            bad.append(path)
+    for path, t, end in overlay_schema.cue_finish(type_, props, p.fps, dur):
+        if any(b == path or b.startswith(path + ".") for b in bad):
+            continue  # its time is already reported
+        if end >= dur:
+            errors.append(f"{where}.{path} ({type_}): starts appearing at {t:.2f} s and finishes at {end:.2f} s, "
+                          f"after the event ends ({dur:.2f} s); give it an earlier time or make the event longer")
+    return props
+
+
 def load(spec_path: Path, root: Path | None = None) -> tuple[Project, dict]:
     """Validated Project with edges refined and every anchor resolved. Raises SpecError(errors)."""
     spec_path = Path(spec_path).resolve()
@@ -453,9 +624,13 @@ def load(spec_path: Path, root: Path | None = None) -> tuple[Project, dict]:
     )
     if errors := p.source_errors():
         raise SpecError(errors)
-    edges = p.refine_edges(**spec.get("edges", {}))
+    errors, reported = _overlaps(p, spec["segments"], refined=False)
+    settings = spec.get("edges", {})
+    edges, details = p.refine_edges(**settings, joins=_joins(p), detail=True)
+    errors += _overlaps(p, spec["segments"], refined=True, skip=reported)[0]
+    edge_errors, warnings, energy = _edge_rules(p, details, settings.get("above_floor", 9.0))
+    errors += edge_errors
     offs = p.offsets()
-    errors = []
     for i, (s, raw) in enumerate(zip(p.segments, spec["segments"])):
         z = raw.get("zoom", {"kind": "static", "scale": 1.0})
         at = None
@@ -486,7 +661,9 @@ def load(spec_path: Path, root: Path | None = None) -> tuple[Project, dict]:
         if b - a < 0.05:
             errors.append(f"events[{i}] ({e['type']}): ends {b - a:.2f} s after it starts")
             continue
-        ev = {"type": e["type"], "start": round(a, 3), "duration": round(b - a, 3), "props": e.get("props", {})}
+        start, dur = round(a, 3), round(b - a, 3)
+        props = _event_props(p, i, e["type"], copy.deepcopy(e.get("props", {})), start, dur, offs, errors)
+        ev = {"type": e["type"], "start": start, "duration": dur, "props": props, "index": i}
         if "name" in e:
             ev["name"] = e["name"]
         events.append(ev)
@@ -505,7 +682,7 @@ def load(spec_path: Path, root: Path | None = None) -> tuple[Project, dict]:
     if errors:
         raise SpecError(errors)
     p.events, p.sfx = events, sfx
-    return p, {"edges": edges, "duration": round(offs[-1], 3)}
+    return p, {"edges": edges, "duration": round(offs[-1], 3), "warnings": warnings, "energy": energy}
 
 
 def timeline(p: Project) -> list[str]:
@@ -523,9 +700,7 @@ def check(spec_path: Path, root: Path | None = None) -> dict:
         p, rep = load(spec_path, root)
     except SpecError as e:
         return {"errors": e.errors, "warnings": [], "duration": None, "timeline": [], "edges": []}
-    warnings = [ln for ln in rep["edges"] if "WARN" in ln]
-    warnings += [ln for ln in p.edge_energy() if "check" in ln]
-    warnings += p.echo_check() + p.sfx_check()
+    warnings = rep["warnings"] + p.echo_check() + p.sfx_check()
     for e in p.events:
         if e["start"] + e["duration"] > rep["duration"] + 1e-6:
             warnings.append(f"event {e['type']} at {e['start']}s runs past the end ({rep['duration']:.2f}s)")

@@ -1,0 +1,78 @@
+{
+  "title": "DotTrack",
+  "description": "Progress as dots: steps checked at stops[i], or days filling from fillStart to fillEnd.",
+  "x-layout": "float",
+  "type": "object",
+  "properties": {
+    "variant": {
+      "type": "string",
+      "enum": [
+        "steps",
+        "days"
+      ],
+      "default": "steps"
+    },
+    "stops": {
+      "type": "array",
+      "items": {
+        "type": "number",
+        "x-time": "event"
+      }
+    },
+    "count": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 60,
+      "default": 14
+    },
+    "fillStart": {
+      "type": "number",
+      "x-time": "event",
+      "default": 0.3
+    },
+    "fillEnd": {
+      "type": "number",
+      "x-time": "event",
+      "default": 1.4
+    },
+    "value": {
+      "type": "string",
+      "x-text": true
+    },
+    "unit": {
+      "type": "string",
+      "x-text": true
+    },
+    "top": {
+      "type": "number",
+      "minimum": -400,
+      "maximum": 1920,
+      "description": "px from the top of the 1080x1920 frame"
+    }
+  },
+  "x-cues": [
+    {
+      "path": "stops[]",
+      "when": {
+        "variant": [
+          "steps"
+        ]
+      },
+      "entrance": {
+        "frames": 14
+      }
+    },
+    {
+      "path": "fillEnd",
+      "when": {
+        "variant": [
+          "days"
+        ]
+      },
+      "default": 1.4,
+      "entrance": {
+        "frames": 0
+      }
+    }
+  ]
+}

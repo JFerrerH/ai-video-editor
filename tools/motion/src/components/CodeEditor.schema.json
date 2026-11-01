@@ -1,0 +1,53 @@
+{
+  "title": "CodeEditor",
+  "description": "Dark code editor typing lines, plus a DAY n counter from dayFrom to dayTo.",
+  "x-layout": "float",
+  "type": "object",
+  "required": [
+    "file",
+    "lines"
+  ],
+  "properties": {
+    "file": {
+      "type": "string",
+      "x-text": true
+    },
+    "lines": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "x-text": true
+    },
+    "dayLabel": {
+      "type": "string",
+      "x-text": true,
+      "default": "DÍA"
+    },
+    "dayFrom": {
+      "type": "number"
+    },
+    "dayTo": {
+      "type": "number"
+    },
+    "countStart": {
+      "type": "number",
+      "x-time": "event",
+      "default": 0.3
+    },
+    "countEnd": {
+      "type": "number",
+      "x-time": "event",
+      "default": 2
+    }
+  },
+  "x-cues": [
+    {
+      "path": "countEnd",
+      "default": 2,
+      "entrance": {
+        "frames": 0
+      }
+    }
+  ]
+}

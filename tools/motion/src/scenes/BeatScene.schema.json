@@ -1,0 +1,178 @@
+{
+  "title": "BeatScene",
+  "description": "One beat of a narrated explainer (storyboard engine): grid, widgets, figure, headline.",
+  "x-layout": "full",
+  "type": "object",
+  "properties": {
+    "bg": {
+      "type": "string",
+      "enum": [
+        "light",
+        "dark"
+      ]
+    },
+    "grain": {
+      "type": "number"
+    },
+    "words": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "text",
+          "t",
+          "emph",
+          "phrase"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "x-text": true
+          },
+          "t": {
+            "type": "number",
+            "x-time": "event"
+          },
+          "emph": {
+            "type": "boolean"
+          },
+          "phrase": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "headline": {
+      "type": "boolean"
+    },
+    "headlineSize": {
+      "type": "number"
+    },
+    "figure": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "pose": {
+          "type": "string",
+          "enum": [
+            "stand",
+            "wave",
+            "cheer",
+            "point",
+            "shrug",
+            "slump",
+            "think",
+            "type",
+            "push",
+            "shout",
+            "read",
+            "wait",
+            "reach",
+            "scared",
+            "walk"
+          ]
+        },
+        "poses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "pose"
+            ],
+            "properties": {
+              "pose": {
+                "type": "string",
+                "enum": [
+                  "stand",
+                  "wave",
+                  "cheer",
+                  "point",
+                  "shrug",
+                  "slump",
+                  "think",
+                  "type",
+                  "push",
+                  "shout",
+                  "read",
+                  "wait",
+                  "reach",
+                  "scared",
+                  "walk"
+                ]
+              },
+              "at": {
+                "type": "number",
+                "x-time": "event"
+              },
+              "prop": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "desk",
+                  "megaphone",
+                  "box",
+                  "book",
+                  "phone",
+                  "bag"
+                ]
+              }
+            }
+          }
+        },
+        "facing": {
+          "type": "string",
+          "enum": [
+            "left",
+            "right"
+          ]
+        },
+        "slot": {
+          "type": "string"
+        },
+        "scale": {
+          "type": "number"
+        },
+        "phase": {
+          "type": "number"
+        },
+        "x": {
+          "type": "number"
+        },
+        "moves": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "x",
+              "at"
+            ],
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "at": {
+                "type": "number",
+                "x-time": "event"
+              },
+              "dur": {
+                "type": "number",
+                "x-time": "duration"
+              }
+            }
+          }
+        }
+      }
+    },
+    "widgets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    }
+  }
+}

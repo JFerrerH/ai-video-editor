@@ -25,6 +25,8 @@ export const Captions: React.FC<{
   chunks: CapChunk[];
   lightRanges?: [number, number][];
   top?: number;
+  /** [start, end, top] (s, s, px): while a scene's text sits in the caption band, captions move to `top` */
+  avoid?: [number, number, number][];
   size?: number;
   emphSize?: number;
   emphColor?: string;
@@ -39,7 +41,8 @@ export const Captions: React.FC<{
   words,
   chunks,
   lightRanges = [],
-  top = 1300,
+  top: baseTop = 1300,
+  avoid = [],
   size = 58,
   emphSize = 68,
   emphColor = "white",
@@ -52,6 +55,7 @@ export const Captions: React.FC<{
   const { fps } = useVideoConfig();
   const { colors, fonts } = useBrand();
   const now = frame / fps;
+  const top = avoid.find(([a, b]) => now >= a && now < b)?.[2] ?? baseTop;
 
   const ci = chunks.findIndex((c) => now >= c.start && now < c.end);
   if (ci < 0) return null;

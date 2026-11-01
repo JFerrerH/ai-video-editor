@@ -1,0 +1,56 @@
+{
+  "title": "AgeBars",
+  "description": "Ratio bars (×1 / ×2 / ×3) that grow on cue, floating above the head.",
+  "x-layout": "float",
+  "type": "object",
+  "required": [
+    "bars"
+  ],
+  "properties": {
+    "bars": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "value",
+          "label",
+          "at"
+        ],
+        "properties": {
+          "value": {
+            "type": "number"
+          },
+          "label": {
+            "type": "string",
+            "x-text": true
+          },
+          "at": {
+            "type": "number",
+            "x-time": "event"
+          },
+          "highlight": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "caption": {
+      "type": "string",
+      "x-text": true
+    },
+    "top": {
+      "type": "number",
+      "minimum": -400,
+      "maximum": 1920,
+      "description": "px from the top of the 1080x1920 frame"
+    }
+  },
+  "x-cues": [
+    {
+      "path": "bars[].at",
+      "entrance": {
+        "frames": 14
+      }
+    }
+  ]
+}

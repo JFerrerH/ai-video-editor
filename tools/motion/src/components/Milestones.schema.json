@@ -1,0 +1,54 @@
+{
+  "title": "Milestones",
+  "description": "Life milestones as icons on a line, each landing at its at.",
+  "x-layout": "float",
+  "type": "object",
+  "required": [
+    "items"
+  ],
+  "properties": {
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "icon",
+          "at"
+        ],
+        "properties": {
+          "icon": {
+            "type": "string",
+            "enum": [
+              "cap",
+              "diploma",
+              "briefcase",
+              "star"
+            ]
+          },
+          "at": {
+            "type": "number",
+            "x-time": "event"
+          },
+          "label": {
+            "type": "string",
+            "x-text": true
+          }
+        }
+      }
+    },
+    "top": {
+      "type": "number",
+      "minimum": -400,
+      "maximum": 1920,
+      "description": "px from the top of the 1080x1920 frame"
+    }
+  },
+  "x-cues": [
+    {
+      "path": "items[].at",
+      "entrance": {
+        "frames": 14
+      }
+    }
+  ]
+}

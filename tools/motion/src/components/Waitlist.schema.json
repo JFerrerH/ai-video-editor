@@ -1,0 +1,58 @@
+{
+  "title": "Waitlist",
+  "description": "Waitlist sign-up mock: email types in, button presses at submitAt, success state.",
+  "x-layout": "float",
+  "type": "object",
+  "required": [
+    "title",
+    "placeholder",
+    "email",
+    "button",
+    "success",
+    "submitAt"
+  ],
+  "properties": {
+    "title": {
+      "type": "string",
+      "x-text": true
+    },
+    "placeholder": {
+      "type": "string",
+      "x-text": true
+    },
+    "email": {
+      "type": "string",
+      "x-text": true
+    },
+    "button": {
+      "type": "string",
+      "x-text": true
+    },
+    "success": {
+      "type": "string",
+      "x-text": true
+    },
+    "typeStart": {
+      "type": "number",
+      "x-time": "event",
+      "default": 0.3
+    },
+    "typeEnd": {
+      "type": "number",
+      "x-time": "event",
+      "default": 1.2
+    },
+    "submitAt": {
+      "type": "number",
+      "x-time": "event"
+    }
+  },
+  "x-cues": [
+    {
+      "path": "submitAt",
+      "entrance": {
+        "frames": 19
+      }
+    }
+  ]
+}

@@ -149,6 +149,13 @@ class Holes(unittest.TestCase):
         self.assertEqual(untranscribed, [[2.5, 5.0]])
         self.assertEqual([w["text"] for w in words if w["type"] == "word"], ["hello"])
 
+    def test_thank_you_over_music_dropped(self):
+        first = scribe(("hello", 0.5, 1.0))
+        retranscribe, _ = self.stub([("Thank", 9.0, 9.3), ("you.", 9.3, 9.6), ("I", 26.0, 26.2)])
+        _, patched, untranscribed = T.fill_holes(first, [(0.4, 1.1), (8.6, 27.5)], retranscribe, 30.0)
+        self.assertEqual(patched, [])
+        self.assertEqual(untranscribed, [[8.6, 27.5]])
+
     def test_short_gaps_are_not_holes(self):
         first = scribe(("uno", 0.5, 0.9), ("dos", 2.0, 2.4))
         self.assertEqual(T.uncovered(first, [(0.5, 2.4)]), [])  # 0.9 → 2.0 is under MIN_HOLE once padded

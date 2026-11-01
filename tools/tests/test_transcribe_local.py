@@ -156,6 +156,20 @@ class Holes(unittest.TestCase):
         self.assertEqual(patched, [])
         self.assertEqual(untranscribed, [[8.6, 27.5]])
 
+    def test_real_sentence_with_listed_phrase_kept(self):
+        first = scribe(("hello", 0.5, 1.0))
+        said = "okay so thank you all for coming today".split()
+        retranscribe, _ = self.stub([(t, 3.0 + 0.3 * i, 3.25 + 0.3 * i) for i, t in enumerate(said)])
+        words, patched, untranscribed = T.fill_holes(first, [(0.4, 1.1), (2.8, 5.6)], retranscribe, 6.0)
+        self.assertEqual(len(patched), 1)
+        self.assertEqual(untranscribed, [])
+        self.assertIn("thank", [w["text"] for w in words if w["type"] == "word"])
+
+    def test_listed_phrases_match_whole_words(self):
+        self.assertFalse(T._hallucination([{"text": "musical"}, {"text": "theatre"}]))
+        self.assertFalse(T._hallucination([{"text": "I"}, {"text": "subscribed"}, {"text": "today"}]))
+        self.assertTrue(T._hallucination([{"text": "Music"}, {"text": "music."}]))
+
     def test_short_gaps_are_not_holes(self):
         first = scribe(("uno", 0.5, 0.9), ("dos", 2.0, 2.4))
         self.assertEqual(T.uncovered(first, [(0.5, 2.4)]), [])  # 0.9 → 2.0 is under MIN_HOLE once padded

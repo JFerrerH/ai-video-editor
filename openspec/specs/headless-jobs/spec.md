@@ -30,6 +30,7 @@ The runner SHALL accept only operations from a fixed list:
 - `cut` (`check`, `render`)
 - `site`
 - `brand` (`check`)
+- `schema`
 - `shortform.build`
 
 Each operation SHALL validate its arguments against a schema before running anything. An unknown operation or argument SHALL be rejected without side effects.
@@ -53,6 +54,11 @@ Each operation SHALL validate its arguments against a schema before running anyt
 
 - **WHEN** `tools/run_job.py --help` runs
 - **THEN** its op list names `site` and `brand` with their arguments
+
+#### Scenario: Schema op listed
+
+- **WHEN** `tools/run_job.py --help` runs
+- **THEN** its op list names `schema`
 
 #### Scenario: Non-http URL
 
@@ -115,6 +121,8 @@ The `cut` op SHALL render a plain EDL (sources, ranges, grade, optional overlays
 `conform`, `frames`, `pack`, `face`, `shortform`, `cut`, `site` and `brand` SHALL report their written files in `outputs`. Ops that measure something SHALL also return it as fields in the result, so a caller needn't parse files:
 - `face`: the suggested centre and confidence per take
 - `shortform check` and `cut check`: errors, warnings and planned duration
+- `shortform stills`: warnings (legibility and caption placement) and one entry per still with its time and, for event stills, the event index and type
+- `transcribe`: `language_detected` (when detected), `patched` and `untranscribed` per take
 - renders: loudness and true peak
 - `site`: final URL, title, colours, fonts, image candidates and the blocked count
 - `brand check`: one entry per checked file and the kit errors
@@ -128,6 +136,16 @@ The `cut` op SHALL render a plain EDL (sources, ranges, grade, optional overlays
 
 - **WHEN** a `brand` job with `cmd: check` runs on a directory with one valid font and no `brand.json`
 - **THEN** the result JSON has `ok: true`, a `files` list with one `valid` entry naming its family, `errors: []`, and `outputs` includes the stored font
+
+#### Scenario: Stills result fields
+
+- **WHEN** a `shortform` job with `cmd: stills` runs on a spec with 2 segments and 1 event
+- **THEN** the result has 3 `stills` entries, one with `event: 0` and its type, and a `warnings` list
+
+#### Scenario: Transcribe result fields
+
+- **WHEN** a `transcribe` job runs on a take with one unintelligible speech run
+- **THEN** the result has `ok: true` and `untranscribed` lists that range for the take
 
 ### Requirement: Failures keep their cause
 When an op fails with a multi-line message (for example a tool step that exits non-zero with its stderr attached), the runner SHALL write the whole message to stderr and SHALL set `error` to its most specific line: the last line naming an error, else the first line. Paths under the engine root SHALL appear relative in `error`.
@@ -143,3 +161,17 @@ When an op fails with a multi-line message (for example a tool step that exits n
 #### Scenario: One-line failure unchanged
 - **WHEN** an op fails with a single-line message
 - **THEN** `error` is that line, as before
+
+### Requirement: Schema op
+
+The runner SHALL provide a `schema` operation that returns the overlay props schemas (every component plus the shared event props) in the result's `schema` field. It SHALL need no project, read no footage and write no files. The same document SHALL ship in the container image at a fixed path.
+
+#### Scenario: Schema job
+
+- **WHEN** a job `{"op": "schema", "args": {}}` runs
+- **THEN** the runner exits 0, `ok` is true, `outputs` is empty, and `schema` has a key for `KineticType`, `ListScene` and `StatScene`
+
+#### Scenario: Schema in the image
+
+- **WHEN** the container's self-check runs
+- **THEN** it reports the schema file present at its fixed path with one entry per registered component

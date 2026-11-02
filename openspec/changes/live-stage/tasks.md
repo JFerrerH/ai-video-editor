@@ -25,4 +25,4 @@
 - [x] 5.1 Timing on the engine Docker image with `--cpus=4`: the launch preview (68 s), concurrency 2, 3 and 4. Record the times here and in the proposal's Impact
   - Measured (arm64 container on the M-series Mac, `ENGINE_RENDER_CONCURRENCY`): 165 s at 2, 145 s at 3, 143 s at 4 (2.1–2.4x real time); the Mac itself, native: 101 s (launch) and 108 s (habilidades, 85 s).
 - [x] 5.2 Re-render `footage/xp-launch` and `footage/xp-habilidades` from their prototype plans, written as specs: compare frame by frame with the approved prototype renders; −14 ±1 LUFS; the low line recognised by re-transcription
-- [ ] 5.3 Full test suite green; tag the release
+- [x] 5.3 Full test suite green; tag the release

@@ -19,7 +19,7 @@ It serves any number of unrelated projects and brands: talking heads, vertical s
 Why these numbers:
 
 - **Apple Silicon is required.** Local transcription uses `mlx-whisper`, which only runs on Apple Silicon, and the person matte (`tools/person_matte.py`, text behind the speaker) uses Apple's Vision framework through `swift`. Intel Macs, Linux and Windows aren't supported as-is.
-- **RAM.** Whisper large-v3-turbo needs about 3–4 GB while it runs. A Remotion overlay render opens several headless Chrome tabs (by default one per two CPU threads), each taking a few hundred MB. 8 GB works if you close other apps and expect slower renders; 16 GB is comfortable; 4K sources or long-form projects want 32 GB.
+- **RAM.** Whisper large-v3-turbo needs about 3–4 GB while it runs. A Remotion stage render opens several headless Chrome tabs (by default one per two CPU threads), each taking a few hundred MB. 8 GB works if you close other apps and expect slower renders; 16 GB is comfortable; 4K sources or long-form projects want 32 GB.
 - **Disk.** The toolchain takes about 6 GB once installed:
 
   | Item | Size |
@@ -205,7 +205,7 @@ Brand kits are client data, so git ignores every folder in `brands/` except `_te
 |---|---|
 | `tools/new_project.py` | Scaffolds `footage/<name>/edit/project.md`, plus a short-form `build.py` (`--shortform`) or a storyboard (`--type generated`, `--explainer`) |
 | `tools/transcribe_local.py` | Offline Whisper → Scribe-shaped word JSON for video-use (always pass `--language`) |
-| `tools/shortform.py` | Short-form engine: cuts with silence-snapped edges, zooms, looks, Remotion overlay, captions, SFX mix, loudnorm |
+| `tools/shortform.py` | Short-form engine: cuts with silence-snapped edges, zooms, looks, a Remotion stage (camera, layers, speaker cut-out, captions), SFX mix, loudnorm |
 | `tools/storyboard.py` | From-scratch engine: `check`, `voice`, `sheet`, `stills`, `render` a `storyboard.json` (any aspect) |
 | `tools/narration.py` | Narration timing: script words, alignment to Whisper word times, headline phrases, `@word` cues |
 | `tools/gen/voice.py` | Local text-to-speech (Kokoro-82M, Apache-2.0): a line → WAV + sidecar, cached (`--list` for voices) |

@@ -4,8 +4,9 @@
     uv run tools/person_matte.py in.mov --start 8.0 --dur 3.7 -o matte.mov --backend mediapipe
 
 Writes a grey matte (white = person) at the clip's resolution and frame rate, starting at
-frame 0 = `start`. Used by tools/shortform.py to put text BEHIND the speaker (events with
-`behind: true`): text layer under the matted person, over the background.
+frame 0 = `start`. Used by tools/shortform.py to put events BEHIND the speaker (layer `behind`):
+`matte_windows()` pads and merges the events' windows, `cutout()` writes the speaker as ProRes 4444
+with alpha for the Remotion stage to draw above them.
 
 Backends (chosen at runtime; `--backend` forces one):
   - vision     macOS with `swift`: Apple Vision person segmentation (person_matte.swift)

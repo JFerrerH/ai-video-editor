@@ -518,7 +518,7 @@ class Project:
         lst.write_text("".join(f"file '{p}'\n" for p in paths))
         run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", str(out)])
 
-    # ── 3. Remotion overlay ───────────────────────────────────────────────
+    # ── 3. Remotion props and per-event overlay stills ───────────────────────────────────────────────
     def stage_overlay(self) -> tuple[Path, Path]:
         """Copy assets into a per-project Remotion public dir and write the props JSON."""
         pub = self.edit_dir / "motion_public"

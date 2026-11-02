@@ -522,6 +522,13 @@ class LiveStageSpecTest(Fixture):
         e = self.errors(self.doc(self.mutate(lambda s: None), 0, object="Not Valid!"))
         self.assertTrue(any("events[2].object" in x for x in e), e)
 
+    def test_sticker_after_the_event_ends(self):
+        spec = self.mutate(lambda s: s["events"].append({"type": "Stickers", "start": 0.2, "duration": 1.0, "props": {
+            "items": [{"text": "ok", "at": 0.2, "x": 0, "y": 0}, {"text": "late", "at": 1.5, "x": 0, "y": 0}]}}))
+        e = self.load_errors(spec)
+        self.assertTrue(any("events[2].props.items[1].at (Stickers)" in x and "outside the event" in x for x in e), e)
+        self.assertFalse(any("items[0]" in x for x in e), e)
+
     # ── the low look ──────────────────────────────────────────────────────
     def test_one_short_low_line(self):
         spec = self.low(freeze=0.4)

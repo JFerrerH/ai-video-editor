@@ -1,7 +1,7 @@
 # live-stage Specification
 
 ## Purpose
-TBD - created by archiving change live-stage. Update Purpose after archive.
+Short-form frames are composed in one Remotion composition (the stage) from the cut footage, so graphics can move the camera, sit behind the speaker, and recur as story objects, instead of floating above a fixed picture.
 
 ## Requirements
 

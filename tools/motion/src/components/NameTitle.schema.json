@@ -2,6 +2,7 @@
   "title": "NameTitle",
   "description": "Big serif title with no card; pair with behind: true so it sits behind the head.",
   "x-layout": "float",
+  "examples": [{"text": "Alex"}],
   "type": "object",
   "properties": {
     "text": {

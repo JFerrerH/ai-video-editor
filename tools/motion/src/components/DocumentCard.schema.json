@@ -2,6 +2,7 @@
   "title": "DocumentCard",
   "description": "Big year stamp plus a paper document card.",
   "x-layout": "float",
+  "examples": [{"year": "2024", "kicker": "Report", "title": "How people save\nwhen prices rise", "author": "A. Writer"}],
   "type": "object",
   "required": [
     "kicker",

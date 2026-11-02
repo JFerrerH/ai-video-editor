@@ -2,6 +2,7 @@
   "title": "StatScene",
   "description": "Hero number counting from `from` to `value` between countStart and countEnd, then the label rises in.",
   "x-layout": "full",
+  "examples": [{"value": 500, "prefix": "$", "suffix": " saved", "kicker": "In one year", "label": "with one rule"}],
   "type": "object",
   "required": ["value"],
   "properties": {

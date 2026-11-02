@@ -59,9 +59,26 @@ def run(cmd: list[str], cwd: Path | None = None) -> str:
     return r.stderr
 
 
+class Finding(str):
+    """A message that carries its kind, so strict mode can promote it by kind, never by wording."""
+    kind: str | None
+
+    def __new__(cls, text: str, kind: str | None = None):
+        s = super().__new__(cls, text)
+        s.kind = kind
+        return s
+
+
 # legibility probe: an event whose text adds fewer changed pixels than this share of the frame "shows
 # almost no text" (≈ 1,000 px at 1080x1920; a channel must change by more than PROBE_DELTA to count)
 PROBE_SHARE, PROBE_DELTA = 0.0005, 16
+# text over footage (1080-wide px): WCAG contrast 4.5:1 under LARGE_TEXT px tall, 3:1 from it; nothing under
+# MIN_TEXT px; text stays HEAD_MARGIN × the frame width clear of the speaker's head box on every side
+LARGE_TEXT, MIN_TEXT, HEAD_MARGIN = 48, 28, 0.06
+SAFE_SIDE = 130  # px from each side edge (tools/motion/src/theme.ts SAFE.side)
+# silence is measured against the take's speech (Project._quiet): SPEECH_DROP dB under its 90th percentile,
+# quiet runs QUIET_MERGE s apart or closer merged
+SPEECH_DROP, QUIET_MERGE = 25.0, 0.05
 # caption placement around a full-layout scene's measured content (1080x1920 px)
 CAP_GAP, SAFE_TOP, SAFE_BOTTOM = 60, 290, 1536  # gap: the caption shade reaches ~46 px above the line
 
@@ -161,6 +178,8 @@ class Seg:
     note: str = ""
     lock_in: bool = False  # refine_edges() leaves a hand-verified edge alone
     lock_out: bool = False
+    anchored_in: bool = False  # placed from a word anchor (short_spec `from`/`to`): already in a pause
+    anchored_out: bool = False
 
     @property
     def dur(self) -> float:
@@ -200,6 +219,8 @@ class Project:
     # drawn-out "y" dropped at an in-point: (take, word start in source seconds ±0.02)
     caption_skip: list[tuple[str, float]] = field(default_factory=list)
     lufs: float = -14.0
+    # the speaker's head per take, [x0, y0, x1, y1] source px (the face step's `head`): text keeps clear of it
+    head: dict[str, list[float]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not isinstance(self.brand, dict):
@@ -250,12 +271,55 @@ class Project:
             self._env_cache = cache
         return cache[take]
 
+    def silence_db(self, take: str, above_floor: float = 9.0) -> float:
+        """The take's silence threshold in dB: max(floor + `above_floor`, speech − SPEECH_DROP), where speech is
+        the 90th percentile of the envelope over the transcript's words (a floor-only threshold keeps breaths
+        in a quiet room)."""
+        import numpy as np
+        cache = self.__dict__.setdefault("_silence_cache", {})
+        if (take, above_floor) not in cache:
+            db, floor = self._env(take)
+            try:
+                words = self._words(take)
+            except (OSError, KeyError, ValueError):
+                words = []
+            span = np.zeros(len(db), bool)
+            for w in words:
+                span[int(w["start"] / 0.005):int(w["end"] / 0.005) + 1] = True
+            thr = floor + above_floor
+            if span.any():
+                thr = max(thr, float(np.percentile(db[span], 90)) - SPEECH_DROP)
+            cache[(take, above_floor)] = thr
+        return cache[(take, above_floor)]
+
+    def _quiet(self, take: str, above_floor: float = 9.0):
+        """Silence per 5 ms hop: under `silence_db`. Quiet runs ≤ QUIET_MERGE s apart are merged: room noise
+        flickers. Cached per take and threshold."""
+        cache = self.__dict__.setdefault("_quiet_cache", {})
+        if (take, above_floor) not in cache:
+            db, _ = self._env(take)
+            quiet = db < self.silence_db(take, above_floor)
+            k, n, gap = 0, len(quiet), round(QUIET_MERGE / 0.005)
+            while k < n:  # fill short loud gaps that have quiet on both sides
+                if quiet[k]:
+                    k += 1
+                    continue
+                j = k
+                while j < n and not quiet[j]:
+                    j += 1
+                if 0 < k and j < n and j - k <= gap:
+                    quiet[k:j] = True
+                k = j
+            cache[(take, above_floor)] = quiet
+        return cache[(take, above_floor)]
+
     def refine_edges(self, pre: float = 0.10, post: float = 0.12, min_sil: float = 0.06,
                      above_floor: float = 9.0, apply: bool = True, joins: list[tuple[int, int]] = (),
                      detail: bool = False):
         """Snap every in/out point to measured silence so no word is clipped.
 
-        Speech = envelope above (noise floor + `above_floor` dB; breaths/room tone sit below). In-points move into the silence
+        Speech = envelope above the take's silence threshold (`_quiet`: floor + `above_floor` dB, or the
+        speech level − 25 dB when higher; breaths/room tone sit below). In-points move into the silence
         just before the onset (`pre` s of air); out-points move past the word's decay
         (`post` s of air) but never into the next sound. Edges with no usable silence
         within reach are left alone and reported as WARN — check those by ear/eye.
@@ -271,9 +335,8 @@ class Project:
         report, details = [], []
         new: dict[tuple[int, str], tuple[float, str]] = {}
         for i, s in enumerate(self.segments):
-            db, floor = self._env(s.take)
-            quiet = db < floor + above_floor
-            n = len(db)
+            quiet = self._quiet(s.take, above_floor)
+            n = len(quiet)
 
             def runs(a: float, b: float):
                 """Silence runs (start_s, end_s) of ≥ min_sil overlapping [a, b]."""
@@ -318,20 +381,21 @@ class Project:
             else:
                 tag_out = "WARN no silence after word"
 
-            if s.lock_in:
-                new_in, tag_in = s.t_in, "locked"
-            if s.lock_out:
-                new_out, tag_out = s.t_out, "locked"
+            if s.lock_in or s.anchored_in:
+                new_in, tag_in = s.t_in, "locked" if s.lock_in else "anchored"
+            if s.lock_out or s.anchored_out:
+                new_out, tag_out = s.t_out, "locked" if s.lock_out else "anchored"
             new[(i, "in")], new[(i, "out")] = (new_in, tag_in), (new_out, tag_out)
 
         for i, j in joins:  # contiguous cuts whose refined edges would cross
             a, b = self.segments[i], self.segments[j]
             out_t, in_t = new[(i, "out")][0], new[(j, "in")][0]
-            if out_t <= in_t or (a.lock_out and b.lock_in):
-                continue  # apart, or both hand-placed (the overlap check reports it)
-            if a.lock_out:
+            fixed_out, fixed_in = a.lock_out or a.anchored_out, b.lock_in or b.anchored_in
+            if out_t <= in_t or (fixed_out and fixed_in):
+                continue  # apart, or both placed already (the overlap check reports it)
+            if fixed_out:
                 new[(j, "in")] = (out_t, "joined")
-            elif b.lock_in:
+            elif fixed_in:
                 new[(i, "out")] = (in_t, "joined")
             else:
                 db, _ = self._env(a.take)
@@ -498,14 +562,8 @@ class Project:
         return json.loads((self.edit_dir / "overlay_props.json").read_text())["events"]
 
     def _still_time(self, e: dict) -> float:
-        """When an event's entrance has finished: start + min(1.2 s, 60 % of it), or later when its schema's
-        cues (a list's last item, a count's label) finish later; inside the event and the short."""
-        import overlay_schema as O
-        t = min(1.2, 0.6 * e["duration"])
-        if e["type"] in O.schemas():
-            cues = [end for _, _, end in O.cue_finish(e["type"], e.get("props", {}), self.fps, e["duration"])]
-            t = max([t] + [end + 1 / self.fps for end in cues if end < e["duration"]])
-        t = min(t, e["duration"] - 1 / self.fps)
+        """When an event's entrance has finished (`still_time`), inside the short."""
+        t = still_time(e["type"], e.get("props", {}), e["duration"], self.fps)
         return round(min(e["start"] + t, self.offsets()[-1] - 1 / self.fps), 2)
 
     # ── legibility probe and measured content boxes ──────────────────────
@@ -526,11 +584,117 @@ class Project:
                              capture_output=True, check=True).stdout
         return np.frombuffer(raw, np.uint8).reshape(info["height"], info["width"], 4)
 
+    def _batch(self, jobs: list[tuple[int, str, dict, dict]], scale: float, pub: Path, tmp: Path) -> dict:
+        """Render [(k, tag, event, extra top-level props)] each alone at its still time, from one Remotion bundle
+        (tools/motion/scripts/stills.mjs). → {(k, tag): (png, measured texts | None)}."""
+        total = self.offsets()[-1]
+        spec, keys = [], []
+        for k, tag, e, extra in jobs:
+            pj = tmp / f"ev{k}_{tag}.json"
+            pj.write_text(json.dumps({"durationInSeconds": round(total, 3), "brand": self.brand, "events": [e], **extra},
+                                     ensure_ascii=False))
+            t = self._still_time(e)
+            spec.append({"props": str(pj), "frame": min(round(t * self.fps), round(total * self.fps) - 1),
+                         "out": str((tmp / f"ev{k}_{tag}.png").resolve()), "scale": scale})
+            keys.append((k, tag, e))
+        if not spec:
+            return {}
+        cmd = ["node", "scripts/stills.mjs"]
+        r = subprocess.run(cmd, input=json.dumps({"publicDir": str(pub.resolve()), "jobs": spec}), capture_output=True,
+                           text=True, cwd=MOTION)
+        lines = [json.loads(ln) for ln in r.stdout.splitlines() if ln.startswith("{")]
+        out = {}
+        for (k, tag, e), res in zip(keys, lines):
+            if "error" in res:
+                label, t = self._ev_label(e, k), self._still_time(e)
+                raise ToolError(cmd, res["error"], f"{label} failed at {t:.2f} s: {cause_line(res['error'])}")
+            texts = next((m["texts"] for m in res["measure"] or []), None) if res.get("measure") is not None else None
+            out[(k, tag)] = (Path(res["out"]), texts)
+        if len(lines) < len(keys):
+            raise ToolError(cmd, r.stderr or r.stdout)
+        return out
+
+    def _base_frame(self, t: float, w: int, h: int, dst: Path) -> Path:
+        """The cut's own frame (zoom, look) at output time `t`, w x h."""
+        offs = self.offsets()
+        i = max(k for k in range(len(self.segments)) if offs[k] <= t + 1e-9)
+        s = self.segments[i]
+        local = min(t - offs[i], max(0.0, s.dur - 1 / self.fps))  # inside a freeze: its held frame
+        run(["ffmpeg", "-y", "-ss", f"{s.t_in:.3f}", "-t", f"{s.dur:.3f}", "-i", str(self.sources[s.take]),
+             "-vf", f"{self._vf(s, w, h)},trim=start={local:.4f}", "-frames:v", "1", str(dst)])
+        return dst
+
+    def head_box(self, e: dict) -> list[float] | None:
+        """The speaker's head over an event in 1080x1920 output px, grown by HEAD_MARGIN of the width on every
+        side: the union over the segments the event plays on, at each one's smallest and largest zoom (a push
+        or punch moves the head). None when no take under it has a head box (no person)."""
+        offs, a, b = self.offsets(), e["start"], e["start"] + e["duration"]
+        out = None
+        for i, s in enumerate(self.segments):
+            if offs[i + 1] <= a or offs[i] >= b or not self.head.get(s.take):
+                continue
+            k = 1080 / self.source_info(s.take)["width"]
+            x0, y0, x1, y1 = (v * k for v in self.head[s.take])
+            cx, cy = (v * k for v in self.face[s.take])
+            zs = {"static": s.zoom[1:2], "push": s.zoom[1:3], "punch": s.zoom[1:3], "outpunch": s.zoom[1:4]}[s.zoom[0]]
+            for z in (min(zs), max(zs)):
+                cw, ch = 1080 / z, 1920 / z
+                X, Y = max(0, min(1080 - cw, cx - cw / 2)), max(0, min(1920 - ch, cy - ch / 2))
+                box = [(x0 - X) * z, (y0 - Y) * z, (x1 - X) * z, (y1 - Y) * z]
+                out = box if out is None else [min(out[0], box[0]), min(out[1], box[1]),
+                                               max(out[2], box[2]), max(out[3], box[3])]
+        if out is None:
+            return None
+        m = HEAD_MARGIN * 1080
+        return [round(out[0] - m), round(out[1] - m), round(out[2] + m), round(out[3] + m)]
+
+    @staticmethod
+    def _text_groups(e: dict, texts: list[dict]) -> list[dict]:
+        """Measured text nodes grouped by the schema text field that holds them: [{"field", "box", "size"}],
+        box the union, size the smallest. A node no field holds (a number drawn from a numeric prop) is its own
+        group, named by its text in quotes. Nodes with no letter or digit (an emoji, a caret, a ⚠) aren't text
+        a viewer reads, so they're left out."""
+        import overlay_schema as O
+        fields = [(path, _norm(v)) for path, v, _, _ in O.text_fields(e["type"], e.get("props", {}))] \
+            if e["type"] in O.schemas() else []
+        groups: dict[str, dict] = {}
+        for t in texts:
+            if not any(c.isalnum() for c in t["text"]):
+                continue
+            n = _norm(t["text"])
+            field = next((f for f, v in fields if n and n == v), None) or next((f for f, v in fields if n and n in v), None)
+            key = field or f'"{t["text"]}"'
+            g = groups.setdefault(key, {"field": key, "box": list(t["box"]), "size": t["size"]})
+            g["box"] = [min(g["box"][0], t["box"][0]), min(g["box"][1], t["box"][1]),
+                        max(g["box"][2], t["box"][2]), max(g["box"][3], t["box"][3])]
+            g["size"] = min(g["size"], t["size"])
+        return list(groups.values())
+
+    @staticmethod
+    def _place(content: list[float], head: list[float], sizes: list[float]) -> tuple[dict | None, float]:
+        """The `frame` that puts a floating overlay's content in the band between the top safe margin and the
+        head, centred, scaled down (never up) to fit: (frame, scale), frame None when its smallest text would
+        drop under MIN_TEXT px."""
+        x0, y0, x1, y1 = content
+        band = head[1] - SAFE_TOP
+        s = min(1.0, band / max(1, y1 - y0), (1080 - 2 * SAFE_SIDE) / max(1, x1 - x0))
+        if s <= 0 or (sizes and min(sizes) * s < MIN_TEXT):
+            return None, max(0.0, s)
+        # Overlay.tsx: transform origin top centre, then `translate`: p' = origin + translate + s · (p − origin)
+        return {"scale": round(s, 3), "x": round(-s * ((x0 + x1) / 2 - 540)), "y": round(SAFE_TOP - s * y0)}, s
+
     def measure_events(self, scale: float = 0.5, probe: bool = True, missing_only: bool = False,
                        warnings: list[str] | None = None) -> None:
-        """Draw each event alone at its still time: full-layout events' content boxes (1080x1920 px,
-        cached in edit/overlay_boxes.json, read by caption_event()) and, with `probe`, a warning for
-        any text-bearing event whose text adds almost no pixels (out of frame, masked, not yet in)."""
+        """Draw each event alone at its still time and measure it. Content boxes of full-layout events and the
+        text boxes of every event (1080x1920 px) are cached in edit/overlay_boxes.json for caption_event(). A
+        floating event (no backdrop, no `frame`, not behind the speaker) whose text covers the speaker's head
+        box is given the `frame` that places it above the head (`_place`). Each event's text groups (field, box,
+        rendered px height) go to edit/overlay_text.json. With `probe`, findings go to
+        `warnings` (Finding kinds): text that shows almost no pixels (no_text), text under its WCAG contrast
+        against what is really behind it, the event drawn over the cut's own frame with and without its glyphs
+        (contrast), text under MIN_TEXT px (small_text), text over the head (face)."""
+        import numpy as np
+
         import overlay_schema as O
         warnings = warnings if warnings is not None else []
         boxes = self._boxes()
@@ -539,42 +703,108 @@ class Project:
             stage(src, pub / name)
         tmp = self.edit_dir / "stills" / "_probe"
         tmp.mkdir(parents=True, exist_ok=True)
-        for k, e in enumerate(self.events):
-            full = e["type"] in O.schemas() and O.layout(e["type"]) == "full"
-            texts = O.text_fields(e["type"], e.get("props", {})) if e["type"] in O.schemas() else []
-            key = self._box_key(e)
-            need_box = full and not (missing_only and key in boxes)
-            if not (need_box or (probe and texts)):
-                continue
-            t, label = self._still_time(e), self._ev_label(e, k)
-            alone = {**e, "props": {**e.get("props", {}), "full": False}}
-            png = tmp / f"ev{k}.png"
-            try:
-                self._still(self._props_file([alone], tmp / f"ev{k}.json"), t, png, scale, pub)
-            except ToolError as err:
-                raise ToolError(err.cmd, err.output, f"{label} failed at {t:.2f} s: {cause_line(err.output)}") from None
+        todo = [(k, e) for k, e in enumerate(self.events)
+                if probe or not (missing_only and self._box_key(e) in boxes)]
+        alone = lambda e: {**e, "props": {**e.get("props", {}), "full": False}}  # noqa: E731
+        res = self._batch([(k, "alone", alone(e), {"measure": True}) for k, e in todo], scale, pub, tmp)
+
+        def floating(e: dict) -> bool:
+            p_ = e.get("props", {})
+            return not p_.get("full") and not p_.get("behind") and "frame" not in p_
+
+        def alpha_box(png: Path) -> list[int] | None:
             img = self._rgba(png)
-            if need_box:
-                ys, xs = (img[:, :, 3] > 8).nonzero()
-                if len(ys):
-                    f = 1080 / img.shape[1]
-                    boxes[key] = {"box": [round(xs.min() * f), round(ys.min() * f), round((xs.max() + 1) * f),
-                                          round((ys.max() + 1) * f)], "t": t, "event": e.get("index", k), "type": e["type"]}
+            ys, xs = (img[:, :, 3] > 8).nonzero()
+            f = 1080 / img.shape[1]
+            return [round(xs.min() * f), round(ys.min() * f), round((xs.max() + 1) * f), round((ys.max() + 1) * f)] \
+                if len(ys) else None
+
+        hits = lambda a, b: a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]  # noqa: E731
+        placed = []
+        for k, e in todo:  # placement: floating text over the head moves into the band above it
+            texts, head = res[(k, "alone")][1] or [], self.head_box(e)
+            if not (texts and head and floating(e)) or not any(hits(t["box"], head) for t in texts):
+                continue
+            boxes_ = [t["box"] for t in texts] + [b for b in [alpha_box(res[(k, "alone")][0])] if b]
+            content = [min(b[0] for b in boxes_), min(b[1] for b in boxes_), max(b[2] for b in boxes_),
+                       max(b[3] for b in boxes_)]  # its pixels and its text's line boxes
+            frame, s = self._place(content, head, [t["size"] for t in texts])
+            if frame is None:
+                warnings.append(Finding(f"{self._ev_label(e, k)} fits above the speaker's head only at {s:.2f}x, where its "
+                                        f"text would be {min(t['size'] for t in texts) * s:.0f} px tall (under {MIN_TEXT} px); "
+                                        f'set "full": true, or give it fewer words', "face"))
+                continue
+            e["props"] = {**e.get("props", {}), "frame": frame}
+            placed.append((k, e))
+        jobs = [(k, "alone", alone(e), {"measure": True}) for k, e in placed]
+        if probe:
+            for k, e in todo:
+                if e.get("props", {}).get("full"):  # the text sits on the backdrop: draw it, both ways
+                    jobs.append((k, "text", e, {}))
+                    jobs.append((k, "blank", e, {"hideText": True}))
                 else:
-                    boxes.pop(key, None)
-            if probe and texts:
-                blank = json.loads(json.dumps(alone))
-                for _, _, parent, key_ in O.text_fields(e["type"], blank["props"]):
-                    parent[key_] = ""
-                try:
-                    self._still(self._props_file([blank], tmp / f"ev{k}_blank.json"), t, tmp / f"ev{k}_blank.png", scale, pub)
-                except ToolError:
-                    continue  # the component needs its text to draw at all: nothing to compare
-                diff = (abs(img.astype(int) - self._rgba(tmp / f"ev{k}_blank.png").astype(int)) > PROBE_DELTA).any(axis=2)
-                if diff.sum() < PROBE_SHARE * diff.size:
-                    warnings.append(f"{label} shows almost no text at {t:.2f} s ({int(diff.sum())} px of text; "
-                                    f"is it off screen, masked, or not in yet?)")
+                    jobs.append((k, "blank", alone(e), {"hideText": True}))
+        res.update(self._batch(jobs, scale, pub, tmp))
+
+        frames: dict[float, object] = {}
+        measured = {}  # → edit/overlay_text.json
+        for k, e in todo:
+            key, png, texts = self._box_key(e), *res[(k, "alone")]
+            texts = texts or []
+            measured[str(e.get("index", k))] = {"type": e["type"], "t": self._still_time(e),
+                                                "texts": self._text_groups(e, texts)}
+            known = e["type"] in O.schemas()
+            entry = {"t": self._still_time(e), "event": e.get("index", k), "type": e["type"]}
+            if known and O.layout(e["type"]) == "full" and (box := alpha_box(png)):
+                entry["box"] = box
+            if texts:
+                tb = [t["box"] for t in texts]
+                entry["text"] = [min(b[0] for b in tb), min(b[1] for b in tb), max(b[2] for b in tb), max(b[3] for b in tb)]
+            if "box" in entry or "text" in entry:
+                boxes[key] = entry
+            else:
+                boxes.pop(key, None)
+            if not probe:
+                continue
+            t, label, props = entry["t"], self._ev_label(e, k), e.get("props", {})
+            img = self._rgba(res[(k, "text")][0] if props.get("full") else png).astype(float)
+            blank = self._rgba(res[(k, "blank")][0]).astype(float)
+            h, w = img.shape[:2]
+            if t not in frames:
+                frames[t] = self._rgba(self._base_frame(t, w, h, tmp / f"base_{t:06.2f}.png"))[:, :, :3].astype(float)
+            base = frames[t]
+            over = lambda x: x[:, :, :3] * (x[:, :, 3:] / 255) + base * (1 - x[:, :, 3:] / 255)  # noqa: E731
+            comp, comp0 = over(img), over(blank)
+            diff = (abs(comp - comp0) > PROBE_DELTA).any(axis=2)
+            if props.get("behind"):  # under the speaker's cut-out: only what the matte leaves visible counts
+                matte = tmp / f"matte_{k}.mov"
+                make_matte(tmp / f"base_{t:06.2f}.png", 0, 1 / self.fps, matte, fps=self.fps)
+                raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(matte), "-frames:v", "1", "-vf", f"scale={w}:{h}",
+                                      "-pix_fmt", "gray", "-f", "rawvideo", "-"], capture_output=True, check=True).stdout
+                diff &= np.frombuffer(raw, np.uint8).reshape(h, w) < 128
+            if known and O.text_fields(e["type"], props) and diff.sum() < PROBE_SHARE * diff.size:
+                warnings.append(Finding(f"{label} shows almost no text at {t:.2f} s ({int(diff.sum())} px of text; "
+                                        f"is it off screen, masked, or not in yet?)", "no_text"))
+                continue
+            groups = self._text_groups(e, texts)
+            for g in groups:
+                if g["size"] < MIN_TEXT:
+                    warnings.append(Finding(f"{label} {g['field']} text is {g['size']:.0f} px tall, under {MIN_TEXT} px "
+                                            f"(at {t:.2f} s); make it larger", "small_text"))
+            if low := low_contrast(comp, comp0, diff, groups):
+                r, need, _ = min(low)
+                which = ", ".join(f"{fl} {rr:.1f}:1" for rr, _, fl in sorted(low))
+                warnings.append(Finding(f"{label} text contrast {r:.1f}:1 at {t:.2f} s is under {need:g}:1 ({which}); "
+                                        f"give it a card or a colour that reads on what is behind it", "contrast"))
+            head = self.head_box(e)
+            if head and not props.get("full") and not props.get("behind") \
+                    and (over_face := [g["field"] for g in groups if hits(g["box"], head)]):
+                fix = "move it off the face" if "frame" in props else \
+                    'set "full": true, or let the engine place it (it does for floating overlays)'
+                warnings.append(Finding(f"{label} text covers the speaker's face at {t:.2f} s ({', '.join(over_face)}); "
+                                        f"{fix}", "face"))
         (self.edit_dir / "overlay_boxes.json").write_text(json.dumps(boxes, indent=1))
+        (self.edit_dir / "overlay_text.json").write_text(json.dumps(measured, indent=1, ensure_ascii=False))
         shutil.rmtree(tmp, ignore_errors=True)
 
     def stills(self, times: list[float] | None = None, preview: bool = True,
@@ -615,12 +845,7 @@ class Project:
         out = []
         for shot in shots:
             t = shot["t"]
-            i = max(k for k in range(len(self.segments)) if offs[k] <= t + 1e-9)
-            s = self.segments[i]
-            local = min(t - offs[i], max(0.0, s.dur - 1 / self.fps))  # inside a freeze: its held frame
-            base = tmp / f"base_{t:06.2f}.png"
-            run(["ffmpeg", "-y", "-ss", f"{s.t_in:.3f}", "-t", f"{s.dur:.3f}", "-i", str(self.sources[s.take]),
-                 "-vf", f"{self._vf(s, w, h)},trim=start={local:.4f}", "-frames:v", "1", str(base)])
+            base = self._base_frame(t, w, h, tmp / f"base_{t:06.2f}.png")
             ov = tmp / f"ov_{t:06.2f}.png"
             remotion_still(pj, t, ov, layer)
             inputs, parts, cur = ["-i", str(base)], [], "[0:v]"
@@ -869,18 +1094,20 @@ class Project:
                           **({"avoid": avoid} if avoid else {})}}
 
     def _caption_moves(self) -> tuple[list[list[float]], list[str]]:
-        """Where captions go while a full-layout scene's measured content (measure_events) reaches their
-        band: below it if two lines still end above the bottom safe zone, else above it if they start
-        below the top one. Returns ([[start, end, top px]], warnings for scenes they fit around neither way)."""
+        """Where captions go while an overlay reaches their band (measure_events): a full-layout scene's
+        content, or any other event's text. Below it if two lines still end above the bottom safe zone, else
+        above it if they start below the top one. Returns ([[start, end, top px]], findings for events they fit
+        around neither way)."""
         top = self.caption_props.get("top", 1300)
         cap_h = round(2.65 * max(self.caption_props.get("size", 58), self.caption_props.get("emphSize", 68)))
         boxes = self._boxes()
         avoid, warns = [], []
         for k, e in enumerate(self.events):
             b = boxes.get(self._box_key(e))
-            if not b:
-                continue
-            y0, y1 = b["box"][1], b["box"][3]
+            box = b and (b.get("box") or b.get("text"))
+            if not box or e.get("props", {}).get("behind"):
+                continue  # nothing measured, or under the speaker (captions sit over the speaker anyway)
+            y0, y1 = box[1], box[3]
             if y1 <= top - 60 or y0 >= top + cap_h:
                 continue  # clear of the caption band
             below, above = y1 + CAP_GAP, y0 - CAP_GAP - cap_h
@@ -890,9 +1117,12 @@ class Project:
             elif above >= SAFE_TOP:
                 avoid.append(span + [above])
             else:
-                warns.append(f"{self._ev_label(e, k)}: its content ({y0}–{y1} px) reaches the captions at {top} px, "
-                             f"and they fit neither below it (would end at {below + cap_h} px, past {SAFE_BOTTOM}) "
-                             f"nor above it (would start at {above} px, above {SAFE_TOP}); they stay over it")
+                what = "content" if "box" in b else "text"
+                warns.append(Finding(
+                    f"captions cover {self._ev_label(e, k)} text at {b.get('t', e['start']):.2f} s: its {what} ({y0}–{y1} px) "
+                    f"reaches the captions at {top} px, and they fit neither below it (would end at {below + cap_h} px, "
+                    f"past {SAFE_BOTTOM}) nor above it (would start at {above} px, above {SAFE_TOP}); give it fewer words, "
+                    f'or set "full": true', "captions_on_text"))
         return avoid, warns
 
     def caption_warnings(self) -> list[str]:
@@ -1043,6 +1273,45 @@ def _norm(s: str) -> str:
     return re.sub(r"[^\wáéíóúñü%]", "", s.lower())
 
 
+def still_time(type_: str, props: dict, duration: float, fps: int = 30) -> float:
+    """Seconds into an event when its entrance has finished: min(1.2 s, 60 % of it), or later when its
+    schema's cues (a list's last item, a count's label) finish later; inside the event."""
+    import overlay_schema as O
+    t = min(1.2, 0.6 * duration)
+    if type_ in O.schemas():
+        cues = [end for _, _, end in O.cue_finish(type_, props, fps, duration)]
+        t = max([t] + [end + 1 / fps for end in cues if end < duration])
+    return min(t, duration - 1 / fps)
+
+
+def low_contrast(comp, comp0, diff, groups: list[dict], need: float | None = None) -> list[tuple[float, float, str]]:
+    """Text groups (Project._text_groups) under their WCAG contrast: [(ratio, minimum, field)]. `comp` is the
+    frame with the text, `comp0` the same frame without its glyphs, `diff` where they differ; each group is
+    measured over its own changed pixels (median luminance of each frame there). The minimum is 4.5:1 under
+    LARGE_TEXT px, else 3:1, unless `need` is given."""
+    import numpy as np
+    f, out = comp.shape[1] / 1080, []
+    for g in groups:
+        x0, y0, x1, y1 = (max(0, round(v * f)) for v in g["box"])
+        m = diff[y0:y1, x0:x1]
+        if m.sum() < 12:
+            continue
+        lt, lb = (float(np.median(_luminance(c[y0:y1, x0:x1][m]))) for c in (comp, comp0))
+        r = (max(lt, lb) + 0.05) / (min(lt, lb) + 0.05)
+        least = need or (4.5 if g["size"] < LARGE_TEXT else 3.0)
+        if r < least:
+            out.append((round(r, 2), least, g["field"]))
+    return out
+
+
+def _luminance(rgb):
+    """WCAG relative luminance of sRGB pixels (…, 3) in 0–255."""
+    import numpy as np
+    c = np.asarray(rgb, float) / 255
+    c = np.where(c <= 0.03928, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+    return c @ np.array([0.2126, 0.7152, 0.0722])
+
+
 def _ts(t: float) -> str:
     cs = round(max(0.0, t) * 100)
     return f"{cs // 360000}:{cs // 6000 % 60:02d}:{cs // 100 % 60:02d}.{cs % 100:02d}"
@@ -1051,9 +1320,12 @@ def _ts(t: float) -> str:
 def main() -> None:
     """CLI for a data-only short (`edit/short.json`, see tools/short_spec.py):
 
-        uv run tools/shortform.py check  footage/<project>/edit/short.json
-        uv run tools/shortform.py stills footage/<project>/edit/short.json [--at 1.5 4.2]
-        uv run tools/shortform.py render footage/<project>/edit/short.json [--preview]
+        uv run tools/shortform.py check  footage/<project>/edit/short.json [--strict]
+        uv run tools/shortform.py stills footage/<project>/edit/short.json [--at 1.5 4.2] [--strict]
+        uv run tools/shortform.py render footage/<project>/edit/short.json [--preview] [--strict]
+        uv run tools/shortform.py check --never-list
+
+    --strict: locks and keep_restart refused, and every never-list finding (and loud edges) is an error.
     """
     import argparse
     import sys
@@ -1064,20 +1336,26 @@ def main() -> None:
     ap.add_argument("cmd", choices=("check", "stills", "render"))
     ap.add_argument("spec", type=Path, nargs="?", default=Path("edit/short.json"))
     ap.add_argument("--preview", action="store_true")
+    ap.add_argument("--strict", action="store_true", help="for edits nobody reviews by hand (see above)")
+    ap.add_argument("--never-list", action="store_true", help="print the never-list with each item's check, and exit")
     ap.add_argument("--at", type=float, nargs="+", help="output times for stills (default: each segment's middle)")
     a = ap.parse_args()
-    if a.cmd == "check":
-        res = S.check(a.spec)
+    if a.never_list:
+        print("\n".join(S.never_list()))
+        return
+    if a.cmd == "check" or a.strict:
+        res = S.check(a.spec, strict=a.strict)
         print("\n".join(res["timeline"] + [""] + res["edges"]))
         for w in res["warnings"]:
             print(f"WARN  {w}")
         for e in res["errors"]:
             print(f"ERROR {e}")
-        if res["duration"] is not None:
+        if res["duration"] is not None and a.cmd == "check":
             print(f"planned duration: {res['duration']:.2f}s")
-        sys.exit(1 if res["errors"] else 0)
+        if a.cmd == "check" or res["errors"]:
+            sys.exit(1 if res["errors"] else 0)
     try:
-        p, rep = S.load(a.spec)
+        p, rep = S.load(a.spec, strict=a.strict)
     except S.SpecError as e:
         sys.exit("\n".join(f"ERROR {x}" for x in e.errors))
     print("\n".join(rep["edges"]))
@@ -1085,8 +1363,13 @@ def main() -> None:
         warnings = list(rep["warnings"])
         for st in p.stills(a.at, preview=True, warnings=warnings):
             print(f"wrote {st['path']}")
+        errors, warnings = S.strict_split(warnings) if a.strict else ([], warnings)
         for w in warnings:
             print(f"WARN  {w}")
+        for e in errors:
+            print(f"ERROR {e}")
+        if errors:
+            sys.exit("not renderable: fix the errors above")
     else:
         out = p.build(a.preview)
         print("loudness: {:.1f} LUFS, {:.1f} dBTP".format(*loudness(out)))

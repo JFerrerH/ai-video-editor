@@ -2,6 +2,7 @@
   "title": "ProgressCard",
   "description": "Progress bar card filling from → to between fillStart and fillEnd; stall stutters it.",
   "x-layout": "float",
+  "examples": [{"label": "Emergency fund", "to": 68, "note": "Paused in March", "stall": true}],
   "type": "object",
   "required": [
     "label",

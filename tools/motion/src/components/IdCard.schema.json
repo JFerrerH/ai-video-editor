@@ -2,6 +2,7 @@
   "title": "IdCard",
   "description": "Identity card; subtitle and rows pop in on cue.",
   "x-layout": "float",
+  "examples": [{"kicker": "Profile", "title": "The planner", "subtitle": "Likes a clear budget", "rows": [{"text": "Saves every payday", "at": 0.3}, {"text": "Checks once a week", "at": 0.6}]}],
   "type": "object",
   "required": [
     "title"

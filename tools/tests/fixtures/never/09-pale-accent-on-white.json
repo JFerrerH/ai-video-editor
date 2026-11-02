@@ -1,0 +1,26 @@
+{
+ "item": 9,
+ "kind": "contrast",
+ "stage": "stills",
+ "take": "white",
+ "note": "pale accent text (#E8FD5A) on a white fill",
+ "segments": [
+  {
+   "take": "white",
+   "in": 0.45,
+   "out": 3.05
+  }
+ ],
+ "events": [
+  {
+   "type": "NameTitle",
+   "start": 0,
+   "duration": 2.4,
+   "props": {
+    "text": "Read me",
+    "color": "#E8FD5A",
+    "top": 300
+   }
+  }
+ ]
+}

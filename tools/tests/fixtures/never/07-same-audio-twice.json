@@ -1,0 +1,19 @@
+{
+ "item": 7,
+ "kind": "same_audio",
+ "stage": "check",
+ "take": "take1",
+ "note": "two segments of one take over the same source time",
+ "segments": [
+  {
+   "take": "take1",
+   "in": 0.45,
+   "out": 2.05
+  },
+  {
+   "take": "take1",
+   "in": 1.45,
+   "out": 3.05
+  }
+ ]
+}

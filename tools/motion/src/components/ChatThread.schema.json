@@ -2,6 +2,7 @@
   "title": "ChatThread",
   "description": "Chat bubbles (no readable text) stacking up as they arrive. Pair with full, or floating.",
   "x-layout": "float",
+  "examples": [{"messages": [{"from": "me", "at": 0.2, "icon": "speech"}, {"from": "ai", "at": 0.8, "icon": "bulb"}]}],
   "type": "object",
   "required": [
     "messages"

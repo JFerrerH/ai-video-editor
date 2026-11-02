@@ -1,5 +1,5 @@
 import React from "react";
-import { useBrand } from "../../theme";
+import { accentOn, useBrand } from "../../theme";
 import { Card, f, MIN_TEXT, useEntrance, WidgetBase } from "./Card";
 
 export type TermLine = { text: string; at?: number; kind?: "cmd" | "out" | "ok" };
@@ -40,7 +40,7 @@ export const Terminal: React.FC<WidgetBase & { title?: string; lines: TermLine[]
           const caret = i === live && kind === "cmd" && (typing || Math.floor(frame / 15) % 2 === 0);
           return (
             <div key={i} style={{ whiteSpace: "pre", overflow: "hidden", textOverflow: "clip" }}>
-              {kind === "cmd" ? <span style={{ color: colors.accent }}>$ </span> : null}
+              {kind === "cmd" ? <span style={{ color: accentOn(colors, "#16181C", 4.5) }}>$ </span> : null}
               {kind === "ok" ? <span style={{ color: "#4ADE80" }}>✓ </span> : null}
               <span style={{ color: kind === "out" ? "#9AA0A6" : kind === "ok" ? "#4ADE80" : undefined }}>{l.text.slice(0, n)}</span>
               {caret ? <span style={{ display: "inline-block", width: "0.55em", height: "1.05em", verticalAlign: "-0.15em", background: "#E6E6E6", marginLeft: 2 }} /> : null}

@@ -1,0 +1,46 @@
+{
+ "item": 3,
+ "kind": "captions_on_text",
+ "stage": "stills",
+ "take": "take1",
+ "note": "five lines of title text from 400 px, captions at 830: no room above or below",
+ "segments": [
+  {
+   "take": "take1",
+   "in": 0.45,
+   "out": 3.05
+  }
+ ],
+ "captions": {
+  "props": {
+   "top": 830
+  }
+ },
+ "events": [
+  {
+   "type": "NameTitle",
+   "start": 0,
+   "duration": 2.4,
+   "props": {
+    "lines": [
+     {
+      "text": "one"
+     },
+     {
+      "text": "two"
+     },
+     {
+      "text": "three"
+     },
+     {
+      "text": "four"
+     },
+     {
+      "text": "five"
+     }
+    ],
+    "top": 400
+   }
+  }
+ ]
+}

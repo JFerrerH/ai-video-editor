@@ -2,6 +2,7 @@
   "title": "RoomDots",
   "description": "A row of people; at highlightAt one (highlight index) turns accent and lifts.",
   "x-layout": "float",
+  "examples": [{"count": 20, "highlight": 3, "highlightAt": 0.5}],
   "type": "object",
   "required": [
     "highlightAt"

@@ -57,7 +57,7 @@ export const CodeEditor: React.FC<{
             left -= l.length + 1;
             return (
               <div key={i} style={{ display: "flex", gap: 28, minHeight: 50 }}>
-                <span style={{ color: "#555b63", width: 30, textAlign: "right" }}>{i + 1}</span>
+                <span style={{ color: "#7d848e", width: 30, textAlign: "right" }}>{i + 1}</span>
                 <span style={{ whiteSpace: "pre" }}>
                   {keyword(shown)}
                   {left < 0 && left > -l.length - 2 && Math.floor(frame / 8) % 2 ? <span style={{ background: "#e6e6e6" }}> </span> : null}

@@ -2,6 +2,7 @@
   "title": "KineticType",
   "description": "Kinetic typography: lines that build word by word (rise | pop | fade | blur), slam one at a time, or type out.",
   "x-layout": "full",
+  "examples": [{"lines": [{"text": "Every plan", "at": 0.1}, {"text": "starts small", "at": 0.4, "emphasis": "small"}]}],
   "type": "object",
   "required": ["lines"],
   "properties": {

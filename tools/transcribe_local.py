@@ -14,9 +14,13 @@ Differences from ElevenLabs Scribe:
 Completeness (Whisper can skip whole stretches of speech without a word):
   - no --language: the language is detected from 30 s of speech first, then transcribed with that
     language's prompt; the JSON records `language_detected`
-  - speech (the RMS envelope, tools/audio_env.py) that no word covers for 1.5 s or more is transcribed
+  - a word longer than its letters allow (max(1.0, 0.12 s × letters + 0.4)) over speech is transcribed again
+    in its own window and the words that come back replace it: `source.patched` lists {from, to, words, replaced}
+  - speech (the RMS envelope, tools/audio_env.py) that no word covers for 0.6 s or more is transcribed
     again on its own, with no prompt, and merged: `source.patched` lists each patch {from, to, words}
   - speech still without words is listed in `untranscribed` ([[from, to], …]) and printed as a warning
+  - likely false starts ("phrase… phrase again") are listed in `restarts` [{abandoned: [from, to], again, words}]
+    and shown inline in the packed transcript (an audio_event entry at the restart)
 
 Backends (chosen at runtime; `--backend` forces one):
   - mlx            Apple Silicon macOS: mlx-whisper on Metal, default install
@@ -87,7 +91,14 @@ def prompt_for(backend: str, language: str | None) -> str | None:
 SR = 16000
 DETECT_S = 30.0  # seconds of speech the language is detected from
 # a word "covers" its first COVER_CAP s (± COVER_PAD); uncovered speech of MIN_HOLE s or more is re-transcribed
-COVER_CAP, COVER_PAD, MIN_HOLE, PATCH_PAD = 1.5, 0.3, 1.5, 0.5
+# (0.6: a hidden 1.56 s run was split by a 0.6 s pause into two runs under the old 1.5 s)
+COVER_CAP, COVER_PAD, MIN_HOLE, PATCH_PAD = 1.5, 0.3, 0.6, 0.5
+# a word lasting longer than max(WORD_MIN, WORD_PER_LETTER × letters + WORD_BASE) s with speech through
+# IMPLAUSIBLE_SPEECH of it hides speech Whisper folded into one stamp
+WORD_MIN, WORD_PER_LETTER, WORD_BASE, IMPLAUSIBLE_SPEECH = 1.0, 0.12, 0.4, 0.6
+# restart marker: an abandoned phrase (ellipsis, or a pause of RESTART_PAUSE s without . ? !) whose first two
+# words start again within RESTART_WINDOW s
+RESTART_PAUSE, RESTART_WINDOW = 0.3, 6.0
 # what Whisper says over silence or noise; a patch made of these (plus one stray word at most, or of
 # low-confidence words) is dropped
 HALLUCINATIONS = ("subtítulos", "subtitulos", "amara.org", "thanks for watching", "thank you for watching",
@@ -255,28 +266,120 @@ def _hallucination(words: list[dict]) -> bool:
     return (rest != text and len(rest.split()) <= 1) or bool(probs and sum(probs) / len(probs) < 0.3)
 
 
+def _speech_share(a: float, b: float, runs: list[tuple[float, float]]) -> float:
+    return sum(max(0.0, min(b, r1) - max(a, r0)) for r0, r1 in runs) / max(1e-6, b - a)
+
+
+def implausible(w: dict, runs: list[tuple[float, float]]) -> bool:
+    """A word longer than its letters allow, with speech through most of it: Whisper folded speech into it."""
+    letters = sum(c.isalnum() for c in w["text"])
+    dur = w["end"] - w["start"]
+    return dur > max(WORD_MIN, WORD_PER_LETTER * letters + WORD_BASE) \
+        and _speech_share(w["start"], w["end"], runs) >= IMPLAUSIBLE_SPEECH
+
+
+def _shifted(result: dict, lo: float) -> list[dict]:
+    return [{**w, "start": round(w["start"] + lo, 3), "end": round(w["end"] + lo, 3)} for w in plain_words(result)]
+
+
+def _merge(ranges: list[list[float]]) -> list[list[float]]:
+    out: list[list[float]] = []
+    for a, b in sorted(ranges):
+        if out and a <= out[-1][1]:
+            out[-1][1] = max(out[-1][1], b)
+        else:
+            out.append([a, b])
+    return out
+
+
 def fill_holes(words: list[dict], runs: list[tuple[float, float]], retranscribe, duration: float):
-    """Re-transcribe every uncovered stretch of speech on its own and merge its words.
+    """Re-transcribe every implausible word and every uncovered stretch of speech on its own and merge
+    the words. An implausible word's words replace it; a hole's words are added.
     `retranscribe(lo, hi)` → a Whisper result for the audio [lo, hi] with times from lo.
-    Returns (words with spacing rebuilt, patched [{from, to, words}], untranscribed [[from, to]])."""
+    Returns (words with spacing rebuilt, patched [{from, to, words, replaced?}], untranscribed [[from, to]])."""
     plain = [w for w in words if w["type"] == "word"]
-    patched = []
-    for a, b in uncovered(plain, runs):
+    patched, failed = [], []
+    for bad in [w for w in plain if implausible(w, runs)]:
+        a, b = bad["start"], bad["end"]
         lo, hi = max(0.0, a - PATCH_PAD), min(duration, b + PATCH_PAD)
         new = []
-        for w in plain_words(retranscribe(lo, hi)):
-            w = {**w, "start": round(w["start"] + lo, 3), "end": round(w["end"] + lo, 3)}
-            mid = (w["start"] + w["end"]) / 2
-            if lo <= w["start"] <= hi and not any(x["start"] <= mid <= x["end"] for x in plain):
+        for w in _shifted(retranscribe(lo, hi), lo):
+            if a <= (w["start"] + w["end"]) / 2 <= b:  # the retry's padding repeats the neighbours: drop them
+                new.append({**w, "start": max(a, w["start"]), "end": min(b, w["end"])})
+        if new and not _hallucination(new):
+            plain = [w for w in plain if w is not bad] + new
+            patched.append({"from": a, "to": b, "words": len(new), "replaced": bad["text"]})
+        else:
+            failed.append(bad)
+    for a, b in uncovered(plain, runs):
+        lo, hi = max(0.0, a - PATCH_PAD), min(duration, b + PATCH_PAD)
+        solid = [x for x in plain if not any(x is f for f in failed)]
+        new = []
+        for w in _shifted(retranscribe(lo, hi), lo):
+            mid = (w["start"] + w["end"]) / 2  # an implausible word doesn't block its own repair
+            if lo <= w["start"] <= hi and not any(x["start"] <= mid <= x["end"] for x in solid):
                 new.append(w)
         if new and not _hallucination(new):
             plain += new
             patched.append({"from": a, "to": b, "words": len(new)})
+    # an implausible word the hole pass filled is replaced too; one it didn't is speech with no words
+    for bad in failed:
+        if any(w is not bad and bad["start"] <= (w["start"] + w["end"]) / 2 <= bad["end"] for w in plain):
+            plain = [w for w in plain if w is not bad]
     plain.sort(key=lambda w: (w["start"], w["end"]))
     for prev, w in zip(plain, plain[1:]):  # keep times non-decreasing where a patch meets a word
         if prev["end"] > w["start"]:
             prev["end"] = max(prev["start"], w["start"])
-    return with_spacing(plain), patched, [list(r) for r in uncovered(plain, runs)]
+    left = [[round(f["start"], 2), round(f["end"], 2)] for f in failed if any(f is w for w in plain)]
+    return with_spacing(plain), patched, _merge([list(r) for r in uncovered(plain, runs)] + left)
+
+
+# ── false starts ──────────────────────────────────────────────────────────
+def _ends_sentence(text: str) -> bool:
+    return bool(re.search(r"[.?!]$", text.strip()))
+
+
+def _trails_off(text: str) -> bool:
+    return text.strip().endswith(("…", "..."))
+
+
+def mark_restarts(words: list[dict]) -> list[dict]:
+    """Likely false starts: a phrase that ends abandoned (an ellipsis, or a pause of RESTART_PAUSE s without
+    . ? !) and whose first two words start again within RESTART_WINDOW s. Deliberate repetition ends a
+    sentence first, so it isn't marked. [{"abandoned": [from, to], "again": t, "words": "<abandoned text>"}]"""
+    ws = [w for w in words if w["type"] == "word"]
+    by_again: dict[int, dict] = {}
+    for i, w in enumerate(ws):
+        nxt = ws[i + 1] if i + 1 < len(ws) else None
+        if nxt is None or not (_trails_off(w["text"]) or
+                               (nxt["start"] - w["end"] >= RESTART_PAUSE and not _ends_sentence(w["text"]))):
+            continue
+        s = i  # back to the previous sentence end or pause
+        while s > 0 and not _ends_sentence(ws[s - 1]["text"]) and not _trails_off(ws[s - 1]["text"]) \
+                and ws[s]["start"] - ws[s - 1]["end"] < RESTART_PAUSE:
+            s -= 1
+        if i - s < 1:
+            continue  # a one-word phrase has no opening to repeat
+        head = (_norm(ws[s]["text"]), _norm(ws[s + 1]["text"]))
+        for j in range(i + 1, len(ws) - 1):
+            if ws[j]["start"] - w["end"] > RESTART_WINDOW:
+                break
+            if (_norm(ws[j]["text"]), _norm(ws[j + 1]["text"])) == head:
+                prev = by_again.get(j)
+                if prev is None or ws[s]["start"] < prev["abandoned"][0]:
+                    by_again[j] = {"abandoned": [ws[s]["start"], w["end"]], "again": ws[j]["start"],
+                                   "words": " ".join(x["text"] for x in ws[s:i + 1])}
+                break
+    return [by_again[j] for j in sorted(by_again)]
+
+
+def with_restart_marks(words: list[dict], restarts: list[dict]) -> list[dict]:
+    """The word list with an audio_event at each restart, so the packed transcript shows it inline
+    (pack_transcripts.py prints audio events in the phrase text)."""
+    marks = [{"type": "audio_event", "text": f"(restart: false start {r['abandoned'][0]:.2f}–{r['abandoned'][1]:.2f} "
+                                             f"\"{r['words']}\")", "start": r["again"], "end": r["again"],
+              "speaker_id": "speaker_0"} for r in restarts]
+    return sorted(words + marks, key=lambda w: (w["start"], w["type"] != "audio_event"))
 
 
 def transcribe_one(video: Path, edit_dir: Path, model: str | None, language: str | None,
@@ -316,19 +419,24 @@ def transcribe_one(video: Path, edit_dir: Path, model: str | None, language: str
         return engine.transcribe(audio[int(lo * SR):int(hi * SR)], language, None)
 
     words, patched, untranscribed = fill_holes(to_scribe_words(result), runs, retranscribe, duration)
+    restarts = mark_restarts(words)
     text = " ".join(w["text"] for w in words if w["type"] == "word")
     payload = {
         "language_code": result.get("language") or language,
         **({"language_detected": detected} if detected else {}),
         "text": text if patched else result.get("text", "").strip(),
-        "words": words,
+        "words": with_restart_marks(words, restarts),
         "untranscribed": untranscribed,
+        "restarts": restarts,
         "source": {"engine": ENGINE[backend], "model": model, "file": str(video), "prompt": prompt, "patched": patched},
     }
     out_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False))
     n = sum(1 for w in words if w["type"] == "word")
     for p in patched:
-        print(f"  patched {p['from']:.1f}–{p['to']:.1f} s: {p['words']} words Whisper had skipped")
+        what = f"in place of \"{p['replaced']}\"" if "replaced" in p else "Whisper had skipped"
+        print(f"  patched {p['from']:.1f}–{p['to']:.1f} s: {p['words']} words {what}")
+    for r in restarts:
+        print(f"  restart at {r['again']:.2f} s: false start {r['abandoned'][0]:.2f}–{r['abandoned'][1]:.2f} \"{r['words']}\"")
     for a, b in untranscribed:
         print(f"  WARN no words for the speech at {a:.1f}–{b:.1f} s in {video.name} (check it by ear or re-record)")
     print(f"  saved: {out_path} ({n} words) in {time.time() - t0:.1f}s")

@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { clamp, enter, exit, sec } from "../anim";
-import { SAFE, useBrand } from "../theme";
+import { SAFE, accentOn, useBrand } from "../theme";
 
 /** Quote / receipt: items tick in one by one, total, then a rubber stamp. */
 export const Receipt: React.FC<{
@@ -16,6 +16,7 @@ export const Receipt: React.FC<{
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { colors, fonts } = useBrand();
+  const stampColor = accentOn(colors, "#FFFFFF"); // the stamp sits on the white receipt
   const cIn = enter(frame, fps, 0, 16);
   const st = enter(frame, fps, sec(stampAt, fps), 9);
   const out = exit(frame, durationInFrames, 5);
@@ -69,8 +70,8 @@ export const Receipt: React.FC<{
             left: "50%",
             top: "56%",
             translate: "-50% -50%",
-            border: `8px solid ${colors.accent}`,
-            color: colors.accent,
+            border: `8px solid ${stampColor}`,
+            color: stampColor,
             fontFamily: fonts.sans,
             fontWeight: 600,
             fontSize: 64,

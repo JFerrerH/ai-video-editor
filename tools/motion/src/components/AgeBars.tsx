@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { enter, exit, sec } from "../anim";
-import { SAFE, useBrand } from "../theme";
+import { SAFE, readable, useBrand } from "../theme";
 
 type Bar = { value: number; label: string; at: number; highlight?: boolean };
 
@@ -35,7 +35,7 @@ export const AgeBars: React.FC<{ durationInFrames: number; bars: Bar[]; caption?
         }}
       >
         {caption ? (
-          <div style={{ fontFamily: fonts.mono, fontSize: 22, letterSpacing: 5, color: colors.muted, marginBottom: 18 }}>{caption}</div>
+          <div style={{ fontFamily: fonts.mono, fontSize: 28, letterSpacing: 5, color: readable(colors.muted, colors.bg, colors.ink), marginBottom: 18 }}>{caption}</div>
         ) : null}
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-around", height: H + 60 }}>
           {bars.map((b, i) => {

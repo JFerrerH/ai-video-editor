@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { clamp, easeOut, enter, exit, sec } from "../anim";
-import { SAFE, useBrand } from "../theme";
+import { SAFE, accentOn, useBrand } from "../theme";
 
 /**
  * Progress bar card above the speaker's head.
@@ -45,7 +45,7 @@ export const ProgressCard: React.FC<{
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
           <div style={{ fontFamily: fonts.mono, fontSize: 30, letterSpacing: 4, color: colors.muted }}>{label}</div>
           {showValue ? (
-            <div style={{ fontFamily: fonts.serif, fontSize: 92, lineHeight: 1, color: barColor, letterSpacing: -3 }}>
+            <div style={{ fontFamily: fonts.serif, fontSize: 92, lineHeight: 1, color: stalled ? accentOn(colors, colors.bg) : colors.ink, letterSpacing: -3 }}>
               {Math.round(Math.max(0, v))}%
             </div>
           ) : null}
@@ -58,13 +58,14 @@ export const ProgressCard: React.FC<{
             style={{
               marginTop: 18,
               fontFamily: fonts.mono,
-              fontSize: 26,
+              fontSize: 28,
+              fontWeight: 600,
               letterSpacing: 2,
-              color: colors.accent,
-              opacity: stalled ? (Math.floor(frame / 8) % 2 ? 1 : 0.35) : 0,
+              color: accentOn(colors, colors.bg, 4.5),
+              opacity: stalled ? 1 : 0,
             }}
           >
-            ⚠ {note}
+            <span style={{ opacity: Math.floor(frame / 8) % 2 ? 1 : 0.35 }}>⚠</span> {note}
           </div>
         ) : null}
       </div>

@@ -56,7 +56,7 @@ export const BarChart: React.FC<{
       >
         <div style={{ width: labelW + trackW + valueW }}>
           {kicker ? (
-            <div style={{ fontFamily: fonts.sans, fontSize: 32, fontWeight: 600, letterSpacing: "0.2em", textTransform: "uppercase", color: pal.accent, marginBottom: 14, opacity: head }}>
+            <div style={{ fontFamily: fonts.sans, fontSize: 32, fontWeight: 600, letterSpacing: "0.2em", textTransform: "uppercase", color: pal.accentSmall, marginBottom: 14, opacity: head }}>
               {kicker}
             </div>
           ) : null}

@@ -2,6 +2,7 @@
   "title": "NetworkScene",
   "description": "Nodes drift in chaos, then ring a hub at connect; chips, messages and a log on cue.",
   "x-layout": "full",
+  "examples": [{"kicker": "How it works", "title": "One hub", "nodes": [{"id": "a", "label": "Bank", "icon": "chart"}, {"id": "b", "label": "App", "icon": "spark"}], "chips": [{"node": "a", "text": "Synced", "at": 0.6}]}],
   "type": "object",
   "required": [
     "nodes"

@@ -2,6 +2,7 @@
   "title": "PostPile",
   "description": "Blank social-post cards pile up between pileStart and pileEnd. Pair with full.",
   "x-layout": "float",
+  "examples": [{"count": 12}],
   "type": "object",
   "properties": {
     "count": {

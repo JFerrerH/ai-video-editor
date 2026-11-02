@@ -27,6 +27,7 @@
     "dev": "remotion studio",
     "build": "remotion bundle",
     "upgrade": "remotion upgrade",
-    "lint": "eslint src && tsc"
+    "lint": "eslint src && tsc",
+    "test:contrast": "cd ../.. && uv run tools/tests/contrast_matrix.py"
   }
 }

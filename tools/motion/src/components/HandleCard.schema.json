@@ -2,6 +2,7 @@
   "title": "HandleCard",
   "description": "End card: optional kicker plus a big pill (@handle or a CTA).",
   "x-layout": "float",
+  "examples": [{"kicker": "Follow", "handle": "@example"}],
   "type": "object",
   "required": [
     "handle"

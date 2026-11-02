@@ -2,6 +2,7 @@
   "title": "ListScene",
   "description": "Steps, reasons or features revealed one per cue; earlier items dim when a new one lands.",
   "x-layout": "full",
+  "examples": [{"kicker": "Three steps", "title": "The system", "items": [{"text": "Save on payday", "at": 0.2}, {"text": "Name each goal", "at": 0.5}, {"text": "Check weekly", "at": 0.8}]}],
   "type": "object",
   "required": ["items"],
   "properties": {

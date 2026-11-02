@@ -2,6 +2,7 @@
   "title": "SearchBar",
   "description": "A search pill types query; skeleton results stack up from resultsAt.",
   "x-layout": "float",
+  "examples": [{"query": "how to save money"}],
   "type": "object",
   "required": [
     "query"

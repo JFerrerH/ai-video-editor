@@ -56,7 +56,7 @@ export const TitleCard: React.FC<{
               fontWeight: 600,
               letterSpacing: "0.2em",
               textTransform: "uppercase",
-              color: pal.accent,
+              color: pal.accentSmall,
               marginBottom: 28,
               opacity: k,
               translate: `0px ${(1 - k) * 14}px`,
@@ -85,7 +85,7 @@ export const TitleCard: React.FC<{
               fps={fps}
               startFrame={4 + i * 5}
               stagger={2}
-              emphStyle={{ fontStyle: "italic", color: pal.accent }}
+              emphStyle={{ fontStyle: "italic", color: pal.accentText }}
             />
           </div>
         ))}

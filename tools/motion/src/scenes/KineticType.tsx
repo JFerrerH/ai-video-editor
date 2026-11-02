@@ -43,7 +43,7 @@ export const KineticType: React.FC<{
     lineHeight: 1.04,
     textTransform: uppercase ? "uppercase" : undefined,
   };
-  const emph: React.CSSProperties = { color: pal.accent, fontStyle: font === "serif" ? "italic" : undefined };
+  const emph: React.CSSProperties = { color: pal.accentText, fontStyle: font === "serif" ? "italic" : undefined };
   const box: React.CSSProperties = {
     position: "absolute",
     left: safe.left,
@@ -94,7 +94,7 @@ export const KineticType: React.FC<{
             return (
               <div key={i} style={{ ...textStyle, fontSize: l.size ?? base }}>
                 {l.text.slice(0, n)}
-                <span style={{ opacity: caret ? 1 : 0, color: pal.accent, marginLeft: 4 }}>|</span>
+                <span style={{ opacity: caret ? 1 : 0, color: pal.accentText, marginLeft: 4 }}>|</span>
               </div>
             );
           })}

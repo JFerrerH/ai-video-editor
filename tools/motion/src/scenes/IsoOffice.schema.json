@@ -2,6 +2,7 @@
   "title": "IsoOffice",
   "description": "Isometric office: agents appear, walk between desks and show bubbles; optional replay.",
   "x-layout": "full",
+  "examples": [{"kicker": "The team", "title": "Agents at work", "emphasis": "at work", "agents": [{"id": "a", "label": "Planner", "pos": "d1"}, {"id": "b", "label": "Writer", "pos": "d2"}], "desks": [{"id": "d1", "u": 1, "v": 1}, {"id": "d2", "u": 3, "v": 1}]}],
   "type": "object",
   "required": [
     "agents"

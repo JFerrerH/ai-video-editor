@@ -1,0 +1,31 @@
+{
+ "item": 10,
+ "kind": "frame",
+ "stage": "check",
+ "take": "take1",
+ "note": "an overlay moved by hand",
+ "segments": [
+  {
+   "take": "take1",
+   "in": 0.45,
+   "out": 3.05
+  }
+ ],
+ "events": [
+  {
+   "type": "HookTitle",
+   "start": 0,
+   "duration": 1.0,
+   "props": {
+    "lines": [
+     {
+      "text": "Hi"
+     }
+    ],
+    "frame": {
+     "y": 200
+    }
+   }
+  }
+ ]
+}

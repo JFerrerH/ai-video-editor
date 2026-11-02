@@ -2,6 +2,7 @@
   "title": "BarChart",
   "description": "Horizontal bar chart; bars grow one after another from start, stagger apart.",
   "x-layout": "full",
+  "examples": [{"kicker": "Monthly", "title": "Where it goes", "bars": [{"label": "Rent", "value": 900}, {"label": "Food", "value": 320, "highlight": true}, {"label": "Fun", "value": 150}], "prefix": "$"}],
   "type": "object",
   "required": [
     "bars"

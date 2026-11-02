@@ -2,7 +2,7 @@ import React from "react";
 import { interpolate, spring } from "remotion";
 import { clamp } from "../../anim";
 import { LineIcon, IconKind } from "../../components/icons";
-import { textOn, useBrand } from "../../theme";
+import { accentOn, textOn, useBrand } from "../../theme";
 import { Card, f, MIN_TEXT, useCardColors, useEntrance, WidgetBase } from "./Card";
 
 /**
@@ -15,7 +15,7 @@ export const Stamp: React.FC<WidgetBase & { text: string; color?: string; rotate
   const { fonts, colors } = useBrand();
   const a = f(base.at, fps);
   const s = spring({ frame: frame - a, fps, config: { damping: 11, stiffness: 260, mass: 0.6 } });
-  const col = color ?? colors.accent;
+  const col = color ?? accentOn(colors, base.bg === "dark" ? colors.ink : colors.bg);
   const fs = Math.min(110, (base.box.w * 0.8) / Math.max(4, text.length * 0.68));
   if (frame < a) return null;
   return (

@@ -2,6 +2,7 @@
   "title": "SkillSlots",
   "description": "Numbered slots that fill with a line icon on cue; active highlights one.",
   "x-layout": "float",
+  "examples": [{"slots": [{"icon": "chart", "at": 0.2}, {"icon": "brain", "at": 0.5}, {"icon": "heart", "at": 0.8}]}],
   "type": "object",
   "required": [
     "slots"

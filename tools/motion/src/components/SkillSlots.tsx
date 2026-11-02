@@ -1,6 +1,6 @@
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
-import { enter, exit, sec } from "../anim";
+import { NEVER, enter, exit, sec } from "../anim";
 import { SAFE, useBrand } from "../theme";
 import { IconKind, LineIcon } from "./icons";
 
@@ -32,7 +32,7 @@ export const SkillSlots: React.FC<{ durationInFrames: number; slots: Slot[]; act
         }}
       >
         {slots.map((sl, i) => {
-          const f0 = sl.at != null ? sec(sl.at, fps) : Infinity;
+          const f0 = sl.at != null ? sec(sl.at, fps) : NEVER;
           const filled = frame >= f0;
           const k = filled ? enter(frame, fps, f0, 11) : 0;
           const on = active === i && filled;

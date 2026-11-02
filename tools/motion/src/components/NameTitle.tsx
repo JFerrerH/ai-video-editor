@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { enter, exit, sec } from "../anim";
-import { useBrand } from "../theme";
+import { onBackdrop, useBackdrop, useBrand } from "../theme";
 
 /** Big serif title with no card (a name, or a punch line). Pair with `behind: true` so it sits BEHIND
  *  the speaker's head (the engine stacks a person-matted copy of the footage on top): set `top` so the
@@ -20,6 +20,7 @@ export const NameTitle: React.FC<{
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { colors, fonts } = useBrand();
+  const backdrop = useBackdrop();
   const out = exit(frame, durationInFrames, 6);
   const rows = lines ?? [{ text: text ?? "", at: 0 }];
   return (
@@ -39,7 +40,7 @@ export const NameTitle: React.FC<{
           lineHeight: 1,
           letterSpacing: -4,
           whiteSpace: "nowrap",
-          color: color ?? colors.ink,
+          color: color ?? onBackdrop(colors, backdrop, colors.ink),
           // pale colours over a light wall need a soft dark edge to read
           textShadow: "0 2px 4px rgba(0,0,0,0.35), 0 6px 30px rgba(0,0,0,0.3)",
           opacity: Math.min(1, s * 1.4),

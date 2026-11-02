@@ -2,6 +2,7 @@
   "title": "RingStat",
   "description": "Ring that fills to value % at fillAt and pulses at pulseAt.",
   "x-layout": "float",
+  "examples": [{"value": 72, "label": "of the goal"}],
   "type": "object",
   "required": [
     "value"

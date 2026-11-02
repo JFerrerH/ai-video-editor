@@ -9,7 +9,7 @@ import {
   staticFile,
   useVideoConfig,
 } from "remotion";
-import { Brand, BrandContext } from "./theme";
+import { BackdropContext, Brand, BrandContext } from "./theme";
 import { Backdrop } from "./components/Backdrop";
 import { Captions } from "./components/Captions";
 import { CodeEditor } from "./components/CodeEditor";
@@ -96,6 +96,71 @@ export type OverlayProps = {
   durationInSeconds: number;
   brand: Brand;
   events: OverlayEvent[];
+  measure?: boolean; // stills only: log each event's visible text (see MeasureText)
+  hideText?: boolean; // stills only: draw every glyph transparent, layout unchanged (the legibility probe's blank)
+};
+
+// the probe's blank: same layout and pixels, no glyphs (numbers and SVG text included)
+const HIDE_TEXT = `* { color: transparent !important; text-shadow: none !important;
+  -webkit-text-stroke-color: transparent !important; } text, tspan { fill: transparent !important;
+  stroke: transparent !important; }`;
+
+export type MeasuredText = {
+  text: string;
+  box: [number, number, number, number]; // x0, y0, x1, y1 in composition px
+  size: number; // font size × every ancestor's scale, in composition px
+};
+
+/** The visible text nodes under `root`: box, rendered size and text. Invisible ones (opacity, hidden,
+ *  zero size) are skipped: they can't cover a face or be unreadable. */
+const measureText = (root: HTMLElement): MeasuredText[] => {
+  const out: MeasuredText[] = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    const text = n.textContent?.trim();
+    const el = n.parentElement;
+    if (!text || !el) continue;
+    const range = document.createRange();
+    range.selectNodeContents(n);
+    const r = range.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1) continue;
+    let scale = 1;
+    let opacity = 1;
+    for (let a: HTMLElement | null = el; a && a !== root.parentElement; a = a.parentElement) {
+      const cs = getComputedStyle(a);
+      opacity *= parseFloat(cs.opacity);
+      if (cs.visibility === "hidden" || cs.display === "none") opacity = 0;
+      if (cs.transform && cs.transform !== "none") {
+        const m = new DOMMatrixReadOnly(cs.transform);
+        scale *= Math.hypot(m.b, m.d);
+      }
+      if (cs.scale && cs.scale !== "none") scale *= parseFloat(cs.scale.split(" ").pop() ?? "1");
+    }
+    if (opacity < 0.05) continue;
+    out.push({
+      text,
+      box: [r.left, r.top, r.right, r.bottom].map((v) => Math.round(v)) as MeasuredText["box"],
+      size: Math.round(parseFloat(getComputedStyle(el).fontSize) * scale * 10) / 10,
+    });
+  }
+  return out;
+};
+
+/** Measure mode: once the frame has laid out, logs one line `MEASURE [{event, texts}]` (each event's
+ *  `measureText`), which tools/shortform.py reads from the still render's output. */
+const MeasureText: React.FC = () => {
+  const [handle] = useState(() => delayRender("Measuring text"));
+  useEffect(() => {
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const roots = Array.from(document.querySelectorAll<HTMLElement>("[data-event]"));
+        const out = roots.map((r) => ({ event: Number(r.dataset.event), texts: measureText(r) }));
+        console.log("MEASURE " + JSON.stringify(out));
+        continueRender(handle);
+      }),
+    );
+  }, [handle]);
+  return null;
 };
 
 /** Loads the brand's font files; true once they're in. Render text only after that, so anything
@@ -134,7 +199,7 @@ export const useBrandFonts = (brand: Brand) => {
 
 /** The events on their own (no brand provider, no font loading): shared by `Overlay` and `Story`.
  *  Scene primitives (`SCENES`) work as events too; they draw no background there. */
-export const OverlayLayer: React.FC<{ events: OverlayEvent[] }> = ({ events }) => {
+export const OverlayLayer: React.FC<{ events: OverlayEvent[]; measure?: boolean }> = ({ events, measure }) => {
   const { fps, width } = useVideoConfig();
   return (
     <>
@@ -144,6 +209,10 @@ export const OverlayLayer: React.FC<{ events: OverlayEvent[] }> = ({ events }) =
         const durationInFrames = Math.max(1, Math.round(ev.duration * fps));
         const full = Boolean(ev.props?.full);
         const frameBox = ev.props?.frame as { scale?: number; x?: number; y?: number } | undefined;
+        // measure mode: one marked, layout-neutral wrapper per event (the backdrop stays outside it)
+        const Wrap: React.FC<{ children: React.ReactNode }> = measure
+          ? ({ children }) => <AbsoluteFill data-event={ev.index ?? i}>{children}</AbsoluteFill>
+          : ({ children }) => <>{children}</>;
         return (
           <Sequence
             key={i}
@@ -153,6 +222,8 @@ export const OverlayLayer: React.FC<{ events: OverlayEvent[] }> = ({ events }) =
             premountFor={fps}
           >
             {full ? <Backdrop durationInFrames={durationInFrames} {...(ev.props ?? {})} /> : null}
+            <BackdropContext.Provider value={{ full, dark: Boolean(ev.props?.dark) }}>
+            <Wrap>
             {frameBox ? (
               // `frame: {scale, y}` shrinks a full-layout graphic into the band above the
               // speaker's head so it can float over the footage without covering the face
@@ -168,6 +239,8 @@ export const OverlayLayer: React.FC<{ events: OverlayEvent[] }> = ({ events }) =
             ) : (
               <C durationInFrames={durationInFrames} {...(ev.props ?? {})} />
             )}
+            </Wrap>
+            </BackdropContext.Provider>
           </Sequence>
         );
       })}
@@ -175,12 +248,14 @@ export const OverlayLayer: React.FC<{ events: OverlayEvent[] }> = ({ events }) =
   );
 };
 
-export const Overlay: React.FC<OverlayProps> = ({ brand, events }) => {
+export const Overlay: React.FC<OverlayProps> = ({ brand, events, measure, hideText }) => {
   const ready = useBrandFonts(brand);
   return (
     <BrandContext.Provider value={brand}>
       <AbsoluteFill style={{ fontFamily: brand.fonts.sans }}>
-        {ready ? <OverlayLayer events={events} /> : null}
+        {hideText ? <style>{HIDE_TEXT}</style> : null}
+        {ready ? <OverlayLayer events={events} measure={measure} /> : null}
+        {ready && measure ? <MeasureText /> : null}
       </AbsoluteFill>
     </BrandContext.Provider>
   );

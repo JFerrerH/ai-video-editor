@@ -2,6 +2,7 @@
   "title": "PhoneMockup",
   "description": "Phone with product screens swiping in at their at, or a scrolling page capture.",
   "x-layout": "float",
+  "examples": [{"screens": [{"src": "sample.png", "at": 0.0, "label": "Home"}]}],
   "type": "object",
   "properties": {
     "variant": {

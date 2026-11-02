@@ -28,10 +28,11 @@ Ops (args in brackets are optional):
   pack             [silence] → edit/takes_packed.md (every transcript, phrase by phrase)
   frames           source at [sheet] → edit/frames/<stem>_<t>.png (+ _sheet.png), ≤ 24, ≤ 720 px
   face             sources → suggested face centre + confidence per take (also edit/face.json)
-  shortform        cmd=check|stills|render [spec at preview] → from edit/short.json (data only; safe for
-                   specs written by untrusted users): check returns errors/warnings/duration, stills one
+  shortform        cmd=check|stills|render [spec at preview strict] → from edit/short.json (data only; safe
+                   for specs written by untrusted users): check returns errors/warnings/duration, stills one
                    entry per still (event stills: event index and type) plus legibility and caption
-                   warnings, renders loudness
+                   warnings and `renderable`, renders loudness. strict: locks and keep_restart refused,
+                   never-list findings are errors (stills: renderable false), stills/render check first
   cut              cmd=check|render [edl preview subtitles] → plain EDL cut at the sources' orientation
                    (video-use render.py), EDL validated first: no raw ffmpeg filters, no outside paths
   site             url → site/viewport.png + capture.json (+ images/, fonts/): one page's measured
@@ -301,21 +302,26 @@ def op_shortform(root: Path, a: dict) -> dict:
     import short_spec as S
     from shortform import loudness
 
-    spec = a["spec"]
+    spec, strict = a["spec"], a["strict"]
     if spec.is_dir() or spec.suffix != ".json":
         raise JobError("`spec` must be a .json file (default edit/short.json)")
-    if a["cmd"] == "check":
-        res = S.check(spec, root)
-        out = {k: res[k] for k in ("errors", "warnings", "duration", "timeline")}
-        return {**out, **({"error": f"{len(res['errors'])} spec error(s): {res['errors'][0]}"} if res["errors"] else {})}
+    failed = lambda errors: {"errors": errors, "error": f"{len(errors)} spec error(s): {errors[0]}"}  # noqa: E731
+    if a["cmd"] == "check" or strict:  # strict stills/render: the whole check first, never a render past it
+        res = S.check(spec, root, strict=strict)
+        if a["cmd"] == "check" or res["errors"]:
+            out = {k: res[k] for k in ("errors", "warnings", "duration", "timeline")}
+            return {**out, **(failed(res["errors"]) if res["errors"] else {}),
+                    **({"renderable": False} if a["cmd"] == "stills" else {})}
     try:
-        p, rep = S.load(spec, root)
+        p, rep = S.load(spec, root, strict=strict)
     except S.SpecError as e:
-        return {"errors": e.errors, "error": f"{len(e.errors)} spec error(s): {e.errors[0]}"}
+        return {**failed(e.errors), **({"renderable": False} if a["cmd"] == "stills" else {})}
     if a["cmd"] == "stills":
         warnings = list(rep["warnings"])
         stills = p.stills(a["at"] or None, preview=True, warnings=warnings)
-        return {"duration": rep["duration"], "warnings": warnings,
+        errors, warnings = S.strict_split(warnings) if strict else ([], warnings)
+        return {"duration": rep["duration"], "warnings": warnings, "renderable": not errors,
+                **(failed(errors) if errors else {}),
                 "stills": [{"path": str(st["path"].resolve().relative_to(root)), "t": st["t"],
                             **{k: st[k] for k in ("event", "type") if k in st}} for st in stills]}
     out = p.build(a["preview"])
@@ -444,6 +450,7 @@ OPS: dict[str, Op] = {
         "spec": Arg("str", default="edit/short.json", path="in"),
         "at": Arg("floats"),
         "preview": Arg("bool", default=False),
+        "strict": Arg("bool", default=False),
     }),
     "cut": Op(op_cut, {
         "cmd": Arg("str", required=True, choices=("check", "render")),

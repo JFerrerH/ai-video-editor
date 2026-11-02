@@ -2,6 +2,7 @@
   "title": "TitleCard",
   "description": "Chapter / opening title: kicker, big serif title, an accent rule, a supporting line.",
   "x-layout": "full",
+  "examples": [{"kicker": "Chapter one", "title": "Start\nsmall", "emphasis": "small", "sub": "One habit at a time"}],
   "type": "object",
   "required": [
     "title"

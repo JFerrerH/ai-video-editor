@@ -57,7 +57,7 @@ export const StatScene: React.FC<{
         }}
       >
         {kicker ? (
-          <div style={{ fontFamily: fonts.sans, fontSize: 30, fontWeight: 600, letterSpacing: "0.2em", textTransform: "uppercase", color: pal.accent, marginBottom: 16, opacity: appear }}>
+          <div style={{ fontFamily: fonts.sans, fontSize: 30, fontWeight: 600, letterSpacing: "0.2em", textTransform: "uppercase", color: pal.accentSmall, marginBottom: 16, opacity: appear }}>
             {kicker}
           </div>
         ) : null}
@@ -75,7 +75,7 @@ export const StatScene: React.FC<{
         >
           {prefix}
           {num}
-          <span style={{ color: pal.accent, marginLeft: suffix.length === 1 ? "0.04em" : "0.12em", fontSize: suffix.length > 2 ? "0.45em" : undefined }}>{suffix}</span>
+          <span style={{ color: pal.accentText, marginLeft: suffix.length === 1 ? "0.04em" : "0.12em", fontSize: suffix.length > 2 ? "0.45em" : undefined }}>{suffix}</span>
         </div>
         {max ? (
           <div style={{ width: barW, height: 10, borderRadius: 5, background: pal.track, marginTop: 34, overflow: "hidden" }}>

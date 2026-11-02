@@ -12,7 +12,7 @@ Those are exactly the motion-graphics moves published talking-head catalogues ar
 
 Sources: Takes' 28-effect library, Envato's short-form motion guide, and VibeRoll's b-roll guide (`video-studio/docs/editing-references.md`).
 
-A prototype on 2026-11-02 put the footage inside the Remotion composition and drove it from a data plan. It was run on two of the user's videos ("lucce-launch-story" and "lucce-habilidades-ia") with the same components and no per-video code. The user approved the result: "ahora sí".
+A prototype on 2026-11-02 put the footage inside the Remotion composition and drove it from a data plan. It was run on two of the user's videos (a product-launch story and a skills explainer) with the same components and no per-video code. The user approved the result: "ahora sí".
 
 ## What Changes
 

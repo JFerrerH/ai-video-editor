@@ -51,6 +51,10 @@ def _registry(path: Path, block: str) -> set[str]:  # same parse as storyboard.p
 # overlay components and scene primitives both render as events; captions come from the engine
 COMPONENTS = (_registry(SRC / "Overlay.tsx", r"export const REGISTRY")
               | _registry(SRC / "scenes/index.ts", r"export const SCENES")) - {"Captions"}
+# the stage's own components (live-stage): one <Name>.schema.json each under stage/components/
+STAGE = {p.name[:-len(".schema.json")] for p in (SRC / "stage" / "components").glob("*.schema.json")}
+COMPONENTS = COMPONENTS | STAGE
+LAYERS = ["front", "behind", "panel"]
 
 
 @lru_cache(maxsize=None)
@@ -61,12 +65,22 @@ def schemas() -> dict[str, dict]:
 
 
 def schema(type_: str) -> dict:
-    """The component's schema with the shared event props merged into its properties."""
+    """The component's schema with the shared event props merged into its properties. Fields of the event
+    itself (`layer`, `object`: `x-event-field`) sit beside `props`, never inside; a component with
+    `x-event-props: false` (the stage's) takes none of the overlay layer's backdrop props either."""
     s = schemas().get(type_)
     if s is None:
         raise KeyError(f"no schema for {type_} (tools/motion/src/**/{type_}.schema.json)")
-    ev = schemas().get(EVENT, {}).get("properties", {})
+    if s.get("x-event-props") is False:
+        return s
+    ev = {k: v for k, v in schemas().get(EVENT, {}).get("properties", {}).items() if not v.get("x-event-field")}
     return {**s, "properties": {**ev, **s.get("properties", {})}}
+
+
+def layers(type_: str) -> list[str]:
+    """The layers an event of this component may use: the schema's `x-layers`, else front and behind
+    (an overlay component may go under the speaker with `behind`, as before)."""
+    return list(schemas().get(type_, {}).get("x-layers", ["front", "behind"]))
 
 
 def export() -> dict:

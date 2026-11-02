@@ -1,0 +1,53 @@
+{
+  "title": "Gauge",
+  "description": "A dial whose needle creeps, then slams to red at slamAt, with a stamp.",
+  "x-layout": "float",
+  "x-event-props": false,
+  "x-layers": [
+    "front",
+    "behind"
+  ],
+  "examples": [
+    {
+      "label": "RIESGO",
+      "stamp": "FUERA DE RANGO",
+      "slamAt": 1.0
+    }
+  ],
+  "type": "object",
+  "required": [
+    "label",
+    "stamp",
+    "slamAt"
+  ],
+  "properties": {
+    "label": {
+      "type": "string",
+      "x-text": true,
+      "maxLength": 30
+    },
+    "stamp": {
+      "type": "string",
+      "x-text": true,
+      "maxLength": 30
+    },
+    "slamAt": {
+      "type": "number",
+      "x-time": "event"
+    },
+    "y": {
+      "type": "number",
+      "description": "px from the top",
+      "minimum": -4000,
+      "maximum": 4000
+    }
+  },
+  "x-cues": [
+    {
+      "path": "slamAt",
+      "entrance": {
+        "seconds": 0.7
+      }
+    }
+  ]
+}

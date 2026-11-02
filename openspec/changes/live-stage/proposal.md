@@ -32,7 +32,7 @@ A prototype on 2026-11-02 put the footage inside the Remotion composition and dr
   - `Stickers`: key words popping in on their spoken beat;
   - `BehindWord`: a large word rising behind the head, optionally struck through;
   - `DocCard`: a recurring story object with fill, tag and pulse;
-  - `Drawer`: a card falling into a drawer at the bottom of the frame;
+  - `StageDrawer`: a card falling into a drawer at the bottom of the frame (named apart from the engine's existing `Drawer`, which is unchanged);
   - `PhonePanel`: real screens in a phone, for `side` and `corner`;
   - `CodePanel`: a code window typing itself, placeable behind the speaker;
   - `Gauge`: a dial whose needle slams to red, with a stamp;
@@ -42,7 +42,7 @@ A prototype on 2026-11-02 put the footage inside the Remotion composition and dr
 - **The low moment as a segment look.** `look: "low"` makes one short segment black and white with added contrast, and an optional freeze of 0.3–0.5 s. The voice gets one low-pass at about 2.4 kHz, a high-pass at about 220 Hz, a light short echo and a level make-up. That segment's `zoom` is static. It is optional, and at most one per video.
   The first prototype stacked two 1.1 kHz low-passes. The user rejected it as unclear and too muffled, so the voice must stay intelligible.
 - **Captions place themselves.** While a `corner` move is on, captions turn ink and move above the bubble. Emphasis is dropped for words that a `Stickers` or `BehindWord` event already shows.
-- **Speaker cut-out only where it's needed.** The person matte is made for the `behind` events' windows only, plus 0.2 s on each side.
+- **Speaker cut-out only where it's needed.** The person matte is made for the `behind` events' windows only, plus 0.1 s on each side (windows that touch are merged).
 
 Out of scope:
 - Deciding which device fits which line: that's `edit-plans` (the plan compiler) and, above it, the user's or operator's Claude.
@@ -78,7 +78,7 @@ Out of scope:
   - a stage render smoke test on a 5 s fixture.
 - Skills: `short-form-pro` SKILL.md (camera and layers, what each device is for, and that none is required). CLAUDE.md: shortform renders on the stage.
 - Workflows: `short-form-pro` changes render path; `video-use` and `motion-graphics` are unaffected (`Story` keeps its own composition).
-- **Render time.** On the 32 GB M-series Mac, the 68 s launch preview rendered in 59 s at concurrency 6 (720x1280). The Linux 4-vCPU time is measured in this change before release.
+- **Render time.** On the 32 GB M-series Mac, the 68 s launch preview rendered in 59 s at concurrency 6 (720x1280). In the engine image with `--cpus=4`, the same preview took 165 s (concurrency 2), 145 s (3) and 143 s (4); native on the Mac, 101 s.
 - **Disk.** The speaker cut-out is ProRes 4444 with alpha, about 30 MB per second at 720p. It is written for `behind` windows only.
 - No new dependencies. `remotion`'s `OffthreadVideo` is already in the pinned 4.0.535; the licence is unchanged (company licence still needed before charging, as today).
 - **BREAKING** for callers that read `overlay.mov` or `overlay_behind_*.mov` after a shortform render: those files are no longer written.

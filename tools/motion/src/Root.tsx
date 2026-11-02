@@ -1,6 +1,7 @@
 import { CalculateMetadataFunction, Composition } from "remotion";
 import { Overlay, OverlayProps } from "./Overlay";
 import { Story, StoryProps, storyFrames } from "./Story";
+import { Stage, StageProps, stageFrames } from "./stage/Stage";
 import { ASPECTS } from "./layout";
 import { POSE_SHEET, PoseSheet, SheetProps, WIDGET_SAMPLES, WIDGET_SEG, WidgetSheet } from "./explainer/sheets";
 import { Aspect } from "./layout";
@@ -45,6 +46,16 @@ export const RemotionRoot: React.FC = () => {
         height={1920}
         defaultProps={{ durationInSeconds: 10, brand: defaultBrand, events: [] }}
         calculateMetadata={calculateMetadata}
+      />
+      <Composition
+        id="Stage"
+        component={Stage}
+        durationInFrames={300}
+        fps={30}
+        width={1080}
+        height={1920}
+        defaultProps={{ durationInSeconds: 10, brand: defaultBrand, base: "base.mov", persons: [], camera: [], events: [] } as StageProps}
+        calculateMetadata={({ props }) => ({ durationInFrames: stageFrames(props.durationInSeconds) })}
       />
       <Composition
         id="Story"

@@ -1,5 +1,5 @@
-"""Short-form edit engine: talking-head cut + zooms + B&W/freeze looks + Remotion
-overlay + karaoke captions + SFX mix, following video-use's hard rules.
+"""Short-form edit engine: talking-head cut + zooms + B&W/freeze looks, composed on the Remotion
+stage (camera, layers, speaker cut-out, events, captions) + SFX mix, following video-use's hard rules.
 
 A project's `edit/build.py` only holds data (segments, overlay events, SFX) and
 calls `Project(...).build()`. See `.claude/skills/short-form-pro/SKILL.md`.
@@ -7,15 +7,17 @@ calls `Project(...).build()`. See `.claude/skills/short-form-pro/SKILL.md`.
 Pipeline:
   1. per-segment extract (grade, look, face-centred zoom, freeze, 30ms fades)
   2. lossless concat → base
-  3. Remotion `Overlay` composition (transparent ProRes 4444) from events JSON
-  4. dialogue + SFX (attack-aligned) → two-pass loudnorm
-  5. final: base ⊕ overlay → karaoke ASS captions LAST → H.264/AAC
+  3. dialogue + SFX (attack-aligned) → two-pass loudnorm
+  4. Remotion `Stage` composition draws every frame from the base: camera, `panel` / `behind` / `front`
+     events, the speaker's cut-out (ProRes 4444 alpha, `behind` windows only) and the captions
+  5. final: stage video + mix → H.264/AAC (legacy ASS captions burned LAST)
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -25,7 +27,7 @@ from pathlib import Path
 from audio_env import envelope
 from brand import load_brand
 from errors import ToolError, cause_line
-from person_matte import make_matte
+from person_matte import cutout, cutout_still, make_matte, matte_windows
 
 REPO = Path(__file__).resolve().parent.parent
 MOTION = REPO / "tools" / "motion"
@@ -124,8 +126,22 @@ DELIVERY_X264 = [
 LOOKS = {
     None: "",
     "bw": "hue=s=0,eq=contrast=1.12:brightness=-0.02",
+    # the low moment (live-stage D6): black and white with added contrast; its voice treatment is in mix_audio
+    "low": "hue=s=0,eq=contrast=1.15:brightness=-0.02",
 }
 
+
+# the low moment's voice: one band-pass (220 Hz–2.4 kHz keeps the consonants, 2–4 kHz, audible), a light short
+# echo and a little level back. Two 1.1 kHz low-passes were tried and rejected: too muffled to understand.
+LOW_VOICE = "highpass=f=220,lowpass=f=2400,aecho=0.85:0.6:40|80:0.22|0.1,volume=1.6dB"
+
+# the corner move's speaker bubble on the 1080x1920 stage (tools/motion/src/stage/camera.ts): scale 0.3 about the
+# bottom-right corner, with a 10 px white ring
+BUBBLE_TOP = 1920 - round(0.3 * 1920) - 10
+# word-synced devices: emphasis, not restatement (the echo rule exempts them; captions don't emphasise what they show)
+SYNCED = ("Stickers", "BehindWord")
+SYNCED_MAX_WORDS = 3
+SYNC_SLACK = 0.3
 
 HDR_TRANSFERS = {"arib-std-b67", "smpte2084"}  # HLG, PQ
 
@@ -197,6 +213,8 @@ class Project:
     face: dict[str, tuple[int, int]]  # face centre per take, source px
     segments: list[Seg]
     events: list[dict] = field(default_factory=list)  # Remotion overlay events (output seconds)
+    # camera moves on the stage (output seconds): {"kind": push|pull|side|corner, "start", "end", "amount"?}
+    camera: list[dict] = field(default_factory=list)
     sfx: list[tuple[str, float, float]] = field(default_factory=list)  # (name, contact t, gain dB)
     # brand slug → brands/<slug>/brand.json (theme, fonts, caption style); None/"none" → neutral.
     # A dict is used as the Remotion theme as-is (fonts then go in public_files by hand).
@@ -507,7 +525,7 @@ class Project:
         pub.mkdir(exist_ok=True)
         for name, src in self.public_files.items():
             stage(src, pub / name)
-        events = [e for e in self.events if not e.get("props", {}).get("behind")]
+        events = list(self.events)
         if self.caption_engine == "remotion":
             events.append(self.caption_event())  # LAST = top layer (captions above every overlay)
         props = {"durationInSeconds": round(self.offsets()[-1], 3), "brand": self.brand,
@@ -693,8 +711,6 @@ class Project:
         `warnings` (Finding kinds): text that shows almost no pixels (no_text), text under its WCAG contrast
         against what is really behind it, the event drawn over the cut's own frame with and without its glyphs
         (contrast), text under MIN_TEXT px (small_text), text over the head (face)."""
-        import numpy as np
-
         import overlay_schema as O
         warnings = warnings if warnings is not None else []
         boxes = self._boxes()
@@ -710,7 +726,9 @@ class Project:
 
         def floating(e: dict) -> bool:
             p_ = e.get("props", {})
-            return not p_.get("full") and not p_.get("behind") and "frame" not in p_
+            # stage components sit where the spec put them (their schema takes no `frame`); only layer front floats
+            return (not p_.get("full") and self.layer_of(e) == "front" and "frame" not in p_
+                    and e["type"] not in O.STAGE)
 
         def alpha_box(png: Path) -> list[int] | None:
             img = self._rgba(png)
@@ -736,17 +754,14 @@ class Project:
                 continue
             e["props"] = {**e.get("props", {}), "frame": frame}
             placed.append((k, e))
-        jobs = [(k, "alone", alone(e), {"measure": True}) for k, e in placed]
-        if probe:
-            for k, e in todo:
-                if e.get("props", {}).get("full"):  # the text sits on the backdrop: draw it, both ways
-                    jobs.append((k, "text", e, {}))
-                    jobs.append((k, "blank", e, {"hideText": True}))
-                else:
-                    jobs.append((k, "blank", alone(e), {"hideText": True}))
-        res.update(self._batch(jobs, scale, pub, tmp))
+        res.update(self._batch([(k, "alone", alone(e), {"measure": True}) for k, e in placed], scale, pub, tmp))
+        # the probe: each event drawn on the stage (the cut's own frame, the camera, the speaker's cut-out when it is
+        # behind) with its glyphs and without them; the difference is exactly the text a viewer reads
+        stage_res = self._stage_batch(
+            [{"key": f"{k}_{tag}", "t": self._still_time(e), "events": [e], "extra": extra}
+             for k, e in todo if probe for tag, extra in (("text", {}), ("blank", {"hideText": True}))],
+            scale, pub, tmp) if probe else {}
 
-        frames: dict[float, object] = {}
         measured = {}  # → edit/overlay_text.json
         for k, e in todo:
             key, png, texts = self._box_key(e), *res[(k, "alone")]
@@ -767,21 +782,9 @@ class Project:
             if not probe:
                 continue
             t, label, props = entry["t"], self._ev_label(e, k), e.get("props", {})
-            img = self._rgba(res[(k, "text")][0] if props.get("full") else png).astype(float)
-            blank = self._rgba(res[(k, "blank")][0]).astype(float)
-            h, w = img.shape[:2]
-            if t not in frames:
-                frames[t] = self._rgba(self._base_frame(t, w, h, tmp / f"base_{t:06.2f}.png"))[:, :, :3].astype(float)
-            base = frames[t]
-            over = lambda x: x[:, :, :3] * (x[:, :, 3:] / 255) + base * (1 - x[:, :, 3:] / 255)  # noqa: E731
-            comp, comp0 = over(img), over(blank)
+            comp = self._rgba(stage_res[f"{k}_text"][0])[:, :, :3].astype(float)
+            comp0 = self._rgba(stage_res[f"{k}_blank"][0])[:, :, :3].astype(float)
             diff = (abs(comp - comp0) > PROBE_DELTA).any(axis=2)
-            if props.get("behind"):  # under the speaker's cut-out: only what the matte leaves visible counts
-                matte = tmp / f"matte_{k}.mov"
-                make_matte(tmp / f"base_{t:06.2f}.png", 0, 1 / self.fps, matte, fps=self.fps)
-                raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(matte), "-frames:v", "1", "-vf", f"scale={w}:{h}",
-                                      "-pix_fmt", "gray", "-f", "rawvideo", "-"], capture_output=True, check=True).stdout
-                diff &= np.frombuffer(raw, np.uint8).reshape(h, w) < 128
             if known and O.text_fields(e["type"], props) and diff.sum() < PROBE_SHARE * diff.size:
                 warnings.append(Finding(f"{label} shows almost no text at {t:.2f} s ({int(diff.sum())} px of text; "
                                         f"is it off screen, masked, or not in yet?)", "no_text"))
@@ -797,7 +800,7 @@ class Project:
                 warnings.append(Finding(f"{label} text contrast {r:.1f}:1 at {t:.2f} s is under {need:g}:1 ({which}); "
                                         f"give it a card or a colour that reads on what is behind it", "contrast"))
             head = self.head_box(e)
-            if head and not props.get("full") and not props.get("behind") \
+            if head and not props.get("full") and self.layer_of(e) == "front" \
                     and (over_face := [g["field"] for g in groups if hits(g["box"], head)]):
                 fix = "move it off the face" if "frame" in props else \
                     'set "full": true, or let the engine place it (it does for floating overlays)'
@@ -809,9 +812,9 @@ class Project:
 
     def stills(self, times: list[float] | None = None, preview: bool = True,
                warnings: list[str] | None = None) -> list[dict]:
-        """Frames of the FINISHED short (cut + zoom/look, overlays, captions, behind-the-speaker
-        layers) at output times, without rendering the video: one source frame through the
-        segment's own filter, one Remotion still per layer, one ffmpeg composite each.
+        """Frames of the FINISHED short (cut + zoom/look, camera, every layer, the speaker's cut-out, captions)
+        at output times, without rendering the video: one source frame through the segment's own filter,
+        drawn by one Remotion `Stage` still each.
         Default times: the middle of every segment → edit/stills/short_<t>.png. Always, one still per
         overlay event once its entrance has finished → edit/stills/ev<NN>_<Type>_<t>.png (540x960 preview,
         else 1080x1920). Returns [{"path", "t", "event"?, "type"?}]; legibility and caption-placement
@@ -833,59 +836,29 @@ class Project:
         out_dir = self.edit_dir / "stills"
         tmp = out_dir / "_layers"
         tmp.mkdir(parents=True, exist_ok=True)
-        pub, pj = self.stage_overlay()
+        pub, _ = self.stage_overlay()
         layer = self._overlay_events()
-
-        def remotion_still(props: Path, t: float, dst: Path, events: list[dict]) -> None:
-            try:
-                self._still(props, t, dst, scale, pub)
-            except ToolError as err:
-                raise self._blame(err, events, t, scale, pub, tmp) from None
-
         out = []
-        for shot in shots:
-            t = shot["t"]
-            base = self._base_frame(t, w, h, tmp / f"base_{t:06.2f}.png")
-            ov = tmp / f"ov_{t:06.2f}.png"
-            remotion_still(pj, t, ov, layer)
-            inputs, parts, cur = ["-i", str(base)], [], "[0:v]"
-            behind = [e for e in self.events if e.get("props", {}).get("behind")
-                      and e["start"] <= t < e["start"] + e["duration"]]
-            if behind:
-                matte = tmp / f"matte_{t:06.2f}.mov"
-                make_matte(base, 0, 1 / self.fps, matte, fps=self.fps)
-                inputs += ["-i", str(matte)]
-                parts += [f"[1:v]scale={w}:{h},format=gray[m]", "[0:v]format=yuva420p[sp]", "[sp][m]alphamerge[pm]"]
-                for k, e in enumerate(behind):
-                    pk = self._props_file([e], tmp / f"behind_{t:06.2f}_{k}.json")
-                    lay = tmp / f"behind_{t:06.2f}_{k}.png"
-                    remotion_still(pk, t, lay, [e])
-                    inputs += ["-i", str(lay)]
-                    parts.append(f"{cur}[{len(inputs) // 2 - 1}:v]overlay=0:0:format=auto[b{k}]")
-                    cur = f"[b{k}]"
-                parts.append(f"{cur}[pm]overlay=0:0:format=auto[sp2]")
-                cur = "[sp2]"
-            inputs += ["-i", str(ov)]
-            parts.append(f"{cur}[{len(inputs) // 2 - 1}:v]overlay=0:0:format=auto")
+        try:
+            res = self._stage_batch([{"key": str(i), "t": shot["t"], "events": None, "extra": {}}
+                                     for i, shot in enumerate(shots)], scale, pub, tmp)
+        except ToolError as err:
+            if m := re.search(r"stage still at ([\d.]+) s", err.summary or ""):
+                raise self._blame(err, layer, float(m.group(1)), scale, pub, tmp) from None
+            raise
+        finally:
+            shutil.rmtree(pub / "_stills", ignore_errors=True)
+        for i, shot in enumerate(shots):
             dst = out_dir / shot["name"]
-            run(["ffmpeg", "-y", *inputs, "-filter_complex", ";".join(parts), "-frames:v", "1", str(dst)])
-            out.append({"path": dst, "t": t, **{k: shot[k] for k in ("event", "type") if k in shot}})
+            shutil.copy2(res[str(i)][0], dst)
+            out.append({"path": dst, "t": shot["t"], **{k: shot[k] for k in ("event", "type") if k in shot}})
         shutil.rmtree(tmp, ignore_errors=True)
         return out
-
-    def render_overlay(self, preview: bool, out: Path) -> None:
-        pub, pj = self.stage_overlay()
-        cmd = ["npx", "remotion", "render", "Overlay", str(out), f"--props={pj}",
-               f"--public-dir={pub}", "--codec=prores", "--prores-profile=4444",
-               "--pixel-format=yuva444p10le", "--image-format=png", "--log=error"]
-        try:
-            run(cmd, cwd=MOTION)  # always 1080x1920; ffmpeg scales it to the base for previews
-        except ToolError as err:
-            raise self._blame_render(err, pub) from None
 
     def _blame_render(self, err: ToolError, pub: Path) -> ToolError:
         """A failed overlay render: blame the event on screen at the frame Remotion names, else the first
         event that fails drawn alone at its still time (only runs after a failure)."""
+        self.stage_overlay()  # the events as the Overlay composition draws them, one at a time
         events = self._overlay_events()
         tmp = self.edit_dir / "stills" / "_blame"
         tmp.mkdir(parents=True, exist_ok=True)
@@ -903,42 +876,145 @@ class Project:
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
-    def render_behind(self, base: Path, tag: str, reuse_layer: bool, reuse_matte: bool) -> list[tuple[float, float, Path, Path]]:
-        """Events with `props.behind: true` go UNDER the speaker: each is rendered on its own
-        (only its frames) plus a person matte of the base for the same window. build() stacks
-        base → this layer → matted speaker → the main overlay."""
-        out = []
-        pub, _ = self.stage_overlay()
-        total = round(self.offsets()[-1], 3)
-        for k, e in enumerate(e for e in self.events if e.get("props", {}).get("behind")):
-            f0 = round(e["start"] * self.fps)
-            f1 = f0 + round(e["duration"] * self.fps) - 1
-            t0, dur = f0 / self.fps, (f1 - f0 + 1) / self.fps
-            layer = self.edit_dir / f"overlay_behind_{k}.mov"
-            matte = self.edit_dir / f"matte_{tag}_{k}.mov"
-            if not (reuse_layer and layer.exists()):
-                pj = self.edit_dir / f"overlay_behind_{k}.json"
-                pj.write_text(json.dumps({"durationInSeconds": total, "brand": self.brand, "events": [e]},
-                                         ensure_ascii=False))
-                run(["npx", "remotion", "render", "Overlay", str(layer), f"--props={pj}", f"--public-dir={pub}",
-                     f"--frames={f0}-{f1}", "--codec=prores", "--prores-profile=4444",
-                     "--pixel-format=yuva444p10le", "--image-format=png", "--log=error"], cwd=MOTION)
-            if not (reuse_matte and matte.exists()):  # the matte only changes with the cut
-                make_matte(base, t0, dur, matte, fps=self.fps)
-            out.append((t0, t0 + dur, layer, matte))
+    # ── 3a. stage stills ──────────────────────────────────────────────────
+    def _stage_batch(self, jobs: list[dict], scale: float, pub: Path, tmp: Path) -> dict:
+        """Stage stills from one Remotion bundle. A job is {"key", "t", "events" (None: every event and the
+        captions), "extra": top-level props (measure / hideText)}. Each still sits over the cut's own frame at
+        `t` (zoom, look) and, when one of its events is `behind` the speaker, over the speaker's cut-out too,
+        under the real camera. → {key: (png, measured texts | None)}."""
+        total = self.offsets()[-1]
+        assets = pub / "_stills"
+        assets.mkdir(parents=True, exist_ok=True)
+        cache: dict[float, tuple[str, str | None]] = {}
+
+        def frame_assets(t: float, behind: bool) -> tuple[str, str | None]:
+            base = f"base_{t:06.2f}.png"
+            if t not in cache:
+                self._base_frame(t, 1080, 1920, assets / base)
+                cache[t] = (base, None)
+            if behind and cache[t][1] is None:
+                person = f"person_{t:06.2f}.png"
+                cutout_still(assets / base, assets / person, fps=self.fps)
+                cache[t] = (base, person)
+            return cache[t]
+
+        spec = []
+        for j in jobs:
+            t = j["t"]
+            on = [e for e in (j["events"] if j["events"] is not None else self.events)
+                  if self.layer_of(e) == "behind" and e["start"] <= t < e["start"] + e["duration"]]
+            base, person = frame_assets(t, bool(on))
+            pj = self.stage_props("", [], tmp / f"stage_{j['key']}.json", events=j["events"],
+                                  baseImage=f"_stills/{base}", **({"personImage": f"_stills/{person}"} if person else {}),
+                                  **j.get("extra", {}))
+            spec.append({"props": str(pj), "frame": min(round(t * self.fps), round(total * self.fps) - 1),
+                         "out": str((tmp / f"stage_{j['key']}.png").resolve()), "scale": scale, "composition": "Stage"})
+        if not spec:
+            return {}
+        cmd = ["node", "scripts/stills.mjs"]
+        r = subprocess.run(cmd, input=json.dumps({"publicDir": str(pub.resolve()), "jobs": spec}), capture_output=True,
+                           text=True, cwd=MOTION)
+        lines = [json.loads(ln) for ln in r.stdout.splitlines() if ln.startswith("{")]
+        out = {}
+        for j, res in zip(jobs, lines):
+            if "error" in res:
+                raise ToolError(cmd, res["error"], f"stage still at {j['t']:.2f} s failed: {cause_line(res['error'])}")
+            texts = next((m["texts"] for m in res["measure"] or []), None) if res.get("measure") is not None else None
+            out[j["key"]] = (Path(res["out"]), texts)
+        if len(lines) < len(jobs):
+            raise ToolError(cmd, r.stderr or r.stdout)
+        shutil.rmtree(assets, ignore_errors=True)
+        return out
+
+    # ── 3b. the stage: Remotion draws every frame ─────────────────────────
+    @staticmethod
+    def layer_of(e: dict) -> str:
+        """The layer an event is drawn on: its `layer`, else `behind` for the older `props.behind`, else front."""
+        return e.get("layer") or ("behind" if e.get("props", {}).get("behind") else "front")
+
+    def person_windows(self) -> list[tuple[float, float]]:
+        """Output-second windows needing the speaker's cut-out: the `behind` events, padded and merged."""
+        spans = [(e["start"], e["start"] + e["duration"]) for e in self.events if self.layer_of(e) == "behind"]
+        return matte_windows(spans, round(self.offsets()[-1], 3), self.fps)
+
+    def stage_props(self, base: str, persons: list[dict], path: Path, events: list[dict] | None = None,
+                    **extra) -> Path:
+        """The `Stage` composition's props: the base's name in the public dir, the speaker windows, the camera and
+        every event with its layer (captions last, on top), or just `events`."""
+        if events is None:
+            events = [{**e, "layer": self.layer_of(e)} for e in self.events]
+            if self.caption_engine == "remotion":
+                events.append(self.caption_event())
+        else:
+            events = [{**e, "layer": self.layer_of(e)} for e in events]
+        props = {"durationInSeconds": round(self.offsets()[-1], 3), "brand": self.brand, "base": base,
+                 "persons": persons, "camera": [{k: v for k, v in m.items() if k != "index"} for m in self.camera],
+                 "events": events, **extra}
+        path.write_text(json.dumps(props, indent=1, ensure_ascii=False))
+        return path
+
+    def render_stage(self, base: Path, tag: str, out: Path, preview: bool) -> Path:
+        """Draw the short on the Remotion `Stage` from the cut `base` (preview 720x1280, final 1080x1920) into the
+        video-only `out`. The speaker's cut-out is made for the `behind` windows only and deleted afterwards."""
+        pub = self.edit_dir / "motion_public"
+        pub.mkdir(exist_ok=True)
+        for name, src in self.public_files.items():
+            stage(src, pub / name)
+        stage(base, pub / base.name)
+        persons, made = [], []
+        try:
+            for k, (a, b) in enumerate(self.person_windows()):
+                f = pub / f"person_{tag}_{k}.mov"
+                made.append(f)
+                print(f"  speaker cut-out {a:.2f}-{b:.2f} s…")
+                cutout(base, a, b - a, f, fps=self.fps)
+                persons.append({"start": a, "end": b, "src": f.name})
+            pj = self.stage_props(base.name, persons, self.edit_dir / "stage_props.json")
+            print("  rendering the Remotion stage…")
+            cmd = ["npx", "remotion", "render", "Stage", str(out), f"--props={pj}", f"--public-dir={pub}",
+                   "--codec=h264", f"--crf={20 if preview else 10}", "--pixel-format=yuv420p", "--color-space=bt709",
+                   "--muted", "--log=error"]
+            if preview:
+                cmd.append(f"--scale={2 / 3!r}")  # exactly 720x1280 (a rounded 0.6667 gives 1280.06 px and is refused)
+            if n := os.environ.get("ENGINE_RENDER_CONCURRENCY"):
+                cmd.append(f"--concurrency={n}")
+            try:
+                run(cmd, cwd=MOTION)
+            except ToolError as err:
+                raise self._blame_render(err, pub) from None
+        finally:
+            for f in made:
+                f.unlink(missing_ok=True)
+            (pub / base.name).unlink(missing_ok=True)
         return out
 
     # ── 4. audio ──────────────────────────────────────────────────────────
+    def low_span(self) -> tuple[float, float] | None:
+        """Output seconds (start, end) of the low moment (its freeze included), or None."""
+        offs = self.offsets()
+        idx = [i for i, s in enumerate(self.segments) if s.look == "low"]
+        return (offs[idx[0]], offs[idx[-1] + 1]) if idx else None
+
     def mix_audio(self, base: Path, out: Path) -> None:
         attacks = json.loads((SFX_DIR / "attack.json").read_text())
         cmd = ["ffmpeg", "-y", "-i", str(base)]
-        parts = []
+        parts, voice = [], "[0:a]"
+        if span := self.low_span():  # the low moment's voice: band-limited, a short echo, level made up (D6)
+            total, (t0, t1) = self.offsets()[-1], span
+            cuts = [(a, b) for a, b in ((0.0, t0), (t0, t1), (t1, total)) if b - a > 1e-3]
+            labels = []
+            for k, (a, b) in enumerate(cuts):
+                f = LOW_VOICE + "," if abs(a - t0) < 1e-6 and abs(b - t1) < 1e-6 else ""
+                parts.append(f"[0:a]atrim={a:.4f}:{b:.4f},asetpts=PTS-STARTPTS,{f}aformat=sample_rates=48000[v{k}]")
+                labels.append(f"[v{k}]")
+            parts.append(f"{''.join(labels)}concat=n={len(labels)}:v=0:a=1[voice]")
+            voice = "[voice]"
         for j, (name, t, db) in enumerate(self.sfx):
             cmd += ["-i", str(SFX_DIR / f"{name}.wav")]
             ms = max(0, round((t - attacks[name]) * 1000))
             parts.append(f"[{j + 1}:a]volume={db}dB,adelay={ms}|{ms}[s{j}]")
         labels = "".join(f"[s{j}]" for j in range(len(self.sfx)))
-        fc = ";".join(parts + [f"[0:a]{labels}amix=inputs={len(self.sfx) + 1}:normalize=0:duration=first[m]"])
+        fc = ";".join(parts + [f"{voice}{labels}amix=inputs={len(self.sfx) + 1}:normalize=0:duration=first[m]"])
         raw = self.edit_dir / "mix_raw.wav"
         run(cmd + ["-filter_complex", fc, "-map", "[m]", "-c:a", "pcm_s24le", str(raw)])
         loudnorm_2pass(raw, out, self.lufs)
@@ -1029,6 +1105,24 @@ class Project:
                 k += n
         return res
 
+    def _synced_tokens(self, e: dict, t: float) -> set[str]:
+        """The words a word-synced device (Stickers, BehindWord) shows at output time `t`, normalised. A device
+        counts from SYNC_SLACK s before its cue: Whisper stamps a word early, and the device lands on the beat."""
+        if e["type"] not in SYNCED or not e["start"] <= t < e["start"] + e["duration"]:
+            return set()
+        p, rel = e.get("props", {}), t - e["start"] + SYNC_SLACK
+        shown = [i["text"] for i in p.get("items", []) if i.get("at", 0) <= rel] if e["type"] == "Stickers" \
+            else [p.get("word", ""), p.get("lead", "")] if p.get("riseAt", 0) <= rel else []
+        return {_norm(w) for s_ in shown for w in re.split(r"[\s·/\n]+", s_) if w}
+
+    def _synced_unemphasised(self, words: list[dict], flags: list[int]) -> list[int]:
+        """Caption emphasis is dropped for a phrase a word-synced device is showing as one of its words is spoken:
+        the same words twice, one of them in a heavier face, doubled on screen. The whole phrase goes, so it never
+        reads half-emphasised."""
+        drop = {f for w, f in zip(words, flags)
+                if f and any(_norm(self.clean(w["text"])) in self._synced_tokens(e, w["start"]) for e in self.events)}
+        return [0 if f in drop else f for f in flags]
+
     def _emph_flags(self, words: list[dict]) -> list[int]:
         """Group id (>0) for words inside an `emphasis` phrase, else 0."""
         flags = [0] * len(words)
@@ -1052,7 +1146,7 @@ class Project:
         "word" = one word on screen at a time (each replaces the last), except key phrases,
         which stay together as one chunk."""
         words = self.output_words()
-        flags = self._emph_flags(words)
+        flags = self._synced_unemphasised(words, self._emph_flags(words))
         for w, f in zip(words, flags):
             w["emph"] = f
         if self.caption_props.get("mode") == "word":
@@ -1089,6 +1183,12 @@ class Project:
                  if e.get("props", {}).get("full") and not e["props"].get("dark")]
         total = round(self.offsets()[-1], 3)
         avoid, _ = self._caption_moves()
+        # a corner move: the speaker is a bubble at the bottom right over a light backdrop, so captions turn ink and
+        # sit above it (first in `avoid`, which Captions reads in order: the bubble wins over an event's text)
+        cap_h = round(2.65 * max(self.caption_props.get("size", 58), self.caption_props.get("emphSize", 68)))
+        corners = [[m["start"], m["end"]] for m in self.camera if m["kind"] == "corner"]
+        light += corners
+        avoid = [[a, b, BUBBLE_TOP - CAP_GAP - cap_h] for a, b in corners] + avoid
         return {"type": "Captions", "start": 0, "duration": total, "name": "Captions",
                 "props": {"words": cap_words, "chunks": cap_chunks, "lightRanges": light, **self.caption_props,
                           **({"avoid": avoid} if avoid else {})}}
@@ -1105,7 +1205,7 @@ class Project:
         for k, e in enumerate(self.events):
             b = boxes.get(self._box_key(e))
             box = b and (b.get("box") or b.get("text"))
-            if not box or e.get("props", {}).get("behind"):
+            if not box or self.layer_of(e) != "front":
                 continue  # nothing measured, or under the speaker (captions sit over the speaker anyway)
             y0, y1 = box[1], box[3]
             if y1 <= top - 60 or y0 >= top + cap_h:
@@ -1132,6 +1232,19 @@ class Project:
     ECHO_KEYS = {"label", "stamp", "title", "chip", "note", "kicker", "year", "text", "docTitle",
                  "emphasis", "success", "button", "handle", "items", "lines_", "photos", "screens"}
 
+    @staticmethod
+    def _echo_exempt(e: dict) -> bool:
+        """Emphasis, not restatement: stickers and behind-the-head words of at most SYNCED_MAX_WORDS words each
+        (kinetic type on its spoken beat), and a notice quoting what the speaker reports."""
+        p = e.get("props", {})
+        if e["type"] == "Notice":
+            return True
+        if e["type"] == "Stickers":
+            return all(len(str(i.get("text", "")).split()) <= SYNCED_MAX_WORDS for i in p.get("items", []))
+        if e["type"] == "BehindWord":
+            return len(str(p.get("word", "")).split()) <= SYNCED_MAX_WORDS
+        return False
+
     def echo_check(self, window: float = 1.0) -> list[str]:
         """Graphics must COMPLEMENT the captions, never repeat them. Flags any content word
         (or number) shown by an overlay that is also captioned within ±window s of it."""
@@ -1150,6 +1263,8 @@ class Project:
 
         out = []
         for e in self.events:
+            if self._echo_exempt(e):
+                continue
             a, b = e["start"] - window, e["start"] + e["duration"] + window
             spoken = {_norm(self.clean(w["text"])) for w in words if a <= w["start"] <= b}
             shown = {_norm(t) for s in texts(e.get("props", {})) for t in re.split(r"[\s·/\n]+", s)}
@@ -1198,50 +1313,32 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
     # ── all ───────────────────────────────────────────────────────────────
     def build(self, preview: bool, skip_extract: bool = False, skip_overlay: bool = False) -> Path:
+        """Cut, mix and draw the short → edit/preview.mp4 or final.mp4. `skip_extract` reuses the extracted clips.
+        `skip_overlay` is accepted for older build.py files: the stage draws every frame, so there is no overlay
+        to reuse."""
         tag = "preview" if preview else "final"
         print(f"planned duration: {self.offsets()[-1]:.2f}s, {len(self.segments)} segments, "
-              f"{len(self.events)} overlay events, {len(self.sfx)} sfx")
+              f"{len(self.events)} overlay events, {len(self.camera)} camera moves, {len(self.sfx)} sfx")
         d = self.edit_dir / ("clips_preview" if preview else "clips_graded")
         paths = ([d / f"seg_{i:02d}.mov" for i in range(len(self.segments))]
                  if skip_extract else self.extract(preview))
         base = self.edit_dir / f"base_{tag}.mov"
         self.concat(paths, base)
-        overlay = self.edit_dir / "overlay.mov"  # same 1080p render for preview and final
-        if not (skip_overlay and overlay.exists()):
-            self.measure_events(probe=False, missing_only=True)  # scene content boxes → caption placement
-            print("  rendering Remotion overlay…")
-            self.render_overlay(preview, overlay)
-        behind = self.render_behind(base, tag, reuse_layer=skip_overlay, reuse_matte=skip_extract)
+        self.measure_events(probe=False, missing_only=True)  # scene content boxes → caption placement
         mix = self.edit_dir / f"mix_{tag}.wav"
         self.mix_audio(base, mix)
+        video = self.render_stage(base, tag, self.edit_dir / f"stage_{tag}.mp4", preview)
         out = self.edit_dir / f"{tag}.mp4"
-        w, h = (720, 1280) if preview else (1080, 1920)
-        # behind-the-speaker layers: base → layer → base cut out by the person matte (same window)
-        extra, parts, cur = [], [], "[0:v]"
-        if behind:
-            parts.append("[0:v]split=" + str(len(behind) + 1) + "[bg]" + "".join(f"[sp{k}]" for k in range(len(behind))))
-            cur = "[bg]"
-        for k, (t0, t1, layer, matte) in enumerate(behind):
-            li, mi = 3 + 2 * k, 4 + 2 * k
-            extra += ["-i", str(layer), "-i", str(matte)]
-            parts += [f"[{li}:v]scale={w}:{h}:flags=lanczos,setpts=PTS-STARTPTS+{t0:.4f}/TB[bl{k}]",
-                      f"{cur}[bl{k}]overlay=0:0:eof_action=pass:format=auto[bb{k}]",
-                      f"[sp{k}]trim=start={t0:.4f}:end={t1:.4f},setpts=PTS-STARTPTS,format=yuva420p[pp{k}]",
-                      f"[{mi}:v]scale={w}:{h},format=gray,setpts=PTS-STARTPTS[m{k}]",
-                      f"[pp{k}][m{k}]alphamerge,setpts=PTS-STARTPTS+{t0:.4f}/TB[pm{k}]",
-                      f"[bb{k}][pm{k}]overlay=0:0:eof_action=pass:format=auto[cb{k}]"]
-            cur = f"[cb{k}]"
-        fc = ";".join(parts + [f"[1:v]scale={w}:{h}:flags=lanczos[ov]"]) + f";{cur}[ov]overlay=0:0:format=auto"
-        if self.caption_engine == "ass":  # legacy: burn karaoke ASS after the overlay (captions LAST)
+        vf = []
+        if self.caption_engine == "ass":  # legacy: burn karaoke ASS after the stage (captions LAST)
             ass = self.edit_dir / "captions.ass"
             self.build_ass(ass)
-            ass_arg = str(ass).replace(":", r"\:").replace("'", r"\'")
-            fc += f",ass='{ass_arg}'"
-        fc += "[v]"  # remotion engine: captions are already the top layer of the overlay
-        run(["ffmpeg", "-y", "-i", str(base), "-i", str(overlay), "-i", str(mix), *extra,
-             "-filter_complex", fc, "-map", "[v]", "-map", "2:a",
-             *(["-c:v", "libx264", "-preset", "veryfast", "-crf", "22"] if preview else DELIVERY_X264),
-             "-pix_fmt", "yuv420p", "-r", str(self.fps),
+            vf = ["-vf", "ass='" + str(ass).replace(":", r"\:").replace("'", r"\'") + "'"]
+        # the preview's stage video is already encoded for review: copy it unless a filter needs a re-encode
+        enc = ["-c:v", "copy"] if preview and not vf else \
+            (["-c:v", "libx264", "-preset", "veryfast", "-crf", "22"] if preview else DELIVERY_X264)
+        run(["ffmpeg", "-y", "-i", str(video), "-i", str(mix), *vf, "-map", "0:v", "-map", "1:a", *enc,
+             *([] if enc[1] == "copy" else ["-pix_fmt", "yuv420p", "-r", str(self.fps)]),
              "-c:a", "aac", "-b:a", "320k", "-ar", "48000", "-movflags", "+faststart", "-shortest", str(out)])
         print(f"wrote {out}")
         return out

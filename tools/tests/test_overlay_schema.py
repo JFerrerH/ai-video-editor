@@ -130,6 +130,50 @@ class ComponentTest(unittest.TestCase):
         self.assertEqual(O.cue_finish("StatScene", {"value": 1}, 30, 3.0), [("countEnd", 1.3, round(1.3 + 10 / 30, 3))])
 
 
+STAGE = ["Stickers", "BehindWord", "DocCard", "StageDrawer", "PhonePanel", "CodePanel", "Gauge", "Stuck", "Notice"]
+
+
+class StageComponentsTest(unittest.TestCase):
+    def test_export_lists_the_nine_and_the_shared_props(self):
+        out = O.export()
+        for name in STAGE:
+            self.assertIn(name, out)
+            self.assertIn(name, O.COMPONENTS)
+        self.assertEqual(out["event"]["properties"]["layer"]["enum"], ["front", "behind", "panel"])
+        self.assertIn("object", out["event"]["properties"])
+
+    def test_the_engines_drawer_is_still_its_own_component(self):
+        self.assertIn("closeAt", O.schemas()["Drawer"]["properties"])
+        self.assertIn("dropAt", O.schemas()["StageDrawer"]["properties"])
+
+    def test_every_stage_component_declares_its_layers(self):
+        for name in STAGE:
+            layers = O.layers(name)
+            self.assertTrue(layers and set(layers) <= {"front", "behind", "panel"}, name)
+        self.assertEqual(O.layers("HookTitle"), ["front", "behind"])  # engine components: as before
+
+    def test_every_example_validates(self):
+        for name in STAGE:
+            for ex in O.schemas()[name]["examples"]:
+                self.assertEqual(O.validate(name, ex, anchors=True), [], name)
+
+    def test_stage_components_do_not_take_the_overlay_backdrop_props(self):
+        m = msgs("Notice", {"from": "A", "text": "b", "full": True})
+        self.assertIn("full", m)
+
+    def test_layer_and_object_are_event_fields_not_props(self):
+        self.assertIn("layer", msgs("Notice", {"from": "A", "text": "b", "layer": "behind"}))
+        self.assertIn("object", msgs("HookTitle", {"lines": [{"text": "a"}], "object": "x"}))
+
+    def test_sticker_after_the_event_ends_is_a_cue(self):
+        cues = O.cue_finish("Stickers", {"items": [{"text": "a", "at": 0.3, "x": 0, "y": 0}]}, 30, 2.0)
+        self.assertEqual(cues, [("items[0]", 0.3, 0.65)])
+
+    def test_time_fields(self):
+        tf = {p for p, *_ in O.time_fields("PhonePanel", {"mode": "side", "screens": [{"src": "a", "at": 1}]})}
+        self.assertEqual(tf, {"screens[0].at"})
+
+
 def flat_keys(s: dict, prefix: str = "") -> list[str]:
     out = []
     for k, v in s.get("properties", {}).items():

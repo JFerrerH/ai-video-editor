@@ -9,7 +9,7 @@ description: Turn a talking-head take into a professional, high-retention vertic
 short: something new on screen every 2–3 s, all of it tied to the words being
 spoken. Everything here runs locally and costs nothing.
 
-**Engine:** `tools/shortform.py` (Python), `tools/motion/` (Remotion overlay),
+**Engine:** `tools/shortform.py` (Python), `tools/motion/` (the Remotion stage that draws every frame),
 `tools/sfx_synth.py` (SFX), `tools/site_capture.py` (website stills).
 **Describe the short as data:** `edit/short.json` (template `templates/short.json`, shape and anchors in
 `tools/short_spec.py`), run with `uv run tools/shortform.py check|stills|render <edit>/short.json`. It is
@@ -164,8 +164,8 @@ Examples below are illustrative. They show the technique, not a style to copy.
    A drawn-out filler ("y…") you drop at an in-point can still get captioned from Whisper's stretched
    stamp: list it in `captions.skip`. Check the transcript's `untranscribed` ranges first: speech the
    transcriber couldn't put words to has no captions and no word anchors.
-6. `uv run tools/shortform.py stills <edit>/short.json [--at t …]` → finished-look frames (cut, zoom, overlays,
-   captions, behind-the-speaker layers) in `edit/stills/`, ~3 s each, no render: the segment midpoints (or your
+6. `uv run tools/shortform.py stills <edit>/short.json [--at t …]` → finished-look frames (cut, zoom, camera,
+   every layer, the speaker's cut-out, captions: stage frames) in `edit/stills/`, ~3 s each, no render: the segment midpoints (or your
    `--at` times) plus one `ev<NN>_<Type>_<t>.png` per overlay event once its entrance has finished. Read every one
    and fix layout first. `stills` measures every event's text in the render (`edit/overlay_text.json`: field, box,
    px height) and warns when:
@@ -195,11 +195,11 @@ Examples below are illustrative. They show the technique, not a style to copy.
 |---|---|
 | `tools/short_spec.py` | Loads `edit/short.json` into the engine: validates every field (paths stay inside the project, grades are preset names, overlay `src` must be a `public_files` name, event props against their component's schema), refines edges, checks overlaps and edges, resolves anchors (prop times too). `check()` plans without rendering. Limits: 180 s, 120 segments, 200 events, 200 SFX. |
 | `tools/overlay_schema.py` | Props schemas of every overlay component and scene (`<Name>.schema.json` beside it): validation, time fields, reveal cues, viewer text. `--export` prints them all (also the `schema` job op). |
-| `tools/shortform.py` | CLI `check\|stills\|render <spec>`. `Seg(take, in, out, zoom, look, freeze_after)`, `Project(..., brand="<slug>").build(preview)`. Zooms: `("static", s)`, `("push", a, b)`, `("punch", base, peak, src_t)`, `("outpunch", a, b, peak, src_t)`. Looks: `None`, `"bw"`. `p.word()` / `p.at()` map source times → output timeline. Karaoke ASS, attack-aligned SFX mix, two-pass loudnorm, overlay composite, captions LAST. |
+| `tools/shortform.py` | CLI `check\|stills\|render <spec>`. `Seg(take, in, out, zoom, look, freeze_after)`, `Project(..., brand="<slug>").build(preview)`. Zooms: `("static", s)`, `("push", a, b)`, `("punch", base, peak, src_t)`, `("outpunch", a, b, peak, src_t)`. `p.word()` / `p.at()` map source times → output timeline. Looks: `None`, `"bw"`, `"low"`. Karaoke ASS, attack-aligned SFX mix, two-pass loudnorm. `build()` cuts and mixes, then draws the frames on the Remotion `Stage` (no `overlay.mov`). |
 | `tools/brand.py` | `load_brand(slug)` → Remotion theme, font `public_files`, caption props from `brands/<slug>/brand.json`; `None` → neutral. |
-| `tools/motion/` | Remotion project. Composition `Overlay` reads `{durationInSeconds, brand, events[]}` and renders one transparent ProRes 4444 layer. Studio: `cd tools/motion && npx remotion studio --props=<edit>/overlay_props.json --public-dir=<edit>/motion_public`. |
+| `tools/motion/` | Remotion project. Composition `Stage` (what a short renders) reads `{durationInSeconds, brand, base, persons[], camera[], events[]}` and draws the cut `base` under the camera with the events on three layers; composition `Overlay` (`{durationInSeconds, brand, events[]}`) draws events alone on transparent, for measuring and blame. Studio: `cd tools/motion && npx remotion studio --props=<edit>/overlay_props.json --public-dir=<edit>/motion_public`. |
 | `tools/sfx_synth.py` | Builds `assets/sfx/synth/*.wav` + `attack.json`: whoosh, whoosh_short, riser, impact, stamp, thud, pop, click, shutter, typing, chime, success, error, scratch, swell, pluck, bubble, swipe, tap, sparkle, sub, tick. Licence-free (synthesized). File RMS differs a lot (bubble/sub are hot): measure each effect against speech in the mix, not just the gain you typed. |
-| `tools/person_matte.py` | Grey person matte (white = person) for a window of a clip: Apple Vision `.accurate` via `person_matte.swift` on macOS, MediaPipe selfie segmenter elsewhere (`uv sync --group matte`; `--backend` forces one). Used automatically for `behind` events. |
+| `tools/person_matte.py` | Grey person matte (white = person) for a window of a clip: Apple Vision `.accurate` via `person_matte.swift` on macOS, MediaPipe selfie segmenter elsewhere (`uv sync --group matte`; `--backend` forces one). `matte_windows()` pads and merges the `behind` events' windows; `cutout()` writes the speaker as ProRes 4444 with alpha, deleted after the render. |
 | `tools/site_capture.py` | Phone-sized viewport + full-page PNG of a URL (system Chrome via Playwright). It scrolls first so reveal animations render. |
 
 ### Overlay components (`tools/motion/src/components/`)
@@ -241,10 +241,54 @@ The full prop list of each component is its schema (`uv run tools/overlay_schema
 | `Flash` | the turn / comeback | `color` |
 | `Captions` | added automatically by `Project` as the LAST event | `words[{t, text, emph(group id), chunk}]`, `chunks[{start, end}]`, `lightRanges`, `top`, `size`, `emphSize`, `emphColor` (defaults from `brand.json` `captions`; override via `Project.caption_props`) |
 
-**Behind the speaker:** any event with `props.behind: true` is rendered UNDER a person-matted copy of the
-footage (`tools/person_matte.py`: Apple Vision on macOS, ~30 s per window; MediaPipe on Linux/Docker, same
+**Behind the speaker:** any event with `"layer": "behind"` (or the older `props.behind: true`) is drawn UNDER the
+speaker's cut-out (`tools/person_matte.py`: Apple Vision on macOS, ~30 s per window; MediaPipe on Linux/Docker, same
 build file, softer and less precise around loose hair against a busy background): text appears behind the head/hair. Set the text's `top` so its lower part overlaps the top of the head (find the head top on
 a frame of that segment at its zoom) and keep it within `SAFE.side`. Captions and normal events stay on top.
+
+### The stage: camera, layers and objects
+
+A short renders on the Remotion `Stage`: ffmpeg cuts and mixes, then one composition draws the footage, the
+speaker's cut-out, every event and the captions, so a graphic can move the speaker. Order, bottom to top:
+`panel` → footage → `behind` → speaker cut-out → `front` → captions. **None of this is required**: a spec
+without `camera` or `layer` renders as before (everything `front`, no camera), and most lines want no device.
+
+**Camera** (`camera: [{kind, start, end, amount?}]`, times in seconds or word anchors, no overlap):
+
+| Move | What it does | Suits |
+|---|---|---|
+| `push` | slow push-in, `amount` ≤ 0.08 | stakes, a serious line, before a turn |
+| `pull` | the shot shrinks to 80 % on the brand's ink, rounded corners | a `behind` word that needs room |
+| `side` | zoom 1.3× with the speaker in the left third, the wall on the right free | a `front` object (`PhonePanel` `side`, `Notice`, `Gauge`) |
+| `corner` | the speaker becomes a 30 % bubble at the bottom right over the brand gradient; captions turn ink and sit above it | real screens or pages that need the frame (`PhonePanel` `corner` on layer `panel`, `CodePanel`) |
+
+**Split screen is not available.** It was built and shown and rejected: cutting the speaker in half to give a
+component half the frame is too invasive. Use `corner` (the speaker stays whole) or `side` instead.
+
+**Layers** (event field `layer`, beside `props`): `front` (default), `behind` (under the speaker's cut-out, so the
+speaker covers it) and `panel` (under the footage; only valid while a `corner` move covers the whole event).
+Each component lists the layers it may use in its schema (`x-layers`).
+
+**Components** (schemas in `tools/motion/src/stage/components/`, `uv run tools/overlay_schema.py --export`):
+`Stickers` (key words pop in on their spoken beat), `BehindWord` (a big word rising behind the head, optionally
+struck through; keep it in the band above the shoulders where the matte is clean), `DocCard` (a story object with
+fill, tag and pulse), `StageDrawer` (a card falls into a drawer; not the older `Drawer`), `PhonePanel` (real
+screens, modes `corner` and `side`), `CodePanel` (types itself; can sit behind the speaker), `Gauge` (needle slams
+to red, with a stamp), `Stuck` (a bar that stalls), `Notice` (a phone notification quoting what the speaker
+reports). They draw where the spec says: the engine doesn't re-place them above the head.
+
+**Recurring objects:** events of one component sharing `object: "<id>"` are the same thing coming back; `check`
+errors if their identifying props differ (`DocCard`: `kicker`, `title`, `italic`) and lists where each appears.
+A thread of one object through a video is a device, not a rule.
+
+**Echo and emphasis:** `Stickers` and `BehindWord` items of up to 3 words, and a `Notice` quoting reported speech,
+are emphasis, not restatement (the echo rule exempts them). Caption emphasis is dropped for a phrase one of them is
+showing, so the same words aren't doubled in a heavier face.
+
+**The low moment** (`"look": "low"`, optional `"freeze": 0.3–0.5`): one segment of 1.0–3.0 s with a static zoom, in
+black and white with added contrast; its voice is band-limited to about 220 Hz–2.4 kHz (the consonants stay
+audible; two stacked 1.1 kHz low-passes were rejected as unintelligible), with a light short echo. At most one per
+video. Check by re-transcribing the rendered span.
 
 To add a component: create it in `components/`, register it in `REGISTRY` in `Overlay.tsx`, drive all
 motion with `useCurrentFrame()` + `interpolate`/`spring` (no CSS transitions), read colours and fonts
@@ -284,8 +328,9 @@ from `useBrand()`, respect `SAFE` zones, and add a row to this table.
 - **Exact segment lengths:** each segment is forced to N frames and N×(48000/fps) samples; otherwise
   ±1-frame drift adds up across 17 segments and overlays/SFX slide off their words.
 - **Freeze frames:** `-t` must be an *input* option, or tpad/apad get truncated.
-- **Remotion `--scale`** must give integer dimensions. The overlay is always rendered at 1080p and
-  ffmpeg scales it for previews.
+- **Remotion `--scale`** must give integer dimensions. The stage previews at exactly 720x1280 with
+  `--scale=0.6666666666666666` (a rounded 0.6667 gives 1280.06 px and Remotion refuses it); finals render at
+  scale 1.
 - **Fonts fail silently:** `Overlay` asserts `document.fonts.check()` for every brand font and fails
   with `Font did not load: <style> <weight> "<family>" (<file>)`.
 - **Brand font weights:** `400`, `"400"` or a variable font's range `"100 800"` (give the range, or bold

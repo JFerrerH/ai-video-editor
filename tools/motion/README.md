@@ -12,11 +12,11 @@ npm i --loglevel=error          # once
 
 Needs Node.js 18 or later. `node_modules` takes about 0.9 GB, most of it the Chrome Headless Shell that Remotion downloads to render. Remotion renders several frames in parallel (by default one Chrome tab per two CPU threads, a few hundred MB each). On an 8 GB machine, add `--concurrency=2` to manual `npx remotion` commands if renders run out of memory. The full machine requirements are in the [root README](../../README.md#requirements).
 
-ProRes 4444 with alpha is large, roughly 0.5–1 GB per minute at 1080x1920, so keep free disk space in mind when you render long overlays.
+A short renders on the `Stage` composition (the cut footage under a camera, the events on three layers, the captions), straight to H.264. ProRes 4444 with alpha, about 30 MB per second at 720p, is written only for the speaker's cut-out in `behind` windows, and deleted after the render. `ENGINE_RENDER_CONCURRENCY=<n>` sets Remotion's `--concurrency` for it.
 
 ## Input
 
-`shortform.py` writes `<edit>/overlay_props.json` and stages assets into `<edit>/motion_public/`:
+`shortform.py` writes `<edit>/stage_props.json` (composition `Stage`: the same props plus `base`, `persons[]`, `camera[]` and a `layer` on each event) and `<edit>/overlay_props.json` (composition `Overlay`, one event at a time, for measuring and blame), and stages assets into `<edit>/motion_public/`:
 
 ```json
 {
@@ -37,7 +37,7 @@ npx remotion studio --props=<edit>/overlay_props.json --public-dir=<edit>/motion
 npx remotion still Overlay out.png --props=<edit>/overlay_props.json --public-dir=<edit>/motion_public --frame=90 --scale=0.5
 ```
 
-You usually don't render by hand: `Project.build()` and `Project.overlay_stills()` do it for you.
+You usually don't render by hand: `Project.build()` and `Project.stills()` do it for you. The stage components (`src/stage/`) are registered in `STAGE` in `src/stage/index.ts`; `Overlay` draws them too, so they work as events.
 
 ## Components
 

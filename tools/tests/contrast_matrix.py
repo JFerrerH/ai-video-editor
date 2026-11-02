@@ -32,6 +32,8 @@ BRANDS = {  # name → (accent, dark backdrop)
     "dark-accent": ("#1A1A40", True),
 }
 DURATION, FPS = 6.0, 30
+# drawn over footage or the dark pull backdrop by design (light text), so a light backdrop isn't a fair test
+DARK_ONLY = {"BehindWord"}
 
 
 def dark_capable(name: str) -> bool:
@@ -61,7 +63,7 @@ def main(names: list[str]) -> int:
     for brand, (accent, dark) in BRANDS.items():
         theme = {"colors": {**COLORS, "accent": accent}, "fonts": FONTS, "fontFiles": []}
         for name in names:
-            if dark and not dark_capable(name):
+            if (dark and not dark_capable(name)) or (not dark and name in DARK_ONLY):
                 continue
             e = event(name, dark)
             frame = round(still_time(name, e["props"], DURATION, FPS) * FPS)

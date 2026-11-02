@@ -1,0 +1,73 @@
+{
+  "title": "BehindWord",
+  "description": "A large word rising behind the speaker's head, optionally struck through. Use layer \"behind\" so the speaker covers it; keep it in the band above the shoulders.",
+  "x-layout": "float",
+  "x-event-props": false,
+  "x-layers": [
+    "behind",
+    "front"
+  ],
+  "examples": [
+    {
+      "word": "Mañana",
+      "riseAt": 0.2,
+      "strikeAt": 1.4
+    }
+  ],
+  "type": "object",
+  "required": [
+    "word"
+  ],
+  "properties": {
+    "word": {
+      "type": "string",
+      "x-text": true,
+      "maxLength": 24
+    },
+    "lead": {
+      "type": "string",
+      "x-text": true,
+      "maxLength": 40
+    },
+    "riseAt": {
+      "type": "number",
+      "x-time": "event",
+      "default": 0
+    },
+    "strikeAt": {
+      "type": "number",
+      "x-time": "event"
+    },
+    "y": {
+      "type": "number",
+      "description": "px from the top",
+      "minimum": -4000,
+      "maximum": 4000
+    },
+    "size": {
+      "type": "number",
+      "description": "px",
+      "minimum": 60,
+      "maximum": 400
+    },
+    "color": {
+      "type": "string",
+      "description": "a CSS colour; default the brand's background"
+    }
+  },
+  "x-cues": [
+    {
+      "path": "riseAt",
+      "default": 0,
+      "entrance": {
+        "seconds": 0.4
+      }
+    },
+    {
+      "path": "strikeAt",
+      "entrance": {
+        "seconds": 0.3
+      }
+    }
+  ]
+}

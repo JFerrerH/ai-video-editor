@@ -2,7 +2,7 @@
 
 ### Requirement: Stage components
 
-The schema export SHALL include `Stickers`, `BehindWord`, `DocCard`, `Drawer`, `PhonePanel`, `CodePanel`, `Gauge`, `Stuck` and `Notice`, each with its props, required fields and the layers it may use. It SHALL also include the shared event props `layer` and `object`. Times inside their props SHALL be relative to the event start and SHALL resolve inside the event, like the existing components.
+The schema export SHALL include `Stickers`, `BehindWord`, `DocCard`, `StageDrawer`, `PhonePanel`, `CodePanel`, `Gauge`, `Stuck` and `Notice`, each with its props, required fields and the layers it may use. It SHALL also include the shared event props `layer` and `object`. Times inside their props SHALL be relative to the event start and SHALL resolve inside the event, like the existing components.
 
 #### Scenario: Export lists the new components
 

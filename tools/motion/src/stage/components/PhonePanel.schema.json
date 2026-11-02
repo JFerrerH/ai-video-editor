@@ -1,0 +1,69 @@
+{
+  "title": "PhonePanel",
+  "description": "Real screens in a phone; the screen changes on cue. `corner` mode is the hero while a corner camera move is on (layer \"panel\"); `side` sits on the free wall next to a side move.",
+  "x-layout": "float",
+  "x-event-props": false,
+  "x-layers": [
+    "front",
+    "panel"
+  ],
+  "examples": [
+    {
+      "mode": "corner",
+      "screens": [
+        {
+          "src": "sample.png",
+          "at": 0
+        }
+      ]
+    }
+  ],
+  "type": "object",
+  "required": [
+    "mode",
+    "screens"
+  ],
+  "properties": {
+    "mode": {
+      "type": "string",
+      "enum": [
+        "corner",
+        "side"
+      ]
+    },
+    "screens": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "src",
+          "at"
+        ],
+        "properties": {
+          "src": {
+            "type": "string",
+            "description": "a staged public file (short.json public_files)"
+          },
+          "at": {
+            "type": "number",
+            "x-time": "event"
+          }
+        }
+      }
+    },
+    "scroll": {
+      "type": "number",
+      "description": "px the screen scrolls over the event",
+      "minimum": 0,
+      "maximum": 4000
+    }
+  },
+  "x-cues": [
+    {
+      "path": "screens[].at",
+      "entrance": {
+        "seconds": 0.45
+      }
+    }
+  ]
+}

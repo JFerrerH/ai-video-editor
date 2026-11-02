@@ -15,7 +15,7 @@ const SRC = path.join(ROOT, "src");
 const ENGINE_KEYS = new Set(["durationInFrames"]);
 const MAX_DEPTH = 3;
 
-const program = ts.createProgram([path.join(SRC, "Overlay.tsx"), path.join(SRC, "scenes/index.ts")], {
+const program = ts.createProgram([path.join(SRC, "Overlay.tsx"), path.join(SRC, "scenes/index.ts"), path.join(SRC, "stage/index.ts")], {
   jsx: ts.JsxEmit.ReactJSX,
   module: ts.ModuleKind.Preserve,
   moduleResolution: ts.ModuleResolutionKind.Bundler,
@@ -125,7 +125,7 @@ function schemaOf(t, depth) {
   return optional ? {} : { "x-unsupported": checker.typeToString(t) };
 }
 
-const all = new Map([...registry("Overlay.tsx", "REGISTRY"), ...registry("scenes/index.ts", "SCENES")]);
+const all = new Map([...registry("Overlay.tsx", "REGISTRY"), ...registry("scenes/index.ts", "SCENES"), ...registry("stage/index.ts", "STAGE")]);
 all.delete("Captions"); // engine-owned: built by shortform.caption_event(), never written in a spec
 
 const skel = process.argv.indexOf("--skeleton");

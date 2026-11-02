@@ -12,13 +12,15 @@ someone untrusted is safe to check and render. Shape (all keys optional unless n
     {"version": 1, "brand": "none" | "<slug>",
      "sources": {"take1": {"file": "edit/conformed/take1.mov", "face": [540, 900],
                            "head": [380, 520, 760, 1000]}},   required; head optional (else edit/face.json)
-     "segments": [{"take", "in" | "from", "out" | "to", "zoom": {"kind": "static", "scale": 1.0}, "look": null | "bw",
-                   "freeze_after": 0, "lock_in": false, "lock_out": false, "repeat": false, "keep_restart": false,
-                   "note": ""}], required
+     "segments": [{"take", "in" | "from", "out" | "to", "zoom": {"kind": "static", "scale": 1.0},
+                   "look": null | "bw" | "low", "freeze_after": 0, "freeze": 0.4 (low only), "lock_in": false,
+                   "lock_out": false, "repeat": false, "keep_restart": false, "note": ""}], required
      "captions": {"fixes": {"heard": "said"}, "word_fixes": [{"take", "at", "text"}],
                   "skip": [{"take", "at"}], "props": {}, "style": {}, "engine": "remotion" | "ass"},
      "emphasis": [{"take", "phrase", "after"}],
-     "events": [{"type", "start": T, "end": T | "duration": s, "props": {}, "name"}],
+     "events": [{"type", "start": T, "end": T | "duration": s, "props": {}, "name",
+                 "layer": "front" | "behind" | "panel", "object": "<id>"}],
+     "camera": [{"kind": "push" | "pull" | "side" | "corner", "start": T, "end": T, "amount": 0.05 (push only)}],
      "sfx": [{"name", "at": T, "gain_db"}],
      "public_files": {"site/img-00.png": "edit/downloads/site/img-00.png"},
      "grade": null | "<preset>", "lufs": -14.0,
@@ -50,6 +52,10 @@ A time T (event start/end, sfx at) is OUTPUT seconds, or an anchor resolved afte
     {"word": "launch", "take": "take1", "after": 12.0, "edge": "start" | "end", "offset": 0.2}
     {"seg": 2, "edge": "start" | "end", "offset": -0.1}
 
+The camera moves the footage on the stage (no overlap; a `panel` event needs a `corner` move; no split screen).
+`look: "low"` is the one low moment of a video (a static zoom, 1.0–3.0 s, optional `freeze` of 0.3–0.5 s). Events of
+one component sharing an `object` id are one story object coming back; `check` lists where each appears.
+
 An event's props follow its component's schema (tools/motion/src/**/<Type>.schema.json, all of them:
 `uv run tools/overlay_schema.py --export`). Time props (`lines[].at`, `countEnd`…) are seconds from the
 EVENT's start, or an anchor as above, and must land inside the event with every entrance finished
@@ -79,13 +85,19 @@ except Exception:  # video-use not cloned: only the engine's own grades
 DEFAULT_GRADE = Project.__dataclass_fields__["grade"].default
 GRADES = {**_VU_PRESETS, "default": DEFAULT_GRADE, "none": ""}
 
-MAX_DURATION, MAX_SEGMENTS, MAX_EVENTS, MAX_SFX = 180.0, 120, 200, 200
+MAX_DURATION, MAX_SEGMENTS, MAX_EVENTS, MAX_SFX, MAX_CAMERA = 180.0, 120, 200, 200, 40
 TAKE_RE = re.compile(r"^[A-Za-z0-9][\w-]{0,63}$")
 SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 PUBLIC_RE = re.compile(r"^(?!.*\.\.)[\w-][\w./-]*$")
 MEDIA_EXT = {".mp4", ".mov", ".m4v", ".mkv", ".webm"}
 ZOOMS = {"static": ("scale",), "push": ("from", "to"), "punch": ("base", "peak", "at"),
          "outpunch": ("from", "to", "peak", "at")}
+CAMERA_KINDS = ("push", "pull", "side", "corner")
+MAX_PUSH = 0.08
+LOW_LENGTH, LOW_FREEZE = (1.0, 3.0), (0.3, 0.5)
+OBJECT_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
+# the props that make an event the same object again, per component
+OBJECT_IDENTITY = {"DocCard": ("kicker", "title", "italic")}
 EDGE_LIMITS = {"above_floor": (3, 40), "pre": (0, 0.5), "post": (0, 0.5), "min_sil": (0.02, 0.3)}
 CAPTION_STYLE = {"font": str, "size": int, "outline": int, "shadow": int, "margin_v": int, "active": str, "base": str}
 
@@ -254,7 +266,7 @@ def validate(spec: Any, root: Path, edit_dir: Path) -> list[str]:
     """Every shape error in the spec (empty = valid). Reads no media."""
     V = _V()
     top = {"version", "brand", "sources", "segments", "captions", "emphasis", "events", "sfx",
-           "public_files", "grade", "lufs", "edges"}
+           "public_files", "grade", "lufs", "edges", "camera"}
     if not V.obj(spec, "spec", top, {"sources", "segments"}):
         return V.errors
     if spec.get("version", 1) != 1:
@@ -307,7 +319,7 @@ def validate(spec: Any, root: Path, edit_dir: Path) -> list[str]:
         planned = 0.0
         for i, s in enumerate(segs):
             w = f"segments[{i}]"
-            if not V.obj(s, w, {"take", "in", "out", "from", "to", "zoom", "look", "freeze_after", "lock_in",
+            if not V.obj(s, w, {"take", "in", "out", "from", "to", "zoom", "look", "freeze_after", "freeze", "lock_in",
                                 "lock_out", "note", "repeat", "keep_restart"}, {"take"}):
                 continue
             if V.str_(s["take"], f"{w}.take") and s["take"] not in takes:
@@ -331,6 +343,13 @@ def validate(spec: Any, root: Path, edit_dir: Path) -> list[str]:
                 planned += s["freeze_after"]
             if s.get("look") is not None:
                 V.str_(s["look"], f"{w}.look", choices={k for k in LOOKS if k})
+            if "freeze" in s:
+                if s.get("look") != "low":
+                    V.err(f"{w}.freeze", 'only a segment with "look": "low" takes `freeze`; use `freeze_after` for other holds')
+                elif "freeze_after" in s:
+                    V.err(w, "give one of `freeze` or `freeze_after`, not both")
+                else:
+                    V.num(s["freeze"], f"{w}.freeze", *LOW_FREEZE)
             for k in ("lock_in", "lock_out", "repeat", "keep_restart"):
                 if k in s:
                     V.bool_(s[k], f"{w}.{k}")
@@ -350,6 +369,13 @@ def validate(spec: Any, root: Path, edit_dir: Path) -> list[str]:
                             _check_word_anchor(V, z["at"], f"{w}.zoom.at", takes, take_required=False)
                     else:
                         V.num(z[k], f"{w}.zoom.{k}", 1.0, 3.0)
+        lows = [i for i, s in enumerate(segs) if isinstance(s, dict) and s.get("look") == "low"]
+        if len(lows) > 1:
+            V.err("segments", f"the low look is used at most once; segments {', '.join(map(str, lows))} all have it")
+        for i in lows:
+            z = segs[i].get("zoom")
+            if isinstance(z, dict) and z.get("kind") != "static":
+                V.err(f"segments[{i}].zoom", 'a "low" segment holds a static zoom')
         if planned > MAX_DURATION + 2:  # edge refinement adds a little; the exact check runs after load
             V.err("segments", f"about {planned:.0f} s of output; the limit is {MAX_DURATION:.0f} s")
 
@@ -404,6 +430,30 @@ def validate(spec: Any, root: Path, edit_dir: Path) -> list[str]:
                 if "after" in e:
                     V.num(e["after"], f"{w}.after", 0)
 
+    cam = spec.get("camera", [])
+    if not isinstance(cam, list):
+        V.err("camera", "must be a list")
+    elif len(cam) > MAX_CAMERA:
+        V.err("camera", f"{len(cam)} moves; the limit is {MAX_CAMERA}")
+    else:
+        for i, m in enumerate(cam):
+            w = f"camera[{i}]"
+            if not V.obj(m, w, {"kind", "start", "end", "amount"}, {"kind", "start", "end"}):
+                continue
+            if m.get("kind") == "split":
+                V.err(f"{w}.kind", "split screen is not available (it cuts the speaker in half); "
+                                   f"the kinds are {', '.join(CAMERA_KINDS)}")
+            elif "kind" in m:
+                V.str_(m["kind"], f"{w}.kind", choices=set(CAMERA_KINDS))
+            for k in ("start", "end"):
+                if k in m:
+                    _check_time(V, m[k], f"{w}.{k}", takes, n_segs)
+            if "amount" in m:
+                if m.get("kind") != "push":
+                    V.err(w, f"only a push takes `amount`, not {m.get('kind')!r}")
+                else:
+                    V.num(m["amount"], f"{w}.amount", 0.0, MAX_PUSH)
+
     events = spec.get("events", [])
     if not isinstance(events, list):
         V.err("events", "must be a list")
@@ -412,9 +462,17 @@ def validate(spec: Any, root: Path, edit_dir: Path) -> list[str]:
     else:
         for i, e in enumerate(events):
             w = f"events[{i}]"
-            if not V.obj(e, w, {"type", "start", "end", "duration", "props", "name"}, {"type", "start"}):
+            if not V.obj(e, w, {"type", "start", "end", "duration", "props", "name", "layer", "object"}, {"type", "start"}):
                 continue
             V.str_(e["type"], f"{w}.type", choices=OVERLAY_TYPES)
+            if "layer" in e and V.str_(e["layer"], f"{w}.layer", choices=set(overlay_schema.LAYERS)) \
+                    and e["type"] in OVERLAY_TYPES and e["layer"] not in overlay_schema.layers(e["type"]):
+                V.err(f"{w}.layer", f"{e['type']} can't go on the {e['layer']!r} layer; it may use "
+                                    f"{', '.join(overlay_schema.layers(e['type']))}")
+            if "object" in e:
+                V.str_(e["object"], f"{w}.object", OBJECT_RE)
+            if e.get("layer") not in (None, "behind") and isinstance(e.get("props"), dict) and e["props"].get("behind"):
+                V.err(w, f'`props.behind` puts the event under the speaker, but its layer is {e["layer"]!r}; drop one')
             _check_time(V, e["start"], f"{w}.start", takes, n_segs)
             if ("end" in e) == ("duration" in e):
                 V.err(w, "give exactly one of `end` or `duration`")
@@ -871,6 +929,67 @@ def _event_props(p: Project, i: int, type_: str, props: dict, start: float, dur:
     return props
 
 
+def _camera(raw: list[dict], resolve, errors: list[str], total: float) -> list[dict]:
+    """Camera moves in output seconds, sorted by start; errors for a move that doesn't end after it starts,
+    runs past the end, or overlaps another (moves are one at a time)."""
+    moves = []
+    for i, m in enumerate(raw):
+        a, b = (resolve(m[k], f"camera[{i}].{k}") for k in ("start", "end"))
+        if a is None or b is None:
+            continue
+        if b - a < 0.1:
+            errors.append(f"camera[{i}] ({m['kind']}): ends {b - a:.2f} s after it starts; a move needs to end after it starts")
+            continue
+        if b > total + 1e-6:
+            errors.append(f"camera[{i}] ({m['kind']}) {a:.2f}–{b:.2f}: runs past the end of the video ({total:.2f} s)")
+            continue
+        move = {"kind": m["kind"], "start": round(a, 3), "end": round(b, 3), "index": i}
+        if "amount" in m:
+            move["amount"] = float(m["amount"])
+        moves.append(move)
+    moves.sort(key=lambda m: m["start"])
+    for j, b in enumerate(moves):
+        for a in moves[:j]:
+            lo, hi = max(a["start"], b["start"]), min(a["end"], b["end"])
+            if hi - lo > 0.001:
+                errors.append(f"camera[{a['index']}] ({a['kind']} {a['start']:.2f}–{a['end']:.2f}) and camera[{b['index']}] "
+                              f"({b['kind']} {b['start']:.2f}–{b['end']:.2f}) overlap by {hi - lo:.2f} s; "
+                              f"moves don't overlap: end one before the next starts")
+    return moves
+
+
+def _layer_rules(events: list[dict], camera: list[dict], errors: list[str]) -> None:
+    """A `panel` event is only drawn while a `corner` move is on, so it must sit inside one."""
+    corners = [m for m in camera if m["kind"] == "corner"]
+    for e in events:
+        if e["layer"] != "panel":
+            continue
+        a, b = e["start"], e["start"] + e["duration"]
+        if not any(m["start"] - 0.05 <= a and b <= m["end"] + 0.05 for m in corners):
+            errors.append(f"events[{e['index']}] ({e['type']}) {a:.2f}–{b:.2f}: a panel needs a `corner` move covering "
+                          f"all of it; add one to `camera` (or use another layer)")
+
+
+def _object_rules(events: list[dict], errors: list[str]) -> None:
+    """Events sharing an `object` id are one component and agree on its identifying props."""
+    by_id: dict[str, list[dict]] = {}
+    for e in events:
+        if "object" in e:
+            by_id.setdefault(e["object"], []).append(e)
+    for oid, group in by_id.items():
+        first = group[0]
+        for e in group[1:]:
+            if e["type"] != first["type"]:
+                errors.append(f'object "{oid}" is used by {first["type"]} (events[{first["index"]}]) and {e["type"]} '
+                              f"(events[{e['index']}]); one object is one component")
+                continue
+            for k in OBJECT_IDENTITY.get(e["type"], ()):
+                if first["props"].get(k) != e["props"].get(k):
+                    errors.append(f'object "{oid}": events[{first["index"]}] and events[{e["index"]}] ({e["type"]}) differ in '
+                                  f'{k} ({first["props"].get(k)!r} vs {e["props"].get(k)!r}); an object keeps '
+                                  f'{", ".join(OBJECT_IDENTITY[e["type"]])} wherever it comes back')
+
+
 def load(spec_path: Path, root: Path | None = None, strict: bool = False) -> tuple[Project, dict]:
     """Validated Project with edges placed (word anchors resolved, the rest refined) and every anchor
     resolved. `strict`: see the module doc. Raises SpecError(errors)."""
@@ -884,7 +1003,7 @@ def load(spec_path: Path, root: Path | None = None, strict: bool = False) -> tup
     segs = []
     for s in spec["segments"]:
         segs.append(Seg(s["take"], float(s.get("in", 0.0)), float(s.get("out", 0.0)), ("static", 1.0), s.get("look"),
-                        float(s.get("freeze_after", 0.0)), s.get("note", ""),
+                        float(s.get("freeze_after", s.get("freeze", 0.0))), s.get("note", ""),
                         s.get("lock_in", False), s.get("lock_out", False),
                         anchored_in="from" in s, anchored_out="to" in s))
     grade = spec.get("grade")
@@ -942,6 +1061,9 @@ def load(spec_path: Path, root: Path | None = None, strict: bool = False) -> tup
             if not s.t_in - 0.5 <= at <= s.t_out + 0.5:
                 errors.append(f"segments[{i}].zoom.at: {at:.2f} s is outside the segment ({s.t_in:.2f}–{s.t_out:.2f})")
         s.zoom = _zoom(z, at)
+        if s.look == "low" and not LOW_LENGTH[0] <= s.dur <= LOW_LENGTH[1]:
+            errors.append(f'segments[{i}] has look "low" and lasts {s.dur:.2f} s; the low line is '
+                          f"{LOW_LENGTH[0]:.1f}–{LOW_LENGTH[1]:.1f} s long")
     p.pieces = _split_dead_air(p, spec["segments"], above, pre, post)
     offs = p.offsets()
     bounds = [(offs[p.pieces.index(i)], offs[len(p.pieces) - p.pieces[::-1].index(i)])
@@ -971,10 +1093,16 @@ def load(spec_path: Path, root: Path | None = None, strict: bool = False) -> tup
             continue
         start, dur = round(a, 3), round(b - a, 3)
         props = _event_props(p, i, e["type"], copy.deepcopy(e.get("props", {})), start, dur, bounds, errors)
-        ev = {"type": e["type"], "start": start, "duration": dur, "props": props, "index": i}
+        ev = {"type": e["type"], "start": start, "duration": dur, "props": props, "index": i,
+              "layer": e.get("layer") or ("behind" if pr.get("behind") else "front")}
+        if "object" in e:
+            ev["object"] = e["object"]
         if "name" in e:
             ev["name"] = e["name"]
         events.append(ev)
+    camera = _camera(spec.get("camera", []), resolve, errors, offs[-1])
+    _layer_rules(events, camera, errors)
+    _object_rules(events, errors)
     sfx = []
     for i, x in enumerate(spec.get("sfx", [])):
         t = resolve(x["at"], f"sfx[{i}] ({x['name']})")
@@ -991,7 +1119,7 @@ def load(spec_path: Path, root: Path | None = None, strict: bool = False) -> tup
         errors, warnings = _strict_findings(spec, errors, warnings)
     if errors:
         raise SpecError(errors)
-    p.events, p.sfx = events, sfx
+    p.events, p.sfx, p.camera = events, sfx, camera
     return p, {"edges": edges, "duration": round(offs[-1], 3), "warnings": warnings, "energy": energy}
 
 
@@ -1005,6 +1133,14 @@ def timeline(p: Project) -> list[str]:
         label = f"{n}.{i - pieces.index(n)}" if pieces.count(n) > 1 else str(n)
         rows.append(f"{label:>4} {s.take:<10} {s.t_in:7.2f} {s.t_out:7.2f} {offs[i]:7.2f}  {s.zoom[0]:<9} "
                     f"{s.look or '-':<5} {s.note[:40]}")
+    for m in p.camera:
+        rows.append(f"camera {m['kind']:<7} {m['start']:.2f}–{m['end']:.2f}")
+    objects: dict[str, list[dict]] = {}
+    for e in p.events:
+        if "object" in e:
+            objects.setdefault(e["object"], []).append(e)
+    for oid, group in objects.items():
+        rows.append(f"object {oid}: {group[0]['type']} at {', '.join(f'{e['start']:.2f}' for e in group)}")
     return rows
 
 

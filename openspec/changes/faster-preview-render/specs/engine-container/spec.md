@@ -6,7 +6,7 @@
 Every Remotion video render SHALL pass an explicit concurrency. By default it SHALL be derived from the CPUs the process may use (the cgroup CPU quota when one is set, else the CPU count), never above that number and never below 1. `ENGINE_RENDER_CONCURRENCY` SHALL override it with a positive whole number.
 
 #### Scenario: Container limited to 4 CPUs on a larger host
-- **WHEN** a short-form render runs in the engine image with `docker run --cpus=4` on a host with more than 4 cores
+- **WHEN** a short-form render (the Remotion stage) runs in the engine image with `docker run --cpus=4` on a host with more than 4 cores
 - **THEN** the Remotion render command line carries a `--concurrency` value of at most 4
 
 #### Scenario: Override

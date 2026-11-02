@@ -2,9 +2,9 @@
 
 ### Requirement: The preview plays the words of the edit
 
-`preview_qa <project>` SHALL transcribe `edit/preview.mp4` and compare it with the words the edit plays. Each source word SHALL be owned by the segment that covers most of it. Words of three letters or fewer SHALL not count as unexpected speech. It SHALL report:
+`preview_qa <project>` SHALL transcribe `edit/preview.mp4` and compare it with the words the edit plays. Each source word SHALL be owned by the segment that covers most of it. Words of three letters or fewer SHALL not count as unexpected speech, and a replaced run with the same letters as the expected one (a word heard as two) SHALL not either. It SHALL report:
 - a clipped word at a cut;
-- three or more consecutive heard words the edit doesn't contain;
+- heard words the edit doesn't contain: at least one of more than three letters, unless the run is the expected word heard differently (split in two, or another ending);
 - a 3-word run played more often than the take says it;
 - a heard restart.
 Each report SHALL give the output time, the segment and the fix.

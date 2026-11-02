@@ -43,7 +43,7 @@ export const ProgressCard: React.FC<{
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-          <div style={{ fontFamily: fonts.mono, fontSize: 30, letterSpacing: 4, color: colors.muted }}>{label}</div>
+          <div style={{ fontFamily: fonts.mono, fontSize: 36, fontWeight: 700, letterSpacing: 3, color: colors.ink }}>{label}</div>
           {showValue ? (
             <div style={{ fontFamily: fonts.serif, fontSize: 92, lineHeight: 1, color: stalled ? accentOn(colors, colors.bg) : colors.ink, letterSpacing: -3 }}>
               {Math.round(Math.max(0, v))}%

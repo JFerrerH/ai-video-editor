@@ -3,6 +3,7 @@ component in tools/motion/src/), plus the props the overlay layer reads on every
 (`tools/motion/src/event.schema.json`). Standard library only: `check` reads them without Node.
 
     uv run tools/overlay_schema.py --export        # every schema as one JSON object (key per component + "event")
+    uv run tools/overlay_schema.py --plan          # the JSON Schema of an edit plan (edit/plan.json, tools/edit_plan.py)
 
     from overlay_schema import validate, time_fields, cue_finish, text_fields
     validate("StatScene", {"value": "400.000"})    # [("value", 'must be a number, got the string "400.000"')]
@@ -301,6 +302,10 @@ def cue_finish(type_: str, props: dict, fps: int, duration: float) -> list[tuple
 
 
 def main() -> None:
+    if sys.argv[1:] == ["--plan"]:
+        import edit_plan
+        print(json.dumps(edit_plan.plan_schema(), indent=1, ensure_ascii=False))
+        return
     if sys.argv[1:] != ["--export"]:
         sys.exit(__doc__)
     missing = sorted(COMPONENTS - set(schemas()))

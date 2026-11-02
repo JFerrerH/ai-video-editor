@@ -97,6 +97,93 @@ Examples below are illustrative. They show the technique, not a style to copy.
 9. **No music by default.** Tell the user to add a trending sound in-app at 5–10%
    (the platforms favour native audio). If music is licensed, duck it −12 to −15 dB under speech.
 
+## Edit by plan (preferred path)
+
+Guessing seconds is where edits go wrong, and cutting, timing and placing are execution, not judgment. So write the
+**plan**, the judgment (which lines stay, what each moment needs, which object carries the story), in sentence IDs and
+words, and let the compiler do the rest. Writing `edit/short.json` by hand (Workflow below) stays possible for one-off
+control; for edits nobody reviews by hand, plan.
+
+```
+uv run tools/edit_plan.py ids   footage/<p>          # F1, F2, … : take, start, length, text; false starts flagged
+# write footage/<p>/edit/plan.json
+uv run tools/edit_plan.py build footage/<p>          # → edit/short.json: check --strict, stills --strict (contrast, text over the face, tiny text), pacing
+uv run tools/shortform.py stills footage/<p>/edit/short.json --strict   # then render --preview, then:
+uv run tools/preview_qa.py footage/<p>               # listens to the preview: words, repeats, restarts, cuts
+```
+(The same three steps are the headless ops `plan_ids`, `plan_build`, `preview_qa`; `uv run tools/edit_plan.py schema`
+prints the plan's JSON Schema.) Run `conform`, `transcribe` and `face` first, as in Workflow 1 and 4.
+
+A plan has **no seconds**. Keys: `keep` (sentence IDs or ranges, in the order they play; a flagged false start is
+refused, keep the repeat), `hook`, `beats`, `low`, `cta`, `assets`, `brand`.
+
+- A **beat** is what one moment needs: `at` (a sentence), `word` (where it lands, default the sentence's first) and any
+  of `device` (an overlay or stage component and its `props`), `camera` (`push`, `pull`, `side`, `corner`, `none`),
+  `punch` (a punch-in on the word). `layer`/`object` are optional; `until` and `through` end the hold on a sentence or a
+  word (a long run-on sentence needs `through`). A prop that is a time (an item entering, a stamp landing) is the word
+  it lands on, `{"word": "costly"}`, not a number; leave an entrance list's times out and they come one after another.
+  A stamp or a drop needs a run-up: start its beat a word or two before the word it lands on (a `Gauge` whose `slamAt` is
+  its own first word fails in the render).
+- **The compiler executes, it never decides.** It cuts the kept sentences by word, with dead air out and a long pause
+  inside a run as a jump cut that changes the frame size; starts each beat on its word and holds it to the end of
+  its sentence, the next beat or 6 s; gives each device its layer and camera (a `corner` `PhonePanel` goes on the `panel`
+  layer with a `corner` move; a `BehindWord` pulls; a `Stuck` pushes); places floating text above the head (the engine
+  does that: never write `frame`); picks sound effects, one per visible important change (hook pop, panel/side swipe,
+  pull whoosh, drawer thud, gauge stamp, notice chime, first sticker pop, whoosh after the low look, click on a
+  submit), minus `pluck` and anything the brand's notes reject. It adds **no** device, move or look you didn't ask for.
+- **Restraint is enforced:** at most two punch-ins besides the hook's, one `low` look (a line of at most 3 s, never in
+  the first 3 s), beats one at a time. The pacing report names the longest stretch with no visual change (a new
+  device, a camera move, a cut with a new frame size) and warns past 8 s; it never fills it. If it warns, add a beat
+  where the line earns one, or cut tighter.
+- **Devices are choices, none is required.** A plan with only `keep` and a hook is a valid, quiet edit. Pick a device
+  because the line has a concrete thing to show, and let the same object come back (`object`) instead of a new card
+  every time.
+
+`build` leaves its stills in `edit/stills`: **read them before rendering**, a pass means the measured rules hold, not that the
+edit is rich or good. Floating cards need room above the head; on a bright wall the default white text of a `BehindWord` or the
+small kicker of a card fails, so give a `BehindWord` a dark `color` and no `camera: pull` (the compiler sets its `y` so the word sits above the head; `stills --strict` refuses text of which the speaker leaves under 85 % visible), and use full-screen scenes (`KineticType`
+with `full`) or `Stickers` where a card won't fit. The build counts the time with no graphic or camera move on screen: a warning past 5 s, a refusal past 8 s (it never adds anything, so put a device on a word of the line that has something to show).
+
+Errors name the plan field (`plan.beats[3].word`) or the beat (`beat 3 (F7 "la", Stuck)`) and the fix. Then check the
+`stills` and the finished preview as in Verify; `preview_qa` fails on a word heard that the edit doesn't contain, a
+clipped word, a line playing twice, a false start heard, or a cut louder than −12 dB against the speech.
+
+Two worked plans (neutral content; the shapes are what matters):
+
+*A founder story, about 65 s.* The idea card is one object that comes back with a different fill: the idea, "gave up",
+"the friend's app", "ours".
+```json
+{"version": 1, "keep": ["F1-F2", "F4-F15"],
+ "hook": {"title": ["Dreamed in 2020", "real today"], "emphasis": "real today"},
+ "beats": [
+  {"at": "F2", "word": "app", "device": "PhonePanel", "props": {"mode": "corner", "screens": [{"src": "site/home.png"}, {"src": "site/list.png"}]}},
+  {"at": "F4", "word": "thesis", "device": "DocCard", "object": "idea", "props": {"kicker": "PLAN · 2020", "title": "A wardrobe in your phone"}},
+  {"at": "F6", "word": "Big", "device": "Stickers", "props": {"items": [{"text": "Big Data", "at": {"word": "Big"}, "x": 150, "y": 230, "rot": -4}]}},
+  {"at": "F7", "word": "drawer", "device": "StageDrawer", "through": "drawer", "props": {"card": {"kicker": "PLAN · 2020", "title": "A wardrobe in your phone"}, "dropAt": {"word": "put"}, "shutAt": {"word": "drawer"}}},
+  {"at": "F7", "word": "but", "device": "Gauge", "through": "costly", "props": {"label": "QUOTE", "stamp": "OUT OF REACH", "slamAt": {"word": "costly"}}},
+  {"at": "F8", "word": "half", "device": "DocCard", "object": "idea", "props": {"kicker": "PLAN · 2020", "title": "A wardrobe in your phone", "fillTo": 0.5, "fillAt": {"word": "half"}}},
+  {"at": "F9", "word": "what", "camera": {"kind": "push", "amount": 0.08}},
+  {"at": "F12", "word": "reality", "punch": true},
+  {"at": "F15", "word": "visit", "device": "Waitlist", "props": {"title": "Early access", "placeholder": "you@mail.com", "email": "ana@mail.com", "button": "Join", "success": "You're in", "typeStart": {"word": "page"}, "typeEnd": {"word": "join"}, "submitAt": {"word": "list"}}}],
+ "low": {"at": "F10", "words": "it's too late"},
+ "assets": {"site/home.png": "assets/home.png", "site/list.png": "assets/list.png"}}
+```
+*A two-skills tutorial, about 85 s.* A tracker (`SkillSlots`) opens the list, marks each skill and recaps; stickers and a
+search bar show what the speaker is saying; a word behind the head lands the quotable line.
+```json
+{"version": 1, "keep": ["F1", "F3-F11", "F13-F14"],
+ "hook": {"title": ["2 skills", "before the AI"], "emphasis": "before the AI"},
+ "beats": [
+  {"at": "F1", "word": "nobody", "device": "BehindWord", "camera": {"kind": "push", "amount": 0.06}, "props": {"lead": "nobody talks about", "word": "two skills", "riseAt": {"word": "two"}}},
+  {"at": "F3", "word": "skills", "device": "SkillSlots", "props": {"slots": [{"icon": "speech"}, {"icon": "bulb"}]}},
+  {"at": "F4", "word": "communication", "punch": true},
+  {"at": "F5", "word": "explain", "device": "Stickers", "through": "most", "props": {"items": [{"text": "explain", "at": {"word": "explain"}, "x": 120, "y": 230, "rot": -4}, {"text": "what you want", "at": {"word": "want"}, "x": 330, "y": 390, "rot": 3}]}},
+  {"at": "F6", "word": "search", "device": "SearchBar", "through": "magic", "props": {"query": "what can AI do?", "typeEnd": {"word": "internet"}, "resultsAt": {"word": "video"}}},
+  {"at": "F10", "word": "No", "device": "BehindWord", "through": "silly", "props": {"lead": "no such thing as a", "word": "silly question", "riseAt": {"word": "silly"}}},
+  {"at": "F13", "word": "two", "device": "SkillSlots", "props": {"slots": [{"icon": "speech", "at": {"word": "two"}}, {"icon": "bulb", "at": {"word": "two"}}]}}],
+ "cta": {"at": "F14", "word": "share", "handle": "Share it", "kicker": "Send it"}}
+```
+
 ## Workflow
 
 1. Run the `video-use` flow: inventory → transcribe (`--language` set!) → pack →
@@ -195,6 +282,8 @@ Examples below are illustrative. They show the technique, not a style to copy.
 |---|---|
 | `tools/short_spec.py` | Loads `edit/short.json` into the engine: validates every field (paths stay inside the project, grades are preset names, overlay `src` must be a `public_files` name, event props against their component's schema), refines edges, checks overlaps and edges, resolves anchors (prop times too). `check()` plans without rendering. Limits: 180 s, 120 segments, 200 events, 200 SFX. |
 | `tools/overlay_schema.py` | Props schemas of every overlay component and scene (`<Name>.schema.json` beside it): validation, time fields, reveal cues, viewer text. `--export` prints them all (also the `schema` job op). |
+| `tools/edit_plan.py` | `ids` numbers the transcript in sentences (F1…, false starts flagged); `build` compiles `edit/plan.json` (sentence IDs and words, no seconds) into `edit/short.json` and runs `check --strict`; `schema` prints the plan's JSON Schema. |
+| `tools/preview_qa.py` | After a preview render: transcribes `edit/preview.mp4`, compares it with the words the edit keeps (unexpected speech, clipped word, repeat, restart) and measures the sound at each cut against the speech (−12 dB). Errors carry the output time, the segment and the fix. |
 | `tools/shortform.py` | CLI `check\|stills\|render <spec>`. `Seg(take, in, out, zoom, look, freeze_after)`, `Project(..., brand="<slug>").build(preview)`. Zooms: `("static", s)`, `("push", a, b)`, `("punch", base, peak, src_t)`, `("outpunch", a, b, peak, src_t)`. `p.word()` / `p.at()` map source times → output timeline. Looks: `None`, `"bw"`, `"low"`. Karaoke ASS, attack-aligned SFX mix, two-pass loudnorm. `build()` cuts and mixes, then draws the frames on the Remotion `Stage` (no `overlay.mov`). |
 | `tools/brand.py` | `load_brand(slug)` → Remotion theme, font `public_files`, caption props from `brands/<slug>/brand.json`; `None` → neutral. |
 | `tools/motion/` | Remotion project. Composition `Stage` (what a short renders) reads `{durationInSeconds, brand, base, persons[], camera[], events[]}` and draws the cut `base` under the camera with the events on three layers; composition `Overlay` (`{durationInSeconds, brand, events[]}`) draws events alone on transparent, for measuring and blame. Studio: `cd tools/motion && npx remotion studio --props=<edit>/overlay_props.json --public-dir=<edit>/motion_public`. |

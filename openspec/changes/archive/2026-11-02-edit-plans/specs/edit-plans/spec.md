@@ -51,3 +51,17 @@ The message SHALL name the cap and where the plan exceeds it.
 
 - **WHEN** a plan has `low` on two sentences
 - **THEN** `plan build` exits non-zero saying the low look is used at most once
+
+### Requirement: Holds, time props and plan-made cuts
+
+A beat SHALL hold from its word until the end of its `until` sentence (default its own), or of its `through` word in it, for at least 1.5 s and at most 6 s, and SHALL end 0.05 s before the next beat starts. A time prop of a device SHALL be given as `{"word": "…"}`, searched from the beat's word to the end of its hold; a list of entrances left without times SHALL come one after another. A punch-in's sentence and the `low` line SHALL be cuts of their own, and SHALL be refused when either side has less than 0.25 s of pause. A pause of 0.65 s or more inside a kept run SHALL be a jump cut whose frame size alternates.
+
+#### Scenario: Punch-in on a run-on sentence boundary
+
+- **WHEN** a beat has `punch` on a sentence that follows the previous one with 0.1 s of pause
+- **THEN** `plan build` exits non-zero saying the cut needs a pause of 0.25 s and to punch in on a sentence that follows a pause
+
+#### Scenario: Hold ends on a word
+
+- **WHEN** a beat has `through` naming a word in a 29 s sentence
+- **THEN** its event ends at that word's end, not 6 s after it starts

@@ -56,7 +56,7 @@ export const IdCard: React.FC<{
           rotate: `${interpolate(s, [0, 1], [-6, -1.5])}deg`,
         }}
       >
-        {kicker ? <div style={{ fontFamily: fonts.mono, fontSize: 24, letterSpacing: 5, color: colors.muted }}>{kicker}</div> : null}
+        {kicker ? <div style={{ fontFamily: fonts.mono, fontSize: 30, fontWeight: 700, letterSpacing: 4, color: colors.ink }}>{kicker}</div> : null}
         <div style={{ fontFamily: fonts.serif, fontSize: 76, lineHeight: 1.05, color: colors.ink, marginTop: kicker ? 10 : 0, letterSpacing: -1 }}>
           {title}
         </div>
@@ -66,7 +66,7 @@ export const IdCard: React.FC<{
               fontFamily: fonts.serif,
               fontStyle: "italic",
               fontSize: 38,
-              color: colors.muted,
+              color: colors.ink,
               marginTop: 4,
               opacity: frame < sec(subtitleAt, fps) ? 0 : Math.min(1, sub * 1.6),
             }}

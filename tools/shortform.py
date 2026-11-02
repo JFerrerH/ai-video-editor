@@ -74,6 +74,8 @@ class Finding(str):
 # legibility probe: an event whose text adds fewer changed pixels than this share of the frame "shows
 # almost no text" (≈ 1,000 px at 1080x1920; a channel must change by more than PROBE_DELTA to count)
 PROBE_SHARE, PROBE_DELTA = 0.0005, 16
+# text behind the speaker: at least this share of its pixels must stay visible around the cut-out
+HIDDEN_VISIBLE = 0.85
 # text over footage (1080-wide px): WCAG contrast 4.5:1 under LARGE_TEXT px tall, 3:1 from it; nothing under
 # MIN_TEXT px; text stays HEAD_MARGIN × the frame width clear of the speaker's head box on every side
 LARGE_TEXT, MIN_TEXT, HEAD_MARGIN = 48, 28, 0.06
@@ -759,7 +761,10 @@ class Project:
         # behind) with its glyphs and without them; the difference is exactly the text a viewer reads
         stage_res = self._stage_batch(
             [{"key": f"{k}_{tag}", "t": self._still_time(e), "events": [e], "extra": extra}
-             for k, e in todo if probe for tag, extra in (("text", {}), ("blank", {"hideText": True}))],
+             for k, e in todo if probe for tag, extra in (("text", {}), ("blank", {"hideText": True}))]
+            + [{"key": f"{k}_{tag}", "t": self._still_time(e), "events": [e], "extra": {"noPerson": True, **extra}}
+               for k, e in todo if probe and self.layer_of(e) == "behind"
+               for tag, extra in (("open", {}), ("openblank", {"hideText": True}))],
             scale, pub, tmp) if probe else {}
 
         measured = {}  # → edit/overlay_text.json
@@ -790,6 +795,14 @@ class Project:
                                         f"is it off screen, masked, or not in yet?)", "no_text"))
                 continue
             groups = self._text_groups(e, texts)
+            if f"{k}_open" in stage_res:  # behind the speaker: how much of the text the speaker leaves visible
+                shown = abs(self._rgba(stage_res[f"{k}_open"][0])[:, :, :3].astype(float)
+                            - self._rgba(stage_res[f"{k}_openblank"][0])[:, :, :3].astype(float)).max(axis=2) > PROBE_DELTA
+                if shown.sum() and diff.sum() < HIDDEN_VISIBLE * shown.sum():
+                    warnings.append(Finding(
+                        f"{label} is mostly hidden by the speaker: {diff.sum() / shown.sum():.0%} of its text shows at {t:.2f} s "
+                        f"(under {HIDDEN_VISIBLE:.0%}); raise it above the head with props.y, shorten it, or use the front layer",
+                        "hidden"))
             for g in groups:
                 if g["size"] < MIN_TEXT:
                     warnings.append(Finding(f"{label} {g['field']} text is {g['size']:.0f} px tall, under {MIN_TEXT} px "
@@ -831,7 +844,7 @@ class Project:
             shots.append({"t": t, "name": f"ev{n:02d}_{e['type']}_{t:06.2f}.png", "event": n, "type": e["type"]})
         w, h = (540, 960) if preview else (1080, 1920)
         scale = 0.5 if preview else 1
-        self.measure_events(scale=scale, warnings=warnings)
+        self.measure_events(scale=1, warnings=warnings)  # the probe reads thin strokes: at half size they blur to a false low contrast
         warnings += self.caption_warnings()
         out_dir = self.edit_dir / "stills"
         tmp = out_dir / "_layers"
@@ -896,17 +909,19 @@ class Project:
                 person = f"person_{t:06.2f}.png"
                 cutout_still(assets / base, assets / person, fps=self.fps)
                 cache[t] = (base, person)
-            return cache[t]
+            return cache[t][0], (cache[t][1] if behind else None)
 
         spec = []
         for j in jobs:
             t = j["t"]
             on = [e for e in (j["events"] if j["events"] is not None else self.events)
                   if self.layer_of(e) == "behind" and e["start"] <= t < e["start"] + e["duration"]]
-            base, person = frame_assets(t, bool(on))
+            extra = dict(j.get("extra", {}))
+            open_ = extra.pop("noPerson", False)  # the same frame without the speaker's cut-out over the behind layer
+            base, person = frame_assets(t, bool(on) and not open_)
             pj = self.stage_props("", [], tmp / f"stage_{j['key']}.json", events=j["events"],
                                   baseImage=f"_stills/{base}", **({"personImage": f"_stills/{person}"} if person else {}),
-                                  **j.get("extra", {}))
+                                  **extra)
             spec.append({"props": str(pj), "frame": min(round(t * self.fps), round(total * self.fps) - 1),
                          "out": str((tmp / f"stage_{j['key']}.png").resolve()), "scale": scale, "composition": "Stage"})
         if not spec:
@@ -1376,8 +1391,12 @@ def still_time(type_: str, props: dict, duration: float, fps: int = 30) -> float
     import overlay_schema as O
     t = min(1.2, 0.6 * duration)
     if type_ in O.schemas():
-        cues = [end for _, _, end in O.cue_finish(type_, props, fps, duration)]
+        before = O.schemas()[type_].get("x-still-before")  # a cue at which the text leaves (a card dropping into a drawer): still just before it
+        fin = O.cue_finish(type_, props, fps, duration)
+        cues = [end for path, _, end in fin if path != before]
         t = max([t] + [end + 1 / fps for end in cues if end < duration])
+        if before and (gone := next((c for path, c, _ in fin if path == before), None)) is not None:
+            t = max(min(t, gone - 0.1), max([e for p_, _, e in fin if p_ != before and e < gone] or [0.0]) + 1 / fps)
     return min(t, duration - 1 / fps)
 
 

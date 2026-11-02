@@ -23,9 +23,9 @@ The compiler doesn't map meanings to components. Prototype v1 did that (`means` 
 
 ### D3. Timing from words
 
-A beat starts on its word: the word's start, or `pre` seconds before it for entrances. It holds until the end of the sentence or the next beat, at most 6 s.
+A beat starts on its word: the word's start, (no pre-roll). It holds until the end of the sentence or the next beat, at most 6 s.
 
-The prototype handles one Whisper artefact: a word stamped early before a cut (its start falls in the removed gap). Such a word is anchored to the segment start instead.
+The prototype handles one Whisper artefact: a word stamped early before a cut (its start falls in the removed gap). Such a word is anchored to the segment start instead. There is no `pre` offset: a beat that needs a run-up starts on an earlier word.
 
 ### D4. Sound effects
 
@@ -43,7 +43,7 @@ The prototype handles one Whisper artefact: a word stamped early before a cut (i
 
 Volumes are 0.25–0.6. The brand's `rejected_sfx` and `pluck` are excluded (the user's standing rule). The parser takes only the words before "use"/"instead", which fixes the prototype's over-ban of "use click".
 
-### D5. Pacing is reported, not forced
+### D5. Pacing is reported, not forced (amended 2026-11-02: refused past 8 s)
 
 `plan build` prints the longest stretch without a visual change (a new event, a camera move or a cut with a zoom change) and warns past 8 s. It never adds anything to fill the stretch.
 
@@ -61,3 +61,15 @@ The thresholds were calibrated on 6 videos plus the `xp-bad` control. They are r
 
 - **The quality ceiling moves to the plan's author.** A flat plan gives a flat video. The guide (product) teaches the devices with the user-approved launch and habilidades plans as worked examples.
 - **Small calibration set**: the QA thresholds can produce false refusals. Every refusal names the measurement, so a false one is visible and fixable.
+
+### D7. Decisions made while implementing
+
+- **Hold ends** (D3): `until` names a sentence, `through` a word in it, for a long run-on sentence; a hold is at least 1.5 s, at most 6 s, and ends 0.05 s before the next beat (a `Flash` is 0.3 s).
+- **Time props are words**: a time prop of a device is `{"word": "…"}` (searched from the beat's word to the end of its hold), never seconds. Lists of entrances (`screens[].at`, `items[].at`) left without times come one after another.
+- **Cuts**: a long pause (0.65 s or more) inside a run is a jump cut of its own, so the frame size alternates (1.08 / 1.0) as it did in the prototype. A punch-in's sentence and the `low` line are cuts of their own and need 0.25 s of pause on each side; without it the plan is refused (a zoom jump through a word, measured at -8 dB in `preview_qa`).
+- **Placement** is the engine's (`edit-faults`); the compiler never writes `frame`.
+- **QA**: a replaced run that has the same letters as the expected one (a word heard as two) is not unexpected speech; the transcriber's cached file is deleted before each QA run.
+
+### D8. Amended after review
+
+`plan build` also runs `stills --strict` and refuses what it finds; pacing counts visual aids (events and camera moves), warns past 5 s and refuses past 8 s, still never filling a stretch; a plan-made `BehindWord` is placed above the head and `stills` refuses text the speaker hides.

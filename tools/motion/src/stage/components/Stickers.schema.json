@@ -1,0 +1,84 @@
+{
+  "title": "Stickers",
+  "description": "Key words pop in as stickers, each on its own spoken beat. Items of at most 3 words are emphasis, not restatement (the echo rule exempts them).",
+  "x-layout": "float",
+  "x-event-props": false,
+  "x-layers": [
+    "front",
+    "behind"
+  ],
+  "examples": [
+    {
+      "items": [
+        {
+          "text": "sin código",
+          "at": 0.3,
+          "x": 120,
+          "y": 420,
+          "rot": -4
+        }
+      ]
+    }
+  ],
+  "type": "object",
+  "required": [
+    "items"
+  ],
+  "properties": {
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "text",
+          "at",
+          "x",
+          "y"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "x-text": true,
+            "maxLength": 40
+          },
+          "at": {
+            "type": "number",
+            "x-time": "event"
+          },
+          "x": {
+            "type": "number",
+            "description": "px",
+            "minimum": -4000,
+            "maximum": 4000
+          },
+          "y": {
+            "type": "number",
+            "description": "px",
+            "minimum": -4000,
+            "maximum": 4000
+          },
+          "rot": {
+            "type": "number",
+            "description": "degrees",
+            "minimum": -45,
+            "maximum": 45
+          },
+          "size": {
+            "type": "number",
+            "description": "px",
+            "minimum": 30,
+            "maximum": 200
+          }
+        }
+      }
+    }
+  },
+  "x-cues": [
+    {
+      "path": "items[].at",
+      "entrance": {
+        "seconds": 0.35
+      }
+    }
+  ]
+}

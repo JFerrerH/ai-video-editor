@@ -15,6 +15,7 @@ import { Captions } from "./components/Captions";
 import { CodeEditor } from "./components/CodeEditor";
 import { DocumentCard } from "./components/DocumentCard";
 import { Drawer } from "./components/Drawer";
+import { STAGE } from "./stage";
 import { Flash } from "./components/Flash";
 import { HandleCard } from "./components/HandleCard";
 import { HookTitle } from "./components/HookTitle";
@@ -101,7 +102,7 @@ export type OverlayProps = {
 };
 
 // the probe's blank: same layout and pixels, no glyphs (numbers and SVG text included)
-const HIDE_TEXT = `* { color: transparent !important; text-shadow: none !important;
+export const HIDE_TEXT = `* { color: transparent !important; text-shadow: none !important;
   -webkit-text-stroke-color: transparent !important; } text, tspan { fill: transparent !important;
   stroke: transparent !important; }`;
 
@@ -148,7 +149,7 @@ const measureText = (root: HTMLElement): MeasuredText[] => {
 
 /** Measure mode: once the frame has laid out, logs one line `MEASURE [{event, texts}]` (each event's
  *  `measureText`), which tools/shortform.py reads from the still render's output. */
-const MeasureText: React.FC = () => {
+export const MeasureText: React.FC = () => {
   const [handle] = useState(() => delayRender("Measuring text"));
   useEffect(() => {
     requestAnimationFrame(() =>
@@ -204,7 +205,7 @@ export const OverlayLayer: React.FC<{ events: OverlayEvent[]; measure?: boolean 
   return (
     <>
       {events.map((ev, i) => {
-        const C = REGISTRY[ev.type] ?? SCENES[ev.type];
+        const C = REGISTRY[ev.type] ?? SCENES[ev.type] ?? STAGE[ev.type];
         if (!C) throw new Error(`Unknown overlay type: ${ev.type}`);
         const durationInFrames = Math.max(1, Math.round(ev.duration * fps));
         const full = Boolean(ev.props?.full);

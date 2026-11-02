@@ -7,6 +7,8 @@
     "dark": {"type": "boolean", "description": "Backdrop in the brand's ink colour instead of its background colour."},
     "mono": {"type": "boolean", "description": "Backdrop in greyscale."},
     "behind": {"type": "boolean", "description": "Draw the event under the speaker (person matte); short-form only."},
+    "layer": {"type": "string", "enum": ["front", "behind", "panel"], "x-event-field": true, "description": "A field of the event, beside `props`. front (default): over the footage; behind: under the speaker's cut-out (same as `props.behind`); panel: under the footage, only while a `corner` camera move is on. Short-form only."},
+    "object": {"type": "string", "x-event-field": true, "description": "A field of the event, beside `props`. Events of one component sharing an id are the same story object coming back: their identifying props must match (DocCard: kicker, title, italic)."},
     "frame": {
       "type": "object",
       "description": "Shrink and move the component (origin: top centre) to float a full-layout graphic over the footage.",

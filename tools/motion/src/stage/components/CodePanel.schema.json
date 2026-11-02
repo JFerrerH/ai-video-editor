@@ -1,0 +1,91 @@
+{
+  "title": "CodePanel",
+  "description": "A code window that types itself. Can sit behind the speaker.",
+  "x-layout": "float",
+  "x-event-props": false,
+  "x-layers": [
+    "front",
+    "behind",
+    "panel"
+  ],
+  "examples": [
+    {
+      "file": "plan.md",
+      "lines": [
+        "# Plan",
+        "- ship"
+      ]
+    }
+  ],
+  "type": "object",
+  "required": [
+    "file",
+    "lines"
+  ],
+  "properties": {
+    "file": {
+      "type": "string",
+      "x-text": true,
+      "maxLength": 40
+    },
+    "lines": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "x-text": true,
+        "maxLength": 60
+      },
+      "maxItems": 14
+    },
+    "typeFrom": {
+      "type": "number",
+      "x-time": "event",
+      "default": 0.3
+    },
+    "typeTo": {
+      "type": "number",
+      "x-time": "event",
+      "description": "default: 0.4 s before the event ends"
+    },
+    "badge": {
+      "type": "string",
+      "x-text": true,
+      "maxLength": 30,
+      "description": "{n} counts up over the event"
+    },
+    "badgeRange": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "maxItems": 2
+    },
+    "x": {
+      "type": "number",
+      "description": "px",
+      "minimum": -4000,
+      "maximum": 4000
+    },
+    "y": {
+      "type": "number",
+      "description": "px",
+      "minimum": -4000,
+      "maximum": 4000
+    },
+    "w": {
+      "type": "number",
+      "minimum": 100,
+      "maximum": 1080
+    },
+    "h": {
+      "type": "number",
+      "minimum": 100,
+      "maximum": 1920
+    },
+    "scale": {
+      "type": "number",
+      "minimum": 0.2,
+      "maximum": 2
+    }
+  }
+}

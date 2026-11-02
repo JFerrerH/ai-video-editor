@@ -1,0 +1,101 @@
+{
+  "title": "StageDrawer",
+  "description": "A card falls into a drawer at the bottom of the frame, which shuts at shutAt. (Not the engine's `Drawer`, a different component.)",
+  "x-layout": "float",
+  "x-event-props": false,
+  "x-layers": [
+    "front"
+  ],
+  "examples": [
+    {
+      "card": {
+        "kicker": "OLD",
+        "title": "Plan"
+      },
+      "dropAt": 0.8,
+      "shutAt": 1.4
+    }
+  ],
+  "type": "object",
+  "required": [
+    "card",
+    "dropAt",
+    "shutAt"
+  ],
+  "properties": {
+    "card": {
+      "type": "object",
+      "required": [
+        "kicker",
+        "title"
+      ],
+      "properties": {
+        "kicker": {
+          "type": "string",
+          "x-text": true,
+          "maxLength": 60
+        },
+        "title": {
+          "type": "string",
+          "x-text": true,
+          "maxLength": 80
+        },
+        "italic": {
+          "type": "string",
+          "x-text": true,
+          "maxLength": 60
+        },
+        "fillAt": {
+          "type": "number",
+          "x-time": "event",
+          "description": "when the fill starts"
+        },
+        "fillDur": {
+          "type": "number",
+          "x-time": "duration",
+          "minimum": 0.1,
+          "maximum": 5,
+          "default": 0.6
+        },
+        "fillFrom": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 1
+        },
+        "fillTo": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 1
+        },
+        "fillColor": {
+          "type": "string",
+          "description": "a CSS colour; default the brand's first tint"
+        }
+      }
+    },
+    "dropAt": {
+      "type": "number",
+      "x-time": "event"
+    },
+    "shutAt": {
+      "type": "number",
+      "x-time": "event"
+    }
+  },
+  "x-cues": [
+    {
+      "path": "dropAt",
+      "entrance": {
+        "seconds": 0.45
+      }
+    },
+    {
+      "path": "shutAt",
+      "entrance": {
+        "seconds": 0.3
+      }
+    }
+  ]
+}

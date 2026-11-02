@@ -1,0 +1,121 @@
+{
+  "title": "DocCard",
+  "description": "A document-like story object that can come back later: its fill shows how far it got. Share `object` between events so the engine keeps its identity (kicker, title, italic).",
+  "x-layout": "float",
+  "x-event-props": false,
+  "x-layers": [
+    "front",
+    "behind"
+  ],
+  "examples": [
+    {
+      "kicker": "PLAN",
+      "title": "Our",
+      "italic": "thesis",
+      "fillTo": 0.3,
+      "fillAt": 0.4
+    }
+  ],
+  "type": "object",
+  "required": [
+    "kicker",
+    "title"
+  ],
+  "properties": {
+    "kicker": {
+      "type": "string",
+      "x-text": true,
+      "maxLength": 60
+    },
+    "title": {
+      "type": "string",
+      "x-text": true,
+      "maxLength": 80
+    },
+    "italic": {
+      "type": "string",
+      "x-text": true,
+      "maxLength": 60
+    },
+    "fillAt": {
+      "type": "number",
+      "x-time": "event",
+      "description": "when the fill starts"
+    },
+    "fillDur": {
+      "type": "number",
+      "x-time": "duration",
+      "minimum": 0.1,
+      "maximum": 5,
+      "default": 0.6
+    },
+    "fillFrom": {
+      "type": "number",
+      "default": 0,
+      "minimum": 0,
+      "maximum": 1
+    },
+    "fillTo": {
+      "type": "number",
+      "default": 0,
+      "minimum": 0,
+      "maximum": 1
+    },
+    "fillColor": {
+      "type": "string",
+      "description": "a CSS colour; default the brand's first tint"
+    },
+    "tag": {
+      "type": "string",
+      "x-text": true,
+      "maxLength": 30
+    },
+    "tagAt": {
+      "type": "number",
+      "x-time": "event"
+    },
+    "pulseAt": {
+      "type": "number",
+      "x-time": "event"
+    },
+    "x": {
+      "type": "number",
+      "description": "px",
+      "minimum": -4000,
+      "maximum": 4000
+    },
+    "y": {
+      "type": "number",
+      "description": "px",
+      "minimum": -4000,
+      "maximum": 4000
+    },
+    "rot": {
+      "type": "number",
+      "description": "degrees",
+      "minimum": -45,
+      "maximum": 45
+    }
+  },
+  "x-cues": [
+    {
+      "path": "tagAt",
+      "entrance": {
+        "seconds": 0.3
+      }
+    },
+    {
+      "path": "pulseAt",
+      "entrance": {
+        "seconds": 0.5
+      }
+    },
+    {
+      "path": "fillAt",
+      "entrance": {
+        "seconds_prop": "fillDur",
+        "seconds": 0.6
+      }
+    }
+  ]
+}

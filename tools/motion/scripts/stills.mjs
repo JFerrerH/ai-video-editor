@@ -1,7 +1,8 @@
-// Many Overlay stills from one bundle, with each still's text measurements (Overlay `measure` mode).
+// Many Overlay (or Stage) stills from one bundle, with each still's text measurements (`measure` mode).
 //
 //   node scripts/stills.mjs < jobs.json
-//   jobs.json: {"publicDir": "<dir>", "jobs": [{"props": "<props.json>", "frame": 36, "out": "<png>", "scale": 0.5}]}
+//   jobs.json: {"publicDir": "<dir>", "jobs": [{"props": "<props.json>", "frame": 36, "out": "<png>", "scale": 0.5,
+//                "composition": "Overlay" | "Stage"}]}
 //
 // Prints one JSON line per job, in order: {"out", "measure": [{event, texts: [{text, box, size}]}] | null}.
 // A job whose props say `"measure": true` logs its measurements from the page; the CLI's `remotion still`
@@ -22,7 +23,7 @@ for (const job of jobs) {
   const inputProps = JSON.parse(fs.readFileSync(job.props, "utf8"));
   let measure = null;
   try {
-    const composition = await selectComposition({ serveUrl, id: "Overlay", inputProps, logLevel: "error" });
+    const composition = await selectComposition({ serveUrl, id: job.composition ?? "Overlay", inputProps, logLevel: "error" });
     await renderStill({
       serveUrl,
       composition,

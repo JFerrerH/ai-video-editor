@@ -1,0 +1,38 @@
+{
+  "title": "Notice",
+  "description": "A phone notification quoting what the speaker reports (exempt from the echo rule: it quotes reported speech).",
+  "x-layout": "float",
+  "x-event-props": false,
+  "x-layers": [
+    "front"
+  ],
+  "examples": [
+    {
+      "from": "Ana",
+      "text": "¿Lo revisaste?"
+    }
+  ],
+  "type": "object",
+  "required": [
+    "from",
+    "text"
+  ],
+  "properties": {
+    "from": {
+      "type": "string",
+      "x-text": true,
+      "maxLength": 30
+    },
+    "text": {
+      "type": "string",
+      "x-text": true,
+      "maxLength": 90
+    },
+    "when": {
+      "type": "string",
+      "x-text": true,
+      "maxLength": 12,
+      "description": "the small time label on the right (e.g. \"now\"); none by default"
+    }
+  }
+}

@@ -16,6 +16,9 @@ TOOLS = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(TOOLS))
 
 import short_spec as S  # noqa: E402
+import shortform as SF  # noqa: E402
+
+MOTION = TOOLS / "motion"
 
 # three tone bursts with silence between: "hello" 0.5–1.0, "launch" 1.5–2.0, "world" 2.5–3.0
 WORDS = [("hello", 0.5, 1.0), ("launch", 1.5, 2.0), ("world", 2.5, 3.0)]
@@ -381,6 +384,350 @@ class SpecTest(Fixture):
         self.assertTrue(any("apart" in w for w in res["warnings"]), res["warnings"])
 
 
+DOC = {"kicker": "PLAN", "title": "Our", "italic": "thesis"}
+
+
+class LiveStageSpecTest(Fixture):
+    """camera, event layer and object, and the low look (openspec/changes/live-stage)."""
+
+    def cam(self, *moves, **extra) -> dict:
+        return self.mutate(lambda s: s.update(camera=list(moves), **extra))
+
+    def doc(self, spec: dict, start, props=None, **ev) -> dict:
+        spec["events"].append({"type": "DocCard", "start": start, "duration": 0.5, "props": props or dict(DOC), **ev})
+        return spec
+
+    def low(self, **seg) -> dict:
+        return self.mutate(lambda s: s["segments"][1].update({"zoom": {"kind": "static", "scale": 1.0}, "look": "low", **seg}))
+
+    # ── camera ────────────────────────────────────────────────────────────
+    def test_camera_kinds_are_valid(self):
+        for kind in ("push", "pull", "side", "corner"):
+            self.assertEqual(self.errors(self.cam({"kind": kind, "start": 0.2, "end": 1.0})), [], kind)
+
+    def test_split_asked_for(self):
+        errs = self.errors(self.cam({"kind": "split", "start": 0.2, "end": 1.0}))
+        self.assertTrue(any("split screen is not available" in e and "push, pull, side, corner" in e for e in errs), errs)
+
+    def test_camera_shape(self):
+        e = self.errors(self.cam({"kind": "pull", "start": 0.2}, {"kind": "pull", "start": 0.2, "end": 1.0, "zoom": 2}))
+        self.assertTrue(any("camera[0]" in x and "'end'" in x for x in e), e)
+        self.assertTrue(any("camera[1]" in x and "unknown field" in x for x in e), e)
+
+    def test_push_amount_limit(self):
+        self.assertEqual(self.errors(self.cam({"kind": "push", "start": 0.2, "end": 1.0, "amount": 0.08})), [])
+        e = self.errors(self.cam({"kind": "push", "start": 0.2, "end": 1.0, "amount": 0.09}))
+        self.assertTrue(any("camera[0].amount" in x for x in e), e)
+
+    def test_amount_only_on_push(self):
+        e = self.errors(self.cam({"kind": "pull", "start": 0.2, "end": 1.0, "amount": 0.05}))
+        self.assertTrue(any("camera[0]" in x and "amount" in x for x in e), e)
+
+    def test_overlapping_moves(self):
+        e = self.load_errors(self.cam({"kind": "side", "start": 0.2, "end": 1.2}, {"kind": "push", "start": 1.0, "end": 1.8}))
+        self.assertTrue(any("camera[0]" in x and "camera[1]" in x and "overlap" in x for x in e), e)
+
+    def test_touching_moves_are_fine(self):
+        spec = self.cam({"kind": "side", "start": 0.2, "end": 1.0}, {"kind": "push", "start": 1.0, "end": 1.8})
+        p, _ = S.load(self.write(spec), self.root)
+        self.assertEqual([m["kind"] for m in p.camera], ["side", "push"])
+
+    def test_word_anchored_moves_resolve_to_output_seconds(self):
+        spec = self.cam({"kind": "pull", "start": {"word": "launch", "take": "take1"},
+                         "end": {"word": "world", "take": "take1", "edge": "end"}})
+        p, _ = S.load(self.write(spec), self.root)
+        m = p.camera[0]
+        self.assertAlmostEqual(m["start"], p.word("take1", "launch"), places=2)
+        self.assertAlmostEqual(m["end"], p.word("take1", "world", end=True), places=2)
+
+    def test_move_must_end_after_it_starts_and_inside_the_video(self):
+        e = self.load_errors(self.cam({"kind": "pull", "start": 1.0, "end": 0.5}))
+        self.assertTrue(any("camera[0]" in x and "after it starts" in x for x in e), e)
+        e = self.load_errors(self.cam({"kind": "pull", "start": 1.0, "end": 30.0}))
+        self.assertTrue(any("camera[0]" in x and "runs past the end" in x for x in e), e)
+
+    def test_no_camera_is_a_plain_spec(self):
+        p, _ = S.load(self.write(BASE), self.root)
+        self.assertEqual(p.camera, [])
+        self.assertTrue(all(e["layer"] == "front" for e in p.events))
+
+    # ── layers ────────────────────────────────────────────────────────────
+    def test_layer_values(self):
+        code = {"file": "a.md", "lines": ["x"]}
+        for layer in ("front", "behind", "panel"):  # CodePanel may use all three
+            spec = self.mutate(lambda s: s["events"].append({"type": "CodePanel", "start": 0, "duration": 1.0, "props": code, "layer": layer}))
+            self.assertEqual(self.errors(spec), [], layer)
+        e = self.errors(self.doc(self.mutate(lambda s: None), 0, layer="middle"))
+        self.assertTrue(any("events[2].layer" in x for x in e), e)
+
+    def test_layer_must_be_one_the_component_allows(self):
+        spec = self.mutate(lambda s: s["events"].append({"type": "Notice", "start": 0, "duration": 0.5, "layer": "behind",
+                                                          "props": {"from": "A", "text": "b"}}))
+        e = self.errors(spec)
+        self.assertTrue(any("events[2].layer" in x and "Notice" in x and "front" in x for x in e), e)
+
+    def test_panel_without_corner(self):
+        spec = self.mutate(lambda s: s["events"].append({"type": "PhonePanel", "start": 0.1, "duration": 0.5, "layer": "panel",
+                                                          "props": {"mode": "corner", "screens": [{"src": "s.png", "at": 0}]},
+                                                          }))
+        spec["public_files"] = {"s.png": "take1.mov"}
+        e = self.load_errors(spec)
+        self.assertTrue(any("events[2]" in x and "needs a `corner` move" in x for x in e), e)
+
+    def test_panel_inside_corner(self):
+        spec = self.cam({"kind": "corner", "start": 0.05, "end": 0.9})
+        spec["events"].append({"type": "PhonePanel", "start": 0.1, "duration": 0.5, "layer": "panel",
+                               "props": {"mode": "corner", "screens": [{"src": "s.png", "at": 0}]}})
+        spec["public_files"] = {"s.png": "take1.mov"}
+        p, _ = S.load(self.write(spec), self.root)
+        self.assertEqual(p.events[-1]["layer"], "panel")
+
+    def test_props_behind_is_a_behind_layer(self):
+        spec = self.mutate(lambda s: s["events"][0]["props"].update(behind=True))
+        p, _ = S.load(self.write(spec), self.root)
+        self.assertEqual(p.events[0]["layer"], "behind")
+
+    def test_layer_and_props_behind_disagree(self):
+        spec = self.mutate(lambda s: (s["events"][0].update(layer="front"), s["events"][0]["props"].update(behind=True)))
+        e = self.errors(spec)
+        self.assertTrue(any("events[0]" in x and "behind" in x for x in e), e)
+
+    # ── recurring objects ─────────────────────────────────────────────────
+    def test_thesis_card_comes_back(self):
+        spec = self.mutate(lambda s: None)
+        for t, fill in ((0.0, 0.1), (0.6, 0.4), (1.2, 0.9)):
+            self.doc(spec, t, {**DOC, "fillTo": fill}, object="thesis")
+        res = self.check(spec)
+        self.assertEqual(res["errors"], [])
+        row = next(r for r in res["timeline"] if "thesis" in r)
+        self.assertIn("DocCard", row)
+        for t in ("0.00", "0.60", "1.20"):
+            self.assertIn(t, row)
+
+    def test_object_identity_mismatch(self):
+        spec = self.mutate(lambda s: None)
+        self.doc(spec, 0.0, dict(DOC), object="thesis")
+        self.doc(spec, 0.6, {**DOC, "title": "Their"}, object="thesis")
+        e = self.load_errors(spec)
+        self.assertTrue(any("thesis" in x and "events[2]" in x and "events[3]" in x and "title" in x for x in e), e)
+
+    def test_object_shared_across_components(self):
+        spec = self.mutate(lambda s: None)
+        self.doc(spec, 0.0, dict(DOC), object="thesis")
+        spec["events"].append({"type": "HookTitle", "start": 0.6, "duration": 0.5, "props": {"lines": [{"text": "x"}]}, "object": "thesis"})
+        e = self.load_errors(spec)
+        self.assertTrue(any("thesis" in x and "DocCard" in x and "HookTitle" in x for x in e), e)
+
+    def test_object_id_shape(self):
+        e = self.errors(self.doc(self.mutate(lambda s: None), 0, object="Not Valid!"))
+        self.assertTrue(any("events[2].object" in x for x in e), e)
+
+    def test_sticker_after_the_event_ends(self):
+        spec = self.mutate(lambda s: s["events"].append({"type": "Stickers", "start": 0.2, "duration": 1.0, "props": {
+            "items": [{"text": "ok", "at": 0.2, "x": 0, "y": 0}, {"text": "late", "at": 1.5, "x": 0, "y": 0}]}}))
+        e = self.load_errors(spec)
+        self.assertTrue(any("events[2].props.items[1].at (Stickers)" in x and "outside the event" in x for x in e), e)
+        self.assertFalse(any("items[0]" in x for x in e), e)
+
+    # ── the low look ──────────────────────────────────────────────────────
+    def test_one_short_low_line(self):
+        spec = self.low(freeze=0.4)
+        self.assertEqual(self.errors(spec), [])
+        p, _ = S.load(self.write(spec), self.root)
+        s = p.segments[-1]
+        self.assertEqual((s.look, s.freeze_after), ("low", 0.4))
+
+    def test_two_low_segments(self):
+        spec = self.mutate(lambda s: [g.update(look="low", zoom={"kind": "static", "scale": 1.0}) for g in s["segments"]])
+        e = self.errors(spec)
+        self.assertTrue(any("low look is used at most once" in x for x in e), e)
+
+    def test_low_needs_a_static_zoom(self):
+        spec = self.mutate(lambda s: s["segments"][1].update(look="low"))  # BASE's second segment has a punch
+        e = self.errors(spec)
+        self.assertTrue(any("segments[1].zoom" in x and "static" in x for x in e), e)
+
+    def test_freeze_range_and_look(self):
+        for bad in (0.2, 0.6):
+            e = self.errors(self.low(freeze=bad))
+            self.assertTrue(any("segments[1].freeze" in x for x in e), (bad, e))
+        e = self.errors(self.mutate(lambda s: s["segments"][0].update(freeze=0.4)))
+        self.assertTrue(any("segments[0].freeze" in x and "low" in x for x in e), e)
+
+    def test_freeze_and_freeze_after(self):
+        e = self.errors(self.low(freeze=0.4, freeze_after=0.4))
+        self.assertTrue(any("segments[1]" in x and "freeze_after" in x for x in e), e)
+
+    def test_low_segment_length(self):
+        spec = self.low(**{"in": 1.45, "out": 1.95})  # 0.5 s
+        e = self.load_errors(spec)
+        self.assertTrue(any("segments[1]" in x and "1.0" in x and "3.0" in x for x in e), e)
+        spec = self.low(**{"in": 1.45, "out": 3.05})  # 1.6 s: inside
+        S.load(self.write(spec), self.root)
+
+    # ── captions follow the camera ────────────────────────────────────────
+    def caps(self, **extra) -> dict:
+        spec = self.mutate(lambda s: s.update(emphasis=[{"take": "take1", "phrase": "launch"}], **extra))
+        spec["events"] = []
+        return spec
+
+    def test_corner_move_puts_ink_captions_above_the_bubble(self):
+        p, _ = S.load(self.write(self.caps(camera=[{"kind": "corner", "start": 0.3, "end": 1.9}])), self.root)
+        props = p.caption_event()["props"]
+        self.assertIn([0.3, 1.9], [list(r) for r in props["lightRanges"]])  # ink while the corner is on
+        a, b, top = next(x for x in props["avoid"] if x[:2] == [0.3, 1.9])
+        cap_h = round(2.65 * max(props.get("size", 58), props.get("emphSize", 68)))
+        self.assertLessEqual(top + cap_h, 1316)  # the bubble's top edge: 1920 − 0.3 · 1920 … ends above it
+        self.assertGreater(top, 290)  # and still inside the top safe zone
+
+    def test_other_moves_leave_captions_alone(self):
+        p, _ = S.load(self.write(self.caps(camera=[{"kind": "pull", "start": 0.3, "end": 1.9}])), self.root)
+        props = p.caption_event()["props"]
+        self.assertEqual(props["lightRanges"], [])
+        self.assertNotIn("avoid", props)
+
+    def emph(self, p) -> dict:
+        ev = p.caption_event()
+        return {w["text"]: w["emph"] for w in ev["props"]["words"]}
+
+    def test_emphasis_stays_without_a_synced_device(self):
+        p, _ = S.load(self.write(self.caps()), self.root)
+        self.assertEqual(self.emph(p)["launch"], 1)
+
+    def test_emphasis_dropped_under_stickers_and_behind_words(self):
+        for type_, props, layer in (("Stickers", {"items": [{"text": "launch", "at": 0.1, "x": 100, "y": 900}]}, "front"),
+                                    ("BehindWord", {"word": "launch", "riseAt": 0.1}, "behind")):
+            spec = self.caps()
+            spec["events"] = [{"type": type_, "start": 0, "duration": 2.0, "layer": layer, "props": props}]
+            p, _ = S.load(self.write(spec), self.root)
+            self.assertEqual(self.emph(p)["launch"], 0, type_)
+
+    def test_emphasis_kept_when_the_device_shows_another_word(self):
+        spec = self.caps()
+        spec["events"] = [{"type": "Stickers", "start": 0, "duration": 2.0,
+                           "props": {"items": [{"text": "hello", "at": 0.1, "x": 100, "y": 900}]}}]
+        p, _ = S.load(self.write(spec), self.root)
+        self.assertEqual(self.emph(p)["launch"], 1)
+
+    def test_emphasis_kept_when_the_sticker_is_not_in_yet(self):
+        spec = self.caps()
+        spec["events"] = [{"type": "Stickers", "start": 0, "duration": 2.6,
+                           "props": {"items": [{"text": "launch", "at": 2.0, "x": 100, "y": 900}]}}]
+        p, _ = S.load(self.write(spec), self.root)
+        self.assertEqual(self.emph(p)["launch"], 1)
+
+    # ── the echo rule and word-synced devices ─────────────────────────────
+    def echo(self, type_, props, **ev) -> list[str]:
+        spec = self.on("take1", {"in": 0.45, "out": 3.05})
+        spec["events"] = [{"type": type_, "start": 0.5, "duration": 1.5, "props": props, **ev}]
+        p, _ = S.load(self.write(spec), self.root)
+        return p.echo_check()
+
+    def test_short_stickers_and_behind_words_are_emphasis_not_echo(self):
+        self.assertEqual(self.echo("Stickers", {"items": [{"text": "launch", "at": 0.1, "x": 0, "y": 900}]}), [])
+        self.assertEqual(self.echo("BehindWord", {"word": "launch"}, layer="behind"), [])
+
+    def test_long_stickers_still_echo(self):
+        out = self.echo("Stickers", {"items": [{"text": "hello launch world now", "at": 0.1, "x": 0, "y": 900}]})
+        self.assertTrue(out and out[0].startswith("ECHO Stickers"), out)
+
+    def test_a_notice_quoting_reported_speech_is_exempt(self):
+        self.assertEqual(self.echo("Notice", {"from": "A", "text": "launch"}), [])
+
+    def test_other_graphics_still_echo(self):
+        self.assertTrue(self.echo("DocCard", {"kicker": "launch", "title": "launch"}))
+
+
+@unittest.skipUnless(shutil.which("npx") and (MOTION / "node_modules" / "remotion").is_dir(), "needs tools/motion deps")
+class StageRenderTest(Fixture):
+    """The finished short is drawn on the stage: one video, camera and layers, the low look, no overlay files."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        words = [("uno", 0.3, 1.0), ("dos", 1.5, 2.1), ("tres", 2.6, 3.3)]
+        make_take(cls.root / "red.mov", words, d=3.5, color="red")
+        (cls.root / "edit" / "transcripts" / "red.json").write_text(json.dumps(
+            {"words": [{"type": "word", "text": t, "start": a, "end": b} for t, a, b in words]}))
+
+    def spec(self, **extra) -> dict:
+        return {"version": 1, "brand": "none", "sources": {"red": {"file": "red.mov", "face": [54, 96]}},
+                "segments": [{"take": "red", "in": 0.2, "out": 1.25}, {"take": "red", "in": 1.3, "out": 3.4,
+                                                                         "look": "low", "freeze": 0.4}], **extra}
+
+    def probe(self, path: Path) -> dict:
+        r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-count_frames", "-show_entries",
+                            "stream=width,height,nb_read_frames,codec_name", "-show_entries", "format=duration",
+                            "-of", "json", str(path)], capture_output=True, text=True, check=True).stdout
+        d = json.loads(r)
+        return {**d["streams"][0], "duration": float(d["format"]["duration"])}
+
+    def frame_saturation(self, path: Path, t: float) -> float:
+        raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{t:.3f}", "-i", str(path), "-frames:v", "1", "-vf",
+                              "scale=24:42,format=rgb24", "-f", "rawvideo", "-"], capture_output=True, check=True).stdout
+        px = [raw[i:i + 3] for i in range(0, len(raw), 3)]
+        return max(max(p) - min(p) for p in px)
+
+    def test_preview_is_drawn_on_the_stage(self):
+        spec = self.spec(camera=[{"kind": "pull", "start": 0.1, "end": 0.9}],
+                         events=[{"type": "BehindWord", "start": 0.1, "duration": 0.9, "layer": "behind",
+                                  "props": {"word": "Hola", "riseAt": 0.1}}])
+        p, _ = S.load(self.write(spec), self.root)
+        edit = self.root / "edit"
+        out = p.build(preview=True)
+        info = self.probe(out)
+        self.assertEqual((info["width"], info["height"], info["codec_name"]), (720, 1280, "h264"))
+        self.assertEqual(int(info["nb_read_frames"]), round(p.offsets()[-1] * 30))
+        self.assertAlmostEqual(info["duration"], p.offsets()[-1], delta=0.1)
+        # no overlay intermediates, and the cut-out is deleted after the render
+        self.assertEqual(sorted(x.name for x in edit.glob("overlay*.mov")), [])
+        self.assertEqual(sorted(x.name for x in (edit / "motion_public").glob("person_*")), [])
+        self.assertEqual(sorted(x.name for x in (edit / "motion_public").glob("base_*")), [])
+        # the pull: the footage shrinks, so the frame edge shows the dark backdrop instead of the red wall
+        pulled = subprocess.run(["ffmpeg", "-v", "error", "-ss", "0.5", "-i", str(out), "-frames:v", "1", "-vf",
+                                 "crop=4:4:0:600,scale=1:1,format=rgb24", "-f", "rawvideo", "-"],
+                                capture_output=True, check=True).stdout
+        self.assertLess(max(pulled), 60)
+
+    def test_the_low_look_is_grey_and_holds(self):
+        p, _ = S.load(self.write(self.spec()), self.root)
+        out = p.build(preview=True)
+        t_low = p.offsets()[1]
+        self.assertGreater(self.frame_saturation(out, 0.3), 100)  # red before
+        self.assertLess(self.frame_saturation(out, t_low + 0.5), 8)  # grey in the low segment
+        end = p.offsets()[-1]
+        self.assertLess(self.frame_saturation(out, end - 0.1), 8)  # and in its freeze
+        self.assertAlmostEqual(p.segments[1].freeze_after, 0.4)
+        self.assertEqual(p.low_span(), (p.offsets()[1], p.offsets()[2]))
+        self.assertAlmostEqual(self.probe(out)["duration"], end, delta=0.1)
+
+    def test_plain_spec_has_no_camera_and_no_cutout(self):
+        p, _ = S.load(self.write(self.spec(segments=[{"take": "red", "in": 0.2, "out": 1.25}])), self.root)
+        self.assertEqual(p.person_windows(), [])
+        out = p.build(preview=True)
+        self.assertEqual(self.probe(out)["width"], 720)
+        self.assertGreater(self.frame_saturation(out, 0.3), 100)
+
+    def test_final_is_1080_with_the_delivery_encode(self):
+        p, _ = S.load(self.write(self.spec(segments=[{"take": "red", "in": 0.2, "out": 1.25}],
+                                           camera=[{"kind": "push", "start": 0.1, "end": 0.9, "amount": 0.05}])), self.root)
+        out = p.build(preview=False)
+        info = json.loads(subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                                          "stream=width,height,profile,r_frame_rate,color_space,nb_frames", "-of", "json",
+                                          str(out)], capture_output=True, text=True, check=True).stdout)["streams"][0]
+        self.assertEqual((info["width"], info["height"], info["profile"], info["r_frame_rate"]), (1080, 1920, "High", "30/1"))
+        self.assertEqual(info["color_space"], "bt709")
+        loud, _ = SF.loudness(out)
+        self.assertAlmostEqual(loud, -14.0, delta=1.0)
+
+    def test_low_voice_graph_is_in_the_mix(self):
+        p, _ = S.load(self.write(self.spec()), self.root)
+        self.assertEqual(p.low_span(), (p.offsets()[1], p.offsets()[2]))
+        self.assertIn("lowpass=f=2400", SF.LOW_VOICE)
+        self.assertIn("highpass=f=220", SF.LOW_VOICE)
+        self.assertNotIn("1100", SF.LOW_VOICE)  # the rejected two-low-pass version
+
+
 class WordEdgesTest(Fixture):
     """Segments cut by word anchors (`from` / `to`), resolved into pauses measured against the speech."""
 
@@ -555,7 +902,6 @@ class FaultsTest(Fixture):
             self.assertTrue(ln.lstrip().startswith(f"{n}."), ln)
 
 
-MOTION = TOOLS / "motion"
 
 
 @unittest.skipUnless(shutil.which("npx") and (MOTION / "node_modules" / "remotion").is_dir(), "needs tools/motion deps")
@@ -587,6 +933,39 @@ class StillsTest(Fixture):
         p, _ = S.load(self.write(self.one({"type": "ListScene", "start": 0.0, "duration": 2.5,
                                            "props": {"items": [{"text": t} for t in "abc"]}})), self.root)
         self.assertEqual(p._still_time(p.events[0]), round(1.7 + 14 / 30 + 1 / 30, 2))  # not 1.2: the last item is in
+
+    def test_behind_word_is_covered_by_the_speaker(self):
+        """A behind word overlapping the speaker: where the matte says "person" the still shows the footage."""
+        from unittest import mock
+
+        def left_half_person(base, out, fps=30, backend=None):  # the "speaker": the left half of the frame
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(base), "-vf",
+                            "format=rgba,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='if(lt(X,W/2),255,0)'",
+                            "-frames:v", "1", str(out)], check=True)
+            return out
+
+        word = {"type": "BehindWord", "start": 0.3, "duration": 1.5, "layer": "behind",
+                "props": {"word": "HOLA", "riseAt": 0.0, "y": 640}}
+        p, _ = S.load(self.write(self.one(word)), self.root)
+        with mock.patch.object(SF, "cutout_still", left_half_person):
+            out = p.stills([1.0])
+        png = next(st["path"] for st in out if st.get("type") == "BehindWord")
+        img = p._rgba(png)[:, :, :3]
+        h, w = img.shape[:2]
+        band = img[round(h * 0.34):round(h * 0.45)]  # the word's rows (y 640–860 of 1920)
+        light = (band.min(axis=2) > 200)  # the word is near-white; the gray wall is not
+        self.assertEqual(int(light[:, :w // 2].sum()), 0)  # under the speaker: hidden
+        self.assertGreater(int(light[:, w // 2:].sum()), 200)  # beside the speaker: drawn
+
+    def test_stills_show_the_camera(self):
+        spec = self.one({"type": "HookTitle", "start": 0.3, "duration": 1.5, "props": {"lines": [{"text": "Hola"}]}})
+        spec["camera"] = [{"kind": "pull", "start": 0.2, "end": 1.9}]
+        p, _ = S.load(self.write(spec), self.root)
+        out = p.stills([1.0])
+        img = p._rgba(next(st["path"] for st in out if st["path"].name.startswith("short_")))[:, :, :3]
+        h, w = img.shape[:2]
+        self.assertLess(int(img[h // 2, 2].max()), 60)  # the footage is pulled back: the brand's ink shows at the edge
+        self.assertGreater(int(img[h // 2, w // 2].min()), 100)  # and the gray wall is in the middle
 
     def test_failure_names_the_event(self):
         from errors import ToolError

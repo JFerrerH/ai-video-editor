@@ -1,0 +1,71 @@
+{
+  "title": "Stuck",
+  "description": "A progress bar that stalls, then shows its result at resultAt.",
+  "x-layout": "float",
+  "x-event-props": false,
+  "x-layers": [
+    "front"
+  ],
+  "examples": [
+    {
+      "label": "PROGRESO",
+      "resultAt": 1.2,
+      "resultTag": "ATASCADO",
+      "result": "Sin avance"
+    }
+  ],
+  "type": "object",
+  "required": [
+    "label",
+    "resultAt",
+    "resultTag",
+    "result"
+  ],
+  "properties": {
+    "label": {
+      "type": "string",
+      "x-text": true,
+      "maxLength": 30
+    },
+    "stopAt": {
+      "type": "number",
+      "default": 0.14,
+      "description": "where the bar stops, 0–1",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "resultAt": {
+      "type": "number",
+      "x-time": "event"
+    },
+    "resultTag": {
+      "type": "string",
+      "x-text": true,
+      "maxLength": 20
+    },
+    "result": {
+      "type": "string",
+      "x-text": true,
+      "maxLength": 40
+    },
+    "resultItalic": {
+      "type": "string",
+      "x-text": true,
+      "maxLength": 40
+    },
+    "y": {
+      "type": "number",
+      "description": "px from the top",
+      "minimum": -4000,
+      "maximum": 4000
+    }
+  },
+  "x-cues": [
+    {
+      "path": "resultAt",
+      "entrance": {
+        "seconds": 0.25
+      }
+    }
+  ]
+}

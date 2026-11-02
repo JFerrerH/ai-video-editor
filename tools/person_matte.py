@@ -4,8 +4,9 @@
     uv run tools/person_matte.py in.mov --start 8.0 --dur 3.7 -o matte.mov --backend mediapipe
 
 Writes a grey matte (white = person) at the clip's resolution and frame rate, starting at
-frame 0 = `start`. Used by tools/shortform.py to put text BEHIND the speaker (events with
-`behind: true`): text layer under the matted person, over the background.
+frame 0 = `start`. Used by tools/shortform.py to put events BEHIND the speaker (layer `behind`):
+`matte_windows()` pads and merges the events' windows, `cutout()` writes the speaker as ProRes 4444
+with alpha for the Remotion stage to draw above them.
 
 Backends (chosen at runtime; `--backend` forces one):
   - vision     macOS with `swift`: Apple Vision person segmentation (person_matte.swift)
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import math
 import os
 import shutil
 import subprocess
@@ -113,6 +115,49 @@ def make_matte(src: Path, start: float, dur: float, out: Path, fps: int = 30, so
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-framerate", str(fps), "-i", str(mattes / "%05d.png"),
                         "-vf", f"format=gray,gblur=sigma={soften}", "-c:v", "prores_ks", "-profile:v", "2",
                         "-pix_fmt", "yuv422p10le", str(out)], check=True)
+    return out
+
+
+WINDOW_PAD = 0.1  # s of matte before and after each behind event
+
+
+def matte_windows(spans: list[tuple[float, float]], total: float, fps: int = 30,
+                  pad: float = WINDOW_PAD) -> list[tuple[float, float]]:
+    """The windows (output seconds of the cut base) to matte for events spanning `spans`: each padded `pad` s on
+    both sides, snapped outward to whole frames, clamped to [0, total], and merged when they touch or overlap
+    (one matte then covers events across several segments)."""
+    wins: list[list[float]] = []
+    for a, b in sorted(spans):
+        a, b = max(0.0, math.floor((a - pad) * fps + 1e-6) / fps), min(total, math.ceil((b + pad) * fps - 1e-6) / fps)
+        if wins and a <= wins[-1][1] + 1e-9:
+            wins[-1][1] = max(wins[-1][1], b)
+        else:
+            wins.append([a, b])
+    return [(round(a, 4), round(b, 4)) for a, b in wins]
+
+
+def cutout(base: Path, start: float, dur: float, out: Path, fps: int = 30, backend: str | None = None) -> Path:
+    """The speaker's cut-out of a window of the cut base: the base with the person matte as alpha, ProRes 4444
+    (frame 0 = `start`). The stage draws it between the `behind` layer and the front, under the same camera."""
+    n = round(dur * fps)
+    with tempfile.TemporaryDirectory() as td:
+        matte = Path(td) / "matte.mov"
+        make_matte(base, start, dur, matte, fps=fps, backend=backend)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{start:.4f}", "-i", str(base), "-i", str(matte),
+                        "-filter_complex", "[1:v]format=gray[m];[0:v]format=yuva444p10le[v];[v][m]alphamerge",
+                        "-frames:v", str(n), "-c:v", "prores_ks", "-profile:v", "4", "-pix_fmt", "yuva444p10le",
+                        "-an", str(out)], check=True)
+    return out
+
+
+def cutout_still(base: Path, out: Path, fps: int = 30, backend: str | None = None) -> Path:
+    """The speaker's cut-out of one frame (a PNG): the frame with the person matte as alpha, for stills."""
+    with tempfile.TemporaryDirectory() as td:
+        matte = Path(td) / "matte.mov"
+        make_matte(base, 0, 1 / fps, matte, fps=fps, backend=backend)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(base), "-i", str(matte), "-filter_complex",
+                        "[1:v]format=gray[m];[0:v]format=rgba[v];[v][m]alphamerge", "-frames:v", "1", str(out)],
+                       check=True)
     return out
 
 

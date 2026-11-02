@@ -31,20 +31,20 @@ export const CodePanel: React.FC<{
           {["#FF5F57", "#FEBC2E", "#28C840"].map((c) => (
             <div key={c} style={{ width: 20, height: 20, borderRadius: 10, background: c }} />
           ))}
-          <div style={{ marginLeft: 20, fontFamily: fonts.mono, fontSize: 26, color: "#8A9099" }}>{file}</div>
+          <div style={{ marginLeft: 20, fontFamily: fonts.mono, fontSize: 32, color: "#B4BAC4" }}>{file}</div>
           {badge ? (
-            <div style={{ marginLeft: "auto", fontFamily: fonts.mono, fontSize: 26, color: "#1E2127", background: "#F2F1EE", padding: "6px 16px", borderRadius: 10 }}>
+            <div style={{ marginLeft: "auto", fontFamily: fonts.mono, fontSize: 36, fontWeight: 700, color: "#1E2127", background: "#F2F1EE", padding: "6px 16px", borderRadius: 10 }}>
               {badge.replace("{n}", String(Math.round(interpolate(t, [0, d], [badgeRange[0], badgeRange[1]], clamp))))}
             </div>
           ) : null}
         </div>
-        <div style={{ marginTop: 34, fontFamily: fonts.mono, fontSize: 34, lineHeight: 1.7, color: "#E6E6E6", whiteSpace: "pre" }}>
+        <div style={{ marginTop: 34, fontFamily: fonts.mono, fontSize: 36, lineHeight: 1.6, color: "#E6E6E6", whiteSpace: "pre" }}>
           {lines.map((l, i) => {
             const s = l.slice(0, Math.max(0, left));
             left -= l.length + 1;
             return (
               <div key={i}>
-                <span style={{ color: "#9AA3B2", marginRight: 26 }}>{i + 1}</span>
+                <span style={{ color: "#C9CED8", marginRight: 26 }}>{i + 1}</span>
                 {s}
                 {left < 0 && left > -l.length - 2 && Math.floor(t * 2) % 2 ? "▍" : ""}
               </div>

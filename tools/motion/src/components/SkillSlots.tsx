@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { NEVER, enter, exit, sec } from "../anim";
-import { SAFE, useBrand } from "../theme";
+import { SAFE, readable, useBrand } from "../theme";
 import { IconKind, LineIcon } from "./icons";
 
 type Slot = { icon: IconKind; at?: number }; // `at` (s): the icon fills the slot; omitted = stays empty
@@ -56,7 +56,7 @@ export const SkillSlots: React.FC<{ durationInFrames: number; slots: Slot[]; act
                 rotate: `${(i % 2 ? 1 : -1) * 2}deg`,
               }}
             >
-              <div style={{ fontFamily: fonts.serif, fontStyle: "italic", fontSize: 44, color: on ? colors.tint1 : colors.muted }}>
+              <div style={{ fontFamily: fonts.serif, fontStyle: "italic", fontWeight: 700, fontSize: 44, color: on ? readable(colors.tint1, colors.ink, colors.bg, 7) : colors.ink }}>
                 {String(i + 1).padStart(2, "0")}
               </div>
               <div style={{ opacity: filled ? k : 0, scale: String(interpolate(k, [0, 1], [0.4, 1])) }}>

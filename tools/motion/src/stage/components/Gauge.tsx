@@ -24,7 +24,7 @@ export const Gauge: React.FC<{ durationInFrames: number; label: string; stamp: s
   };
   return (
     <div style={{ position: "absolute", left: 230, top: y, width: 620, height: 420, background: colors.bg, borderRadius: 30, opacity: vis, transform: `translateY(${(1 - vis) * 60}px)`, boxShadow: "0 20px 50px rgba(0,0,0,.3)" }}>
-      <div style={{ position: "absolute", top: 26, width: "100%", textAlign: "center", fontFamily: fonts.mono, fontSize: 26, letterSpacing: 5, color: colors.muted }}>{label}</div>
+      <div style={{ position: "absolute", top: 26, width: "100%", textAlign: "center", fontFamily: fonts.mono, fontSize: 36, fontWeight: 700, letterSpacing: 3, color: colors.ink }}>{label}</div>
       <svg width={620} height={420} style={{ position: "absolute", top: 40 }}>
         {arc(-90, -30, colors.success)}
         {arc(-30, 30, "#E2A93B")}

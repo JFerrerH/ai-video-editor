@@ -522,5 +522,67 @@ class Failures(Base):
         self.assertEqual(len(error), 500)
 
 
+class PlanOps(unittest.TestCase):
+    """plan_ids and plan_build on the synthetic project of plan_fixture (no footage, no models)."""
+
+    @classmethod
+    def setUpClass(cls):
+        from plan_fixture import PlanFixture
+        PlanFixture.setUpClass()
+        cls.fx = PlanFixture
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.fx.tearDownClass()
+
+    def run_op(self, op, args=None):
+        with mock.patch.object(R, "FOOTAGE", self.fx.tmp):
+            return R.run({"op": op, "project": "demo", "args": args or {}})
+
+    def write_plan(self, plan, name="plan.json"):
+        (self.fx.root / "edit" / name).write_text(json.dumps(plan))
+
+    def test_plan_ids(self):
+        res, code = self.run_op("plan_ids")
+        self.assertEqual(code, 0, res)
+        self.assertEqual([s["id"] for s in res["sentences"]][:3], ["F1", "F2", "F3"])
+        self.assertEqual(res["sentences"][1]["restart_of"], "F3")
+
+    def test_plan_build(self):
+        self.write_plan({"keep": ["F1", "F3-F4", "F6"], "beats": [
+            {"at": "F3", "word": "tesis", "device": "DocCard", "props": {"kicker": "PLAN", "title": "Un ropero"}}]})
+        res, code = self.run_op("plan_build", {"stills": False})
+        self.assertEqual(code, 0, res)
+        self.assertEqual(res["spec"], "edit/short.json")
+        self.assertEqual(res["errors"], [])
+        self.assertIn("longest_s", res["pacing"])
+        self.assertIn("edit/short.json", res["outputs"])
+
+    def test_plan_build_refuses_seconds(self):
+        self.write_plan({"keep": ["F1"], "beats": [{"at": "F1", "device": "DocCard", "start": 12.4,
+                                                    "props": {"kicker": "A", "title": "B"}}]})
+        res, code = self.run_op("plan_build", {"stills": False})
+        self.assertEqual(code, 1)
+        self.assertFalse(res["ok"])
+        self.assertTrue(any("sentence ID and word" in e for e in res["errors"]), res)
+
+    def test_plan_build_spec_errors_are_the_result(self):
+        self.write_plan({"keep": ["F1", "F3-F4", "F6"], "beats": [
+            {"at": "F4", "word": "Sin", "device": "DocCard", "props": {"kicker": "A", "title": "B", "frame": {"y": 200}}}]})
+        res, code = self.run_op("plan_build", {"stills": False})
+        self.assertEqual(code, 1)
+        self.assertTrue(any("frame" in e for e in res["errors"]), res)
+
+    def test_plan_outside_the_project(self):
+        res, code = self.run_op("plan_build", {"plan": "../../plan.json"})
+        self.assertEqual(code, 2)
+        self.assertIn("outside the project", res["error"])
+
+    def test_unknown_argument(self):
+        res, code = self.run_op("plan_build", {"seconds": 3})
+        self.assertEqual(code, 2)
+        self.assertIn("seconds", res["error"])
+
+
 if __name__ == "__main__":
     unittest.main()

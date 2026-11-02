@@ -26,7 +26,7 @@ The live stage (`live-stage`) adds a camera and new devices. The plan is where C
   - **Timing:** every beat's time comes from its word, and it holds until the thought ends (≤ 6 s).
   - **Layers and placement:**
     - each device gets its default layer and camera move;
-    - floating text is placed above the head box;
+    - floating text is placed above the head box by the engine (`edit-faults`); the compiler never writes `frame`;
     - a beat that doesn't fit is refused with the fix.
   - **Sound effects** are sparse:
     - one per visible, important change, from a small table per device;

@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { clamp, enter, exit, sec } from "../anim";
-import { SAFE, useBrand } from "../theme";
+import { SAFE, readable, useBrand } from "../theme";
 
 /** Waitlist sign-up mock: email types in, button presses, success state. */
 export const Waitlist: React.FC<{
@@ -49,7 +49,7 @@ export const Waitlist: React.FC<{
               fontFamily: fonts.sans,
               fontWeight: 600,
               fontSize: 40,
-              color: colors.success,
+              color: readable(colors.success, colors.bg, colors.ink),
               height: 196,
               scale: interpolate(done, [0, 1], [0.85, 1]),
               opacity: Math.min(1, 0.35 + done * 2), // never a blank card between press and success

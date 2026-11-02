@@ -124,3 +124,21 @@ In strict mode, `frame` on any event SHALL be an error. Without strict mode, a g
 
 - **WHEN** an event has `"frame": {"y": 200}` and `check --strict` runs
 - **THEN** it exits non-zero with an error naming `events[N].props.frame` and saying the engine places floating overlays
+
+### Requirement: Text behind the speaker stays readable
+
+`stills` SHALL draw each `behind` event with and without the speaker's cut-out and compare the pixels of its text. When the speaker leaves under 85 % of them visible, it SHALL report `events[N] (<type>) is mostly hidden by the speaker`, naming the share and the fix (raise it with `props.y`, shorten it, or use the front layer). In strict mode this SHALL be an error and `stills` SHALL return `renderable: false`.
+
+#### Scenario: Word behind the head
+
+- **WHEN** a `BehindWord` at `y` 640 sits where the speaker's head covers 38 % of its letters
+- **THEN** `stills --strict` reports 62 % of its text shows, under 85 %, and `renderable` is false
+
+### Requirement: Components keep their small text legible
+
+Stage and overlay components SHALL draw their kickers and labels at 30 px or more, in a bold weight and a colour that reads on their own card, so that `stills --strict` passes on ordinary footage. The legibility probe SHALL measure at full resolution, because thin strokes measured at half size blur to a false low contrast. A card whose text leaves the screen (a card dropping into a drawer) SHALL be probed at the moment its text is on screen.
+
+#### Scenario: Card label on a light card
+
+- **WHEN** a `Stuck`, `Gauge` or `ProgressCard` label is probed at full resolution
+- **THEN** its contrast is at least 4.5:1 and its height at least 28 px

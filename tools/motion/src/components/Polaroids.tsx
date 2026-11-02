@@ -42,7 +42,7 @@ export const Polaroids: React.FC<{
             >
               <Img src={staticFile(p.src)} style={{ width: 248, height: 260, objectFit: "cover", display: "block" }} />
               <div style={{ position: "absolute", left: 16, top: 16, width: 248, height: 260, background: "white", opacity: flash }} />
-              <div style={{ fontFamily: fonts.serif, fontStyle: "italic", fontSize: 34, color: colors.ink, textAlign: "center", marginTop: 8 }}>
+              <div style={{ fontFamily: fonts.serif, fontStyle: "italic", fontWeight: 700, fontSize: 36, color: colors.ink, textAlign: "center", marginTop: 8 }}>
                 {p.label}
               </div>
             </div>

@@ -1,6 +1,6 @@
 import React from "react";
 import { Easing } from "remotion";
-import { textOn, useBrand } from "../../theme";
+import { accentOn, useBrand } from "../../theme";
 import { Doc, type DocProps } from "./Doc";
 import { popAt, ramp, useEventTime } from "../fx";
 
@@ -23,7 +23,7 @@ export const DocCard: React.FC<DocProps & {
   return (
     <div style={{ position: "absolute", left: x, top: y, opacity: Math.min(1, s * 2) * (1 - out), transform: `scale(${(0.8 + 0.2 * s) * pulse}) rotate(${rot}deg)` }}>
       {tag ? (
-        <div style={{ fontFamily: fonts.sans, fontWeight: 600, fontSize: 34, color: textOn(colors.accent, colors.ink), background: colors.accent, display: "inline-block", padding: "8px 20px", borderRadius: 12, marginBottom: 14, opacity: tagIn, transform: `translateY(${(1 - tagIn) * 16}px)` }}>
+        <div style={{ fontFamily: fonts.sans, fontWeight: 600, fontSize: 34, color: "#FFFFFF", background: accentOn(colors, "#FFFFFF", 7), display: "inline-block", padding: "8px 20px", borderRadius: 12, marginBottom: 14, opacity: tagIn, transform: `translateY(${(1 - tagIn) * 16}px)` }}>
           {tag}
         </div>
       ) : null}

@@ -128,7 +128,7 @@ NEVER_LIST = [
     (10, "`frame` given by hand", ("frame",)),
 ]
 # finding kinds that are errors in strict mode: the never-list, loud edges and text that doesn't show
-STRICT_KINDS = {k for _, _, kinds in NEVER_LIST for k in kinds} | {"loud_edge", "no_text"}
+STRICT_KINDS = {k for _, _, kinds in NEVER_LIST for k in kinds} | {"loud_edge", "no_text", "hidden"}
 
 
 def strict_split(warnings: list[str]) -> tuple[list[str], list[str]]:

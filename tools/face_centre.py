@@ -4,9 +4,10 @@
 
 Samples 5 frames (10/30/50/70/90 % of the duration), runs the person matte on them (Apple Vision on macOS,
 MediaPipe elsewhere), takes the top 30 % of the person's height as the head band and returns its centroid
-x and middle y, the median over frames with a person. confidence = share of frames with a person, halved
-when the head touches the top edge. A person in fewer than 3 of the 5 frames (a screen recording that shows a
-photo, say) is not a speaker take → face null, confidence 0. Same file + backend → same answer.
+x and middle y, the median over frames with a person; `head` is that band's box [x0, y0, x1, y1], the median
+per side (text keeps clear of it). confidence = share of frames with a person, halved when the head touches
+the top edge. A person in fewer than 3 of the 5 frames (a screen recording that shows a
+photo, say) is not a speaker take → face and head null, confidence 0. Same file + backend → same answer.
 Check the point on a still before trusting it (tools/frames.py).
 """
 
@@ -55,7 +56,7 @@ def suggest(src: Path, backend: str | None = None) -> dict:
         raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(matte), "-vf", f"scale={WORK_W}:{wh}",
                               "-pix_fmt", "gray", "-f", "rawvideo", "-"], capture_output=True, check=True).stdout
     frames = np.frombuffer(raw, np.uint8).reshape(-1, wh, WORK_W)[:len(SAMPLES)]
-    points, cut_top = [], 0
+    points, bands, cut_top = [], [], 0
     for m in frames:
         mask = m > 127
         if mask.mean() < 0.02:
@@ -65,14 +66,16 @@ def suggest(src: Path, backend: str | None = None) -> dict:
         band = mask[top:top + max(1, round(0.3 * (bottom - top + 1)))]
         xs = np.nonzero(band)[1]
         points.append((float(xs.mean()), top + band.shape[0] / 2))
+        bands.append((int(xs.min()), top, int(xs.max()) + 1, top + band.shape[0]))
         cut_top += top <= 1
     if len(points) < 3:
-        return {"face": None, "confidence": 0.0, "backend": pick_backend(backend)}
+        return {"face": None, "head": None, "confidence": 0.0, "backend": pick_backend(backend)}
     k = w / WORK_W
     x = statistics.median(p[0] for p in points) * k
     y = statistics.median(p[1] for p in points) * k
     conf = len(points) / len(SAMPLES) * (0.5 if cut_top > len(points) / 2 else 1.0)
-    return {"face": [round(x), round(y)], "confidence": round(conf, 2), "backend": pick_backend(backend)}
+    head = [round(statistics.median(b[i] for b in bands) * k) for i in range(4)]
+    return {"face": [round(x), round(y)], "head": head, "confidence": round(conf, 2), "backend": pick_backend(backend)}
 
 
 def main() -> None:

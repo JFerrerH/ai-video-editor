@@ -45,24 +45,16 @@ In strict mode, these `check` and `stills` findings SHALL be errors, each with a
 
 ### Requirement: The never-list
 
-The engine SHALL keep a list of anti-patterns a viewer notices at once. Each SHALL have a check whose finding names the event or segment, the time and the fix, and a test fixture that reproduces it. In strict mode every one SHALL be an error, and `stills` SHALL return `renderable: false`. The list:
-1. text over the face;
-2. text unreadable against what is behind it;
-3. captions on top of overlay text;
-4. text too small;
-5. a cut inside a word;
-6. a false start or untranscribed speech kept;
-7. the same source audio twice;
-8. a graphic echoing the words being spoken;
-9. accent text on a fill it doesn't read on;
-10. `frame` given by hand.
-
-`shortform check --never-list` SHALL print the list with each item's check name, so callers can show it.
+The engine SHALL keep ten anti-patterns a viewer notices at once: text over the face; unreadable text; captions on overlay text; tiny text; a cut inside a word; a false start or untranscribed speech kept; the same audio twice; a graphic echoing the words; accent text that doesn't read; hand placement. Each SHALL have a check naming the event or segment, the time and the fix, and a fixture that reproduces it. In strict mode each SHALL be an error, and `stills` SHALL return `renderable: false`.
 
 #### Scenario: Floating stat across the face
 
 - **WHEN** a non-full `StatScene` with `value: 500`, `prefix: "$"`, `suffix: " mil"`, a kicker and a label is placed by the caller over a take whose head box is 380–760 x 520–1000 px, against a light wall, and `stills --strict` runs
 - **THEN** the result has errors naming that event for text over the face, for contrast under the minimum (kicker and suffix), and for captions on its text, and `renderable` is false
+
+### Requirement: The never-list is printable
+
+`shortform check --never-list` SHALL print the list with each item's check name, so callers can show it.
 
 #### Scenario: List printed
 
@@ -71,13 +63,21 @@ The engine SHALL keep a list of anti-patterns a viewer notices at once. Each SHA
 
 ### Requirement: Text keeps clear of the face
 
-For every overlay event with viewer text, `stills` SHALL measure each text element's box at the event's still time. It SHALL report text whose box intersects the segment's take head box (scaled to output and grown by 6% of the frame width on each side) as `events[N] (<type>) text covers the speaker's face at <t> s`, followed by the fix: `"full": true`, or let the engine place it. When the take has no head box (no person), nothing SHALL be reported. Text drawn on a layer behind the speaker's cut-out (live-stage `behind` events) SHALL not be reported, because the speaker covers it. The contrast probe SHALL measure only its visible pixels.
+For every overlay event with viewer text, `stills` SHALL measure each text element's box at the event's still time. It SHALL report text whose box intersects the segment's take head box (scaled to output and grown by 6% of the frame width on each side) as `events[N] (<type>) text covers the speaker's face at <t> s`, followed by the fix: `"full": true`, or let the engine place it. When the take has no head box (no person), nothing SHALL be reported.
 
 #### Scenario: Title above the head
 
 - **WHEN** a floating title's text box ends 40 px above the grown head box
 - **THEN** no face finding is reported
 
+### Requirement: Text behind the speaker
+
+Text drawn on a layer behind the speaker's cut-out (live-stage `behind` events) SHALL NOT be reported as covering the face, because the speaker covers it. The contrast probe SHALL measure only its pixels the cut-out leaves visible.
+
+#### Scenario: Behind event over the head
+
+- **WHEN** a `behind` event's text box intersects the head box
+- **THEN** no face finding is reported for it
 ### Requirement: Captions never sit on overlay text
 
 During every overlay event with viewer text, not only full-layout ones, captions SHALL move out of the overlay's text boxes: below them if they fit above the bottom safe zone, else above them if they fit below the top safe zone. When neither fits, `stills` SHALL report `captions cover events[N] (<type>) text at <t> s`, with the fix of fewer words or `"full": true`.
@@ -98,14 +98,23 @@ During every overlay event with viewer text, not only full-layout ones, captions
 
 ### Requirement: Engine places floating overlays
 
-In strict mode, `frame` on any event SHALL be an error. A floating overlay without `frame` SHALL be placed in the band between the top safe margin and the top of the grown head box, centred horizontally. It SHALL be scaled down, never up, to fit that band. When it fits only below the minimum text size, `check` SHALL report an error naming the event, with the fix of `"full": true` or fewer words. Without strict mode, a given `frame` SHALL keep working as today.
+A floating overlay without `frame` whose text would cover the grown head box SHALL be placed between the top safe margin and the head, centred, scaled down (never up) to fit; one clear of the head SHALL stay put. When it fits only with text under the minimum size, `stills` SHALL report a face finding naming the event, with the fix of `"full": true` or fewer words.
 
 #### Scenario: Placed above the head
 
-- **WHEN** a floating `Receipt` without `frame` runs over a take whose grown head box starts at 560 px, and `stills --strict` runs
-- **THEN** the event's measured content box ends at or above 560 px, its text is at least 28 px tall, and no face or caption finding is reported
+- **WHEN** a floating `NameTitle` without `frame`, whose text would cross the head, runs over a take whose grown head box starts at 565 px, and `stills --strict` runs
+- **THEN** the event's measured text ends at or above 565 px and starts at or below 290 px, its text is at least 28 px tall, and no face or caption finding is reported
 
 #### Scenario: Doesn't fit
 
 - **WHEN** a floating overlay's content would need a scale below the minimum text size to fit the band
-- **THEN** `check --strict` reports an error naming the event and suggesting `"full": true` or fewer words
+- **THEN** `stills --strict` reports an error naming the event and suggesting `"full": true` or fewer words, and `renderable` is false
+
+### Requirement: Hand placement refused in strict mode
+
+In strict mode, `frame` on any event SHALL be an error. Without strict mode, a given `frame` SHALL keep working as today.
+
+#### Scenario: Frame given by hand
+
+- **WHEN** an event has `"frame": {"y": 200}` and `check --strict` runs
+- **THEN** it exits non-zero with an error naming `events[N].props.frame` and saying the engine places floating overlays

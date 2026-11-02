@@ -2,6 +2,7 @@
   "title": "HookTitle",
   "description": "Opening hook: serif headline on a card above the speaker's head.",
   "x-layout": "float",
+  "examples": [{"lines": [{"text": "Saving starts", "emphasis": "starts"}, {"text": "before you spend"}]}],
   "type": "object",
   "required": [
     "lines"

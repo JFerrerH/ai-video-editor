@@ -73,7 +73,7 @@ When `--language` is not given, the system SHALL detect the spoken language from
 
 ### Requirement: Speech with no words is re-transcribed
 
-After transcription, the system SHALL find speech from the audio's RMS envelope (the same speech/silence measure the short-form edge refinement uses). Each stretch of at least 1.5 s of speech that no word covers (a word covers at most its first 1.5 s) SHALL be transcribed again on its own (0.5 s padding, same language, no prompt) and its words merged in time order. Each patch SHALL be recorded in `source.patched` as `{"from", "to", "words"}`.
+After transcription, the system SHALL find speech from the audio's RMS envelope (the same speech/silence measure the short-form edge refinement uses). Each stretch of at least 0.6 s of speech that no word covers (a word covers at most its first 1.5 s) SHALL be transcribed again on its own (0.5 s padding, same language, no prompt), and its words merged in time order. Each patch SHALL be recorded in `source.patched` as `{"from", "to", "words"}`.
 
 #### Scenario: Hole filled
 
@@ -84,6 +84,11 @@ After transcription, the system SHALL find speech from the audio's RMS envelope 
 
 - **WHEN** a backend result has three words in the first second and none until 32 s, while speech runs throughout
 - **THEN** the stretch from about 1 s to 32 s is re-transcribed and recorded in `source.patched`
+
+#### Scenario: Short hole
+
+- **WHEN** 0.8 s of speech between two words has no word
+- **THEN** that stretch is re-transcribed, and if nothing comes back it is listed in `untranscribed`
 
 ### Requirement: Untranscribed speech is reported
 
@@ -111,3 +116,51 @@ The test suite SHALL include a Spanish and an English take generated with the lo
 
 - **WHEN** the English synthetic take is transcribed on the current platform's default backend
 - **THEN** word recall against the script is ≥ 95%, `untranscribed` is empty, and each script sentence's last word ends with `.`, `?` or `!` or is followed by ≥ 0.25 s of spacing
+
+### Requirement: Implausible words are detected
+
+After transcription, a word SHALL be treated as implausible when it lasts longer than `max(1.0, 0.12 × letters + 0.4)` seconds and speech runs through at least 60% of it.
+
+#### Scenario: Long word that is real
+
+- **WHEN** a word lasts 1.1 s and has 9 letters (limit 1.48 s)
+- **THEN** it is kept and nothing is re-transcribed for it
+
+### Requirement: Implausible words are re-transcribed
+
+Each implausible word's window (its start to its end, with the usual padding) SHALL be transcribed again on its own. Words that come back and are not a listed hallucination SHALL replace the implausible word, with times kept non-decreasing, and the patch SHALL be recorded in `source.patched` with `"replaced": "<word>"`. When the retry fails, the window SHALL be listed in `untranscribed`.
+
+#### Scenario: Folded false start
+
+- **WHEN** a backend result has one word "remove" spanning 38.68–42.34 over continuous speech, and the retry of that window returns "the first would be to drop the fear of… the first would be"
+- **THEN** the written JSON has those words in 38.68–42.34 instead of the single long word, and `source.patched` has an entry with `"replaced": "remove"`
+
+#### Scenario: Retry hears nothing
+
+- **WHEN** the retry of an implausible word's window returns no words
+- **THEN** that window is listed in `untranscribed`
+
+### Requirement: Restarts are marked
+
+A restart SHALL be marked when both of these hold:
+- a phrase ends abandoned: its last word carries an ellipsis, or is followed by a pause of at least 0.3 s without sentence-ending punctuation;
+- within 6 s after it, the same first two or more words (case and punctuation ignored) start again.
+
+#### Scenario: Restart detected
+
+- **WHEN** a transcript reads "the first would be to drop the fear of… the first would be to remove the fear"
+- **THEN** `restarts` has one entry whose `abandoned` covers "the first would be to drop the fear of…" and whose `again` is the start of the second "the"
+
+#### Scenario: Deliberate repetition isn't a restart
+
+- **WHEN** a transcript reads "I spend this much on food. I spend this much on rent."
+- **THEN** `restarts` is empty, because the first phrase ends a sentence
+
+### Requirement: Restarts are listed and shown
+
+The transcript JSON SHALL list marked restarts as `restarts: [{"abandoned": [from, to], "again": t, "words": "<abandoned text>"}]` (empty list when none), and the packed transcript SHALL show each one inline at its restart.
+
+#### Scenario: Shown in the packed transcript
+
+- **WHEN** a transcript with a marked restart is packed
+- **THEN** the phrase holding the restart shows `(restart: false start <from>–<to> "<abandoned text>")` before the repeated words

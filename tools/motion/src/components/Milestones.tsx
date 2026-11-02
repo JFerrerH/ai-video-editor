@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { clamp, easeOut, enter, exit, sec } from "../anim";
-import { SAFE, useBrand } from "../theme";
+import { SAFE, onBackdrop, useBackdrop, useBrand } from "../theme";
 
 type IconKind = "cap" | "diploma" | "briefcase" | "star";
 type Item = { icon: IconKind; at: number; label?: string };
@@ -48,6 +48,7 @@ export const Milestones: React.FC<{ durationInFrames: number; items: Item[]; top
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { colors, fonts } = useBrand();
+  const backdrop = useBackdrop();
   const out = exit(frame, durationInFrames, 6);
   const gap = 250;
   const x0 = 540 - (gap * (items.length - 1)) / 2;
@@ -105,7 +106,8 @@ export const Milestones: React.FC<{ durationInFrames: number; items: Item[]; top
               <Glyph kind={it.icon} color={colors.ink} />
             </div>
             {it.label ? (
-              <div style={{ marginTop: 14, fontFamily: fonts.mono, fontSize: 24, letterSpacing: 4, color: "white", textShadow: "0 2px 10px rgba(0,0,0,0.5)" }}>
+              <div style={{ marginTop: 14, fontFamily: fonts.mono, fontSize: 28, letterSpacing: 4, color: onBackdrop(colors, backdrop, "white"),
+                textShadow: backdrop.full ? undefined : "0 2px 10px rgba(0,0,0,0.5)" }}>
                 {it.label}
               </div>
             ) : null}

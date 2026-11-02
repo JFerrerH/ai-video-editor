@@ -1,0 +1,14 @@
+{
+ "item": 6,
+ "kind": "restart",
+ "stage": "check",
+ "take": "restart",
+ "note": "a segment that plays the abandoned phrase and its restart",
+ "segments": [
+  {
+   "take": "restart",
+   "in": 0.0,
+   "out": 3.1
+  }
+ ]
+}

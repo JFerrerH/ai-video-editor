@@ -21,11 +21,43 @@ import short_spec as S  # noqa: E402
 WORDS = [("hello", 0.5, 1.0), ("launch", 1.5, 2.0), ("world", 2.5, 3.0)]
 
 
-def make_take(path: Path, words=WORDS) -> None:
-    expr = "+".join(f"between(t,{a},{b})" for _, a, b in words)
-    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=gray:s=108x192:r=30:d=3.5",
-                    "-f", "lavfi", "-i", f"aevalsrc='0.5*sin(2*PI*220*t)*({expr})':s=48000:d=3.5",
+def make_take(path: Path, words=WORDS, d: float = 3.5, color: str = "gray") -> None:
+    """Tone bursts at (_, a, b) or (_, a, b, amplitude) (default 0.5) over digital silence, on a `color` frame."""
+    expr = "+".join(f"{w[3] if len(w) > 3 else 0.5}*between(t,{w[1]},{w[2]})" for w in words)
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"color=c={color}:s=108x192:r=30:d={d}",
+                    "-f", "lavfi", "-i", f"aevalsrc='sin(2*PI*220*t)*({expr})':s=48000:d={d}",
                     "-shortest", "-c:v", "libx264", "-c:a", "pcm_s16le", str(path)], check=True)
+
+
+# extra takes: (sound bursts, transcript words, extra transcript fields)
+TAKES = {
+    # "plan" (0.60–0.74) runs straight into "goes": no pause between them
+    "runon": ([("", 0.3, 1.5)], [("the", 0.30, 0.60), ("plan", 0.60, 0.74), ("goes", 0.74, 1.00), ("on.", 1.00, 1.50)], {}),
+    # "plan" is stamped 0.60–1.00 but sounds only to its core (0.72); a 20 ms blip at 0.91 and a quiet breath
+    # (0.96–1.11, far under the speech, far over digital silence) before "now"
+    "breath": ([("", 0.30, 0.50), ("", 0.60, 0.72), ("", 0.91, 0.93), ("", 0.96, 1.11, 0.01), ("", 1.21, 1.50)],
+               [("we", 0.30, 0.50), ("plan", 0.60, 1.00), ("now.", 1.21, 1.50)], {}),
+    # a 0.62 s pause after "dos" and a 0.1 s one after "uno"
+    "pause": ([("", 0.3, 0.7), ("", 0.8, 1.2), ("", 1.82, 2.3)],
+              [("uno", 0.3, 0.7), ("dos", 0.8, 1.2), ("tres.", 1.82, 2.3)], {}),
+    # loud from the very first sample
+    "loud0": ([("", 0.0, 1.0)], [("go.", 0.0, 1.0)], {}),
+    # take1's audio; "hello" (0.5–1.0) is a false start restarted at "launch" (1.5); 1.2–1.4 has no words
+    "restart": (WORDS, WORDS, {"restarts": [{"abandoned": [0.5, 1.0], "again": 1.5, "words": "hello"}],
+                               "untranscribed": [[1.2, 1.4]]}),
+    # one sound with only words inside, between "a" and "b": music under speech
+    "music": ([("", 0.3, 3.2)], [("a", 0.5, 1.0), ("b", 2.0, 2.5)], {}),
+    # Whisper stamps "la" from 0.5, in the silence before its sound (0.8)
+    "early": ([("", 0.8, 1.2), ("", 1.6, 2.0)], [("la", 0.5, 1.2), ("casa.", 1.6, 2.0)], {}),
+    # a 20 ms click (far under the speech, far over digital silence) 0.08 s after "we"
+    "click": ([("", 0.3, 0.6), ("", 0.68, 0.70, 0.05), ("", 1.3, 1.6)], [("we", 0.3, 0.6), ("go.", 1.3, 1.6)], {}),
+    # take1's audio over a bright wall (luminance ≈ 0.72) and a white one
+    "bright": (WORDS, WORDS, {}),
+    "white": (WORDS, WORDS, {}),
+}
+COLORS = {"bright": "0xDDDDDD", "white": "white"}
+# a head box on the 108x192 takes (source px): x 380–700, y 630–1000 at 1080x1920; grown by 6 %, it starts at 565
+HEAD = [38, 63, 70, 100]
 
 
 BASE = {
@@ -56,6 +88,10 @@ class Fixture(unittest.TestCase):
         make_take(cls.root / "take2.mov", [("", 0.5, 3.0)])
         (cls.root / "edit" / "transcripts" / "take2.json").write_text(json.dumps(
             {"words": [{"type": "word", "text": "empezar,", "start": 0.5, "end": 1.6}]}))
+        for take, (sound, said, extra) in TAKES.items():
+            make_take(cls.root / f"{take}.mov", sound, color=COLORS.get(take, "gray"))
+            words = [{"type": "word", "text": t, "start": a, "end": b} for t, a, b in said]
+            (cls.root / "edit" / "transcripts" / f"{take}.json").write_text(json.dumps({"words": words, **extra}))
 
     @classmethod
     def tearDownClass(cls):
@@ -88,6 +124,14 @@ class Fixture(unittest.TestCase):
         if take2:
             spec["sources"]["take2"] = {"file": "take2.mov", "face": [54, 96]}
         return spec
+
+    def on(self, take: str, *segs: dict) -> dict:
+        """A spec whose segments (dicts without `take`) all cut `take`."""
+        return {"version": 1, "brand": "none", "sources": {take: {"file": f"{take}.mov", "face": [54, 96]}},
+                "segments": [{"take": take, **s} for s in segs]}
+
+    def check(self, spec: dict, strict: bool = False) -> dict:
+        return S.check(self.write(spec), self.root, strict=strict)
 
 
 class SpecTest(Fixture):
@@ -288,16 +332,30 @@ class SpecTest(Fixture):
 
     def test_locked_edge_inside_a_word(self):
         res = S.check(self.write(self.segs(("take2", 1.2, 3.4, {"lock_in": True}), take2=True)), self.root)
+        self.assertTrue(any(e.startswith('segments[0].in 1.20 is inside "empezar" (0.50–1.60): use 0.50 or 1.60')
+                            for e in res["errors"]), res)
+
+    def test_locked_edge_between_words(self):
+        res = self.check(self.on("music", {"in": 1.5, "out": 3.4, "lock_in": True}))
         self.assertEqual(res["errors"], [])
-        self.assertTrue(any(w.startswith('segments[0].in 1.20 is inside "empezar" (0.50–1.60): use 0.50 or 1.60')
-                            for w in res["warnings"]), res["warnings"])
+        self.assertTrue(any(w.startswith("segments[0].in 1.50") and "(locked)" in w for w in res["warnings"]), res)
 
     def test_loud_head(self):
         res = S.check(self.write(self.segs(("take2", 2.2, 3.4), take2=True)), self.root)
         e = next(e for e in res["errors"] if e.startswith("segments[0].in"))
         self.assertIn("starts in the middle of sound", e)
         self.assertRegex(e, r"\+\d+\.\d dB over the room tone")
+        self.assertNotIn("lock", e)
         self.assertFalse(any("<-- check" in m for m in res["errors"] + res["warnings"] + res["edges"]))
+
+    def test_locked_edge_in_an_early_stamp(self):
+        # inside the stamp of "la" but in the silence before its sound: nothing is cut
+        res = self.check(self.on("early", {"in": 0.65, "out": 2.3, "lock_in": True}))
+        self.assertFalse(any("inside" in m for m in res["errors"] + res["warnings"]), res)
+
+    def test_take_starts_mid_word(self):
+        res = self.check(self.on("loud0", {"in": 0.0, "out": 1.3}))
+        self.assertFalse(any(".in" in m for m in res["errors"] + res["warnings"]), res)
 
     def test_captions_fit_nowhere_warns(self):
         spec = self.segs(("take1", 0.45, 3.05))
@@ -308,7 +366,9 @@ class SpecTest(Fixture):
         boxes.write_text(json.dumps({p._box_key(p.events[0]): {"box": [100, 400, 980, 1500]}}))
         self.assertNotIn("avoid", p.caption_event()["props"])
         (w,) = p.caption_warnings()
-        self.assertTrue(w.startswith("events[0] (StatScene): its content (400–1500 px) reaches the captions"), w)
+        self.assertTrue(w.startswith("captions cover events[0] (StatScene) text at "), w)
+        self.assertIn("its content (400–1500 px) reaches the captions", w)
+        self.assertEqual(w.kind, "captions_on_text")
         boxes.write_text(json.dumps({p._box_key(p.events[0]): {"box": [100, 700, 980, 1260]}}))
         self.assertEqual(p.caption_event()["props"]["avoid"], [[0.0, 2.0, 1320]])
         self.assertEqual(p.caption_warnings(), [])
@@ -319,6 +379,180 @@ class SpecTest(Fixture):
         res = S.check(self.write(spec), self.root)
         self.assertEqual(res["errors"], [])
         self.assertTrue(any("apart" in w for w in res["warnings"]), res["warnings"])
+
+
+class WordEdgesTest(Fixture):
+    """Segments cut by word anchors (`from` / `to`), resolved into pauses measured against the speech."""
+
+    def test_out_after_a_word(self):
+        res = self.check(self.on("take1", {"from": {"word": "launch"}, "to": {"word": "world"}}))
+        self.assertEqual(res["errors"], [])
+        p, _ = S.load(self.write(self.on("take1", {"from": {"word": "launch"}, "to": {"word": "world"}})), self.root)
+        first, last = p.segments[0], p.segments[-1]  # the 0.5 s pause before "world" is dead air: two pieces
+        self.assertTrue(1.0 < first.t_in < 1.5, first.t_in)
+        self.assertTrue(3.0 <= last.t_out < 3.5, last.t_out)
+        self.assertIn(f"{last.t_out:7.2f}", res["timeline"][-1])  # resolved seconds in the timeline
+
+    def test_after(self):
+        spec = self.on("take1", {"from": {"word": "hello"}, "to": {"word": "launch", "after": 1.2}})
+        p, _ = S.load(self.write(spec), self.root)
+        self.assertTrue(2.0 <= p.segments[-1].t_out < 2.5, p.segments[-1].t_out)
+
+    def test_run_on_words(self):
+        # one continuous tone: the out is loud (that error stays), but never reported inside a word
+        res = self.check(self.on("runon", {"from": {"word": "the"}, "to": {"word": "plan"}}))
+        self.assertFalse(any("inside" in m for m in res["errors"] + res["warnings"]), res)
+        p, _ = S.load(self.write(self.on("runon", {"in": 0.25, "out": 1.55})), self.root)
+        out = S.word_edge(p, "runon", {"word": "plan"}, "out", 9.0)
+        self.assertTrue(0.70 <= out <= 0.78, out)
+
+    def test_both_forms(self):
+        errs = self.errors(self.on("take1", {"in": 0.4, "from": {"word": "hello"}, "out": 1.1}))
+        self.assertTrue(any(e.startswith("segments[0]") and "`in`" in e and "`from`" in e and "one of" in e
+                            for e in errs), errs)
+        errs = self.errors(self.on("take1", {"in": 0.4}))
+        self.assertTrue(any(e.startswith("segments[0]") and "'out'" in e for e in errs), errs)
+        errs = self.errors(self.on("take1", {"from": {"word": "hello", "edge": "end"}, "out": 1.1}))
+        self.assertTrue(any("segments[0].from" in e and "'edge'" in e for e in errs), errs)
+
+    def test_word_not_in_take(self):
+        errs = self.load_errors(self.on("take1", {"from": {"word": "hello", "after": 2.0}, "out": 3.1}))
+        self.assertTrue(any(e.startswith("segments[0].from") and "'hello'" in e and "take1" in e for e in errs), errs)
+
+    def test_breath_after_a_word(self):
+        p, _ = S.load(self.write(self.on("breath", {"from": {"word": "we"}, "to": {"word": "plan"}})), self.root)
+        out = p.segments[0].t_out
+        self.assertTrue(0.72 < out < 0.96, out)  # in the pause, before the breath
+
+    def test_click_beside_the_cut(self):
+        # the click is merged into the pause (noise flicker); the out moves past it, so it isn't played or loud
+        spec = self.on("click", {"from": {"word": "we"}, "to": {"word": "we"}})
+        res = self.check(spec)
+        self.assertEqual(res["errors"], [])
+        self.assertFalse(any("sound" in w for w in res["warnings"]), res)
+        p, _ = S.load(self.write(spec), self.root)
+        self.assertGreater(p.segments[0].t_out, 0.70 + 0.02)
+
+    def test_dead_air_split(self):
+        spec = self.on("pause", {"from": {"word": "uno"}, "to": {"word": "tres."}, "zoom": {"kind": "static", "scale": 1.1}})
+        res = self.check(spec)
+        self.assertEqual(res["errors"], [])
+        p, _ = S.load(self.write(spec), self.root)
+        a, b = p.segments
+        self.assertEqual((a.zoom, b.zoom), (("static", 1.1), ("static", 1.1)))
+        self.assertTrue(1.2 < a.t_out < 1.4 and 1.6 < b.t_in < 1.82, (a.t_out, b.t_in))
+        self.assertLessEqual((a.t_out - 1.2) + (1.82 - b.t_in), 0.25)  # the silence the output keeps there
+        self.assertEqual(len(res["timeline"]), 3)
+        self.assertTrue(res["timeline"][1].lstrip().startswith("0.0") and res["timeline"][2].lstrip().startswith("0.1"),
+                        res["timeline"])
+
+    def test_pause_found_from_both_sides(self):
+        # "y" is stamped over the whole pause after "dos": both gaps find it; it is cut once
+        TAKE = self.root / "edit" / "transcripts" / "pause.json"
+        orig = TAKE.read_text()
+        self.addCleanup(TAKE.write_text, orig)
+        data = json.loads(orig)
+        data["words"][1:2] = [{"type": "word", "text": "dos", "start": 0.8, "end": 1.1},
+                              {"type": "word", "text": "y", "start": 1.1, "end": 1.8}]
+        TAKE.write_text(json.dumps(data))
+        p, _ = S.load(self.write(self.on("pause", {"from": {"word": "uno"}, "to": {"word": "tres."}})), self.root)
+        self.assertEqual(len(p.segments), 2)
+        self.assertTrue(all(s.t_out - s.t_in >= 0.1 for s in p.segments), [(s.t_in, s.t_out) for s in p.segments])
+
+    def test_seconds_segment_not_split(self):
+        p, _ = S.load(self.write(self.on("pause", {"in": 0.25, "out": 2.4})), self.root)
+        self.assertEqual(len(p.segments), 1)
+
+    def test_seg_anchor_spans_pieces(self):
+        spec = self.on("pause", {"from": {"word": "uno"}, "to": {"word": "tres."}})
+        spec["events"] = [{"type": "HookTitle", "start": 0, "end": {"seg": 0, "edge": "end"},
+                           "props": {"lines": [{"text": "Hi"}]}}]
+        p, _ = S.load(self.write(spec), self.root)
+        self.assertAlmostEqual(p.events[0]["duration"], round(p.offsets()[-1], 3), places=3)
+
+
+class FaultsTest(Fixture):
+    """Restarts and untranscribed speech kept, strict mode, and the scene/backdrop mismatch."""
+
+    def test_false_start_inside_a_segment(self):
+        res = self.check(self.on("restart", {"in": 0.0, "out": 3.1}))
+        e = next(e for e in res["errors"] if "false start" in e)
+        for part in ("segments[0]", '"hello"', "0.50–1.00", "1.50"):
+            self.assertIn(part, e)
+
+    def test_split_suggested_when_the_segment_starts_earlier(self):
+        spec = self.on("restart", {"in": 0.0, "out": 3.1})
+        TAKE = self.root / "edit" / "transcripts" / "restart.json"
+        orig = TAKE.read_text()
+        self.addCleanup(TAKE.write_text, orig)
+        data = json.loads(orig)
+        data["restarts"] = [{"abandoned": [1.5, 2.0], "again": 2.5, "words": "launch"}]
+        TAKE.write_text(json.dumps(data))
+        e = next(e for e in self.check(spec)["errors"] if "false start" in e)
+        self.assertIn("end it at 1.50", e)
+        self.assertIn("2.50", e)
+
+    def test_only_the_restart_kept(self):
+        res = self.check(self.on("restart", {"in": 1.45, "out": 3.1}))
+        self.assertFalse(any("false start" in m for m in res["errors"] + res["warnings"]), res)
+
+    def test_keep_restart(self):
+        res = self.check(self.on("restart", {"in": 0.0, "out": 3.1, "keep_restart": True}))
+        self.assertFalse(any("false start" in e for e in res["errors"]), res)
+        self.assertTrue(any("false start" in w for w in res["warnings"]), res)
+        res = self.check(self.on("restart", {"in": 0.0, "out": 3.1, "keep_restart": True}), strict=True)
+        self.assertTrue(any("segments[0].keep_restart" in e for e in res["errors"]), res)
+        self.assertTrue(any("false start" in e for e in res["errors"]), res)
+
+    def test_untranscribed_kept(self):
+        res = self.check(self.on("restart", {"in": 1.1, "out": 1.6}))
+        w = next(w for w in res["warnings"] if "1.20–1.40" in w)
+        self.assertIn("segments[0]", w)
+        self.assertIn("no words", w)
+        res = self.check(self.on("restart", {"in": 1.1, "out": 1.6}), strict=True)
+        self.assertTrue(any("1.20–1.40" in e for e in res["errors"]), res)
+
+    def test_lock_refused_in_strict(self):
+        spec = self.on("take1", {"in": 0.45, "out": 1.05}, {"in": 1.45, "out": 3.05, "lock_out": True})
+        res = self.check(spec, strict=True)
+        e = next(e for e in res["errors"] if "segments[1].lock_out" in e)
+        self.assertIn("locks aren't accepted", e)
+        self.assertIn("pause or between words", e)
+        res = self.check(spec)
+        self.assertFalse(any("lock_out" in m for m in res["errors"]), res)
+
+    def test_echo_blocks_in_strict(self):
+        spec = self.on("take1", {"in": 0.45, "out": 3.05})
+        spec["events"] = [{"type": "HookTitle", "start": 0.5, "duration": 1.0, "props": {"lines": [{"text": "launch"}]}}]
+        self.assertTrue(any(w.startswith("ECHO") for w in self.check(spec)["warnings"]))
+        self.assertTrue(any(e.startswith("ECHO") for e in self.check(spec, strict=True)["errors"]))
+
+    def test_strict_load_raises(self):
+        spec = self.on("take1", {"in": 0.45, "out": 3.05, "lock_in": True})
+        S.load(self.write(spec), self.root)
+        with self.assertRaises(S.SpecError) as cm:
+            S.load(self.write(spec), self.root, strict=True)
+        self.assertTrue(any("lock_in" in e for e in cm.exception.errors))
+
+    def test_dark_scene_on_light_backdrop(self):
+        spec = self.on("take1", {"in": 0.45, "out": 3.05})
+        spec["events"] = [{"type": "StatScene", "start": 0, "duration": 1.0, "props": {"value": 3, "bg": "dark", "full": True}}]
+        spec["events"][0]["duration"] = 2.5
+        e = next(e for e in self.load_errors(spec) if e.startswith("events[0]"))
+        self.assertIn('"dark": true', e)
+        self.assertIn('"bg": "dark"', e)
+        spec["events"][0]["props"]["dark"] = True
+        S.load(self.write(spec), self.root)
+
+    def test_never_list(self):
+        self.assertEqual(len(S.NEVER_LIST), 10)
+        r = subprocess.run([sys.executable, str(TOOLS / "shortform.py"), "check", "--never-list"],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        lines = [ln for ln in r.stdout.splitlines() if ln.strip()]
+        self.assertEqual(len(lines), 10)
+        for n, ln in enumerate(lines, 1):
+            self.assertTrue(ln.lstrip().startswith(f"{n}."), ln)
 
 
 MOTION = TOOLS / "motion"
@@ -380,7 +614,7 @@ class StillsTest(Fixture):
 
     def test_captions_clear_scene_text(self):
         stat = {"type": "StatScene", "start": 0, "duration": 2.4,
-                "props": {"value": 42, "size": 440, "kicker": "Kicker", "label": "a label\nthat runs\nthree lines"}}
+                "props": {"value": 42, "size": 440, "full": True, "label": "a label\nthat runs\nthree lines"}}
         p, _ = S.load(self.write(self.one(stat, captions={"top": 1250})), self.root)
         warnings = []
         out = p.stills([2.5], warnings=warnings)
@@ -401,6 +635,117 @@ class StillsTest(Fixture):
         self.assertEqual(int((img[y0:y1, x0:x1, 3] > 8).sum()), 0)
         self.assertGreater(int((img[:, :, 3] > 8).sum()), 0)  # the captions are on screen
         self.assertEqual({st["path"].name for st in out}, {"short_002.50.png", "ev00_StatScene_001.67.png"})  # after the label
+
+
+@unittest.skipUnless(shutil.which("npx") and (MOTION / "node_modules" / "remotion").is_dir(), "needs tools/motion deps")
+class ProbeTest(Fixture):
+    """The legibility probe over the real frame, text over the face, text size, captions and placement."""
+
+    def setUp(self):
+        shutil.rmtree(self.root / "edit" / "stills", ignore_errors=True)
+        (self.root / "edit" / "overlay_boxes.json").unlink(missing_ok=True)
+
+    def probe(self, take: str, *events, head=None, captions=None):
+        spec = self.on(take, {"in": 0.45, "out": 3.05})
+        if head:
+            spec["sources"][take]["head"] = head
+        spec["events"] = list(events)
+        if captions:
+            spec["captions"] = {"props": captions}
+        p, _ = S.load(self.write(spec), self.root)
+        warnings = []
+        p.measure_events(warnings=warnings)
+        return p, warnings + p.caption_warnings()
+
+    def kinds(self, warnings) -> dict:
+        out = {}
+        for w in warnings:
+            out.setdefault(w.kind, []).append(w)
+        return out
+
+    def test_pale_text_on_white(self):
+        _, ws = self.probe("white", {"type": "NameTitle", "start": 0, "duration": 2.4,
+                                     "props": {"text": "Read me", "color": "#E8FD5A", "top": 300}})
+        (w,) = self.kinds(ws)["contrast"]
+        self.assertRegex(w, r"^events\[0\] \(NameTitle\) text contrast 1\.\d:1 at [\d.]+ s is under 3:1")
+
+    def test_bare_number_on_bright_wall(self):
+        stat = {"type": "StatScene", "start": 0, "duration": 2.4, "props": {"value": 500, "bg": "none"}}
+        _, ws = self.probe("bright", stat)
+        self.assertIn("contrast", self.kinds(ws), ws)
+        _, ws = self.probe("take1", {**stat, "props": {"value": 500}})  # dark number on the grey wall reads
+        self.assertNotIn("contrast", self.kinds(ws), ws)
+
+    def test_floating_stat_across_the_face(self):
+        stat = {"type": "StatScene", "start": 0, "duration": 2.4,
+                "props": {"value": 500, "prefix": "$", "suffix": " mil", "kicker": "Kicker", "label": "a label",
+                          "bg": "none", "frame": {"scale": 1, "y": 0}}}
+        p, ws = self.probe("bright", stat, head=HEAD)
+        k = self.kinds(ws)
+        self.assertTrue(k["face"][0].startswith("events[0] (StatScene) text covers the speaker's face at "), k)
+        self.assertIn("kicker", k["contrast"][0])
+        errors, _ = S.strict_split(ws)
+        self.assertTrue(any(e.kind == "face" for e in errors) and any(e.kind == "contrast" for e in errors))
+
+    def test_tiny_kicker(self):
+        stat = {"type": "StatScene", "start": 0, "duration": 2.4,
+                "props": {"value": 5, "kicker": "Kicker", "full": True, "frame": {"scale": 0.5}}}
+        _, ws = self.probe("take1", stat)
+        (w,) = self.kinds(ws)["small_text"]
+        self.assertTrue(w.startswith("events[0] (StatScene) kicker text is 15 px tall, under 28 px"), w)
+        groups = json.loads((self.root / "edit" / "overlay_text.json").read_text())["0"]["texts"]
+        self.assertEqual(next(g for g in groups if g["field"] == "kicker")["size"], 15)
+
+    def test_placed_above_the_head(self):
+        name = {"type": "NameTitle", "start": 0, "duration": 2.4, "props": {"text": "Alex"}}
+        p, ws = self.probe("take1", name, head=HEAD)
+        self.assertNotIn("face", self.kinds(ws), ws)
+        frame = p.events[0]["props"]["frame"]
+        self.assertLess(frame["y"], 0)  # moved up
+        box = json.loads((self.root / "edit" / "overlay_boxes.json").read_text())[p._box_key(p.events[0])]["text"]
+        self.assertLessEqual(box[3], 565)
+        self.assertGreaterEqual(box[1], 290)
+        # without a head box (no person) nothing moves
+        p, _ = self.probe("take1", name)
+        self.assertNotIn("frame", p.events[0]["props"])
+
+    def test_behind_text_over_the_head(self):
+        # under the speaker's cut-out: the speaker covers it, so it isn't text over the face (and isn't moved)
+        name = {"type": "NameTitle", "start": 0, "duration": 2.4, "props": {"text": "Alex", "behind": True}}
+        p, ws = self.probe("take1", name, head=HEAD)
+        self.assertNotIn("face", self.kinds(ws), ws)
+        self.assertNotIn("frame", p.events[0]["props"])
+
+    def test_does_not_fit_above_the_head(self):
+        receipt = {"type": "Receipt", "start": 0, "duration": 2.4,
+                   "props": {"title": "This month", "items": [{"text": "Rent", "at": 0.2}, {"text": "Food", "at": 0.4}],
+                             "total": "$1,220"}}
+        p, ws = self.probe("take1", receipt, head=HEAD)
+        w = next(w for w in ws if w.kind == "face")
+        self.assertIn("fits above the speaker's head only at", w)
+        self.assertIn('"full": true', w)
+        self.assertNotIn("frame", p.events[0]["props"])
+
+    def test_pale_accent_receipt_reads(self):
+        # brand-theme: the receipt's stamp in a pale accent is drawn in a darker shade that reads on the card
+        spec = self.on("white", {"in": 0.45, "out": 3.05})
+        spec["events"] = [{"type": "Receipt", "start": 0, "duration": 2.4,
+                           "props": {"title": "This month", "items": [{"text": "Rent", "at": 0.1}], "total": "$900",
+                                     "stamp": "PAID", "stampAt": 0.3}}]
+        p, _ = S.load(self.write(spec), self.root)
+        p.brand = {**p.brand, "colors": {**p.brand["colors"], "accent": "#E8FD5A", "ink": "#16150F"}}
+        warnings = []
+        p.measure_events(warnings=warnings)
+        self.assertNotIn("contrast", self.kinds(warnings), warnings)
+        texts = json.loads((self.root / "edit" / "overlay_text.json").read_text())["0"]["texts"]
+        self.assertIn("stamp", [g["field"] for g in texts])
+
+    def test_captions_on_overlay_text(self):
+        tall = {"type": "NameTitle", "start": 0, "duration": 2.4,
+                "props": {"lines": [{"text": t} for t in ("one", "two", "three", "four", "five")], "top": 400}}
+        _, ws = self.probe("take1", tall, captions={"top": 830})
+        (w,) = self.kinds(ws)["captions_on_text"]
+        self.assertTrue(w.startswith("captions cover events[0] (NameTitle) text at "), w)
 
 
 class ChunksTest(unittest.TestCase):

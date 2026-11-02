@@ -2,6 +2,7 @@
   "title": "ContentGrid",
   "description": "A vague brief → an empty grid at gridAt, tiles fill from fillAt, the card wobbles at missAt.",
   "x-layout": "float",
+  "examples": [{"gridAt": 0.2, "fillAt": 0.8}],
   "type": "object",
   "required": [
     "gridAt",

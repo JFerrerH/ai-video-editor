@@ -42,17 +42,82 @@ export const defaultBrand: Brand = {
   fontFiles: [],
 };
 
-/** Text colour that reads on a solid `hex` fill: white on a dark/saturated fill, `ink` on a light one
- *  (a lime or pale-yellow accent). Uses WCAG relative luminance. */
-export const textOn = (hex: string, ink: string) => {
+const rgbOf = (hex: string) => {
   const h = hex.replace("#", "");
   const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h.slice(0, 6);
-  const [r, g, b] = [0, 2, 4].map((i) => {
-    const c = parseInt(full.slice(i, i + 2), 16) / 255;
-    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? ink : "#FFFFFF";
+  return [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16) / 255);
 };
+
+/** WCAG relative luminance of a hex colour. */
+export const luminance = (hex: string) => {
+  const [r, g, b] = rgbOf(hex).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+
+/** WCAG contrast ratio of two hex colours (1–21). */
+export const contrast = (a: string, b: string) => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+};
+
+/** Text colour that reads on a solid `hex` fill: `ink` or white, whichever contrasts more with it (white on a
+ *  dark/saturated fill, `ink` on a light one such as a lime or pale-yellow accent). */
+export const textOn = (hex: string, ink: string) => (contrast(ink, hex) >= contrast("#FFFFFF", hex) ? ink : "#FFFFFF");
+
+const toHsl = (hex: string): [number, number, number] => {
+  const [r, g, b] = rgbOf(hex);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return [0, 0, l];
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  const h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [h / 6, s, l];
+};
+
+const fromHsl = (h: number, s: number, l: number) => {
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  const ch = (t: number) => {
+    const u = t < 0 ? t + 1 : t > 1 ? t - 1 : t;
+    const v = u < 1 / 6 ? p + (q - p) * 6 * u : u < 1 / 2 ? q : u < 2 / 3 ? p + (q - p) * (2 / 3 - u) * 6 : p;
+    return Math.round(v * 255).toString(16).padStart(2, "0");
+  };
+  return `#${ch(h + 1 / 3)}${ch(h)}${ch(h - 1 / 3)}`;
+};
+
+/** The brand accent drawn as text, or as a text stamp's border, on a solid `fill`: the accent itself when it
+ *  reaches `min` WCAG contrast there (3:1; pass 4.5 for text under 48 px), else the same hue stepped 5 % in
+ *  lightness away from the fill (darker on a light fill, lighter on a dark one) until it does, else `ink`
+ *  (white where ink doesn't read). Accent used as a fill behind text keeps `textOn` for the text. */
+export const accentOn = (colors: Brand["colors"], fill: string, min = 3) => readable(colors.accent, fill, colors.ink, min);
+
+/** Any brand colour (muted, a label grey) drawn as text on a solid `fill`: itself when it reaches `min` WCAG
+ *  contrast, else the nearest shade of the same hue that does (`accentOn`'s steps), else `ink` or white. */
+export const readable = (color: string, fill: string, ink: string, min = 4.5) => {
+  if (contrast(color, fill) >= min) return color;
+  const [h, s, l] = toHsl(color);
+  const step = luminance(fill) > 0.18 ? -0.05 : 0.05;
+  for (let x = l + step; x >= 0 && x <= 1; x += step) {
+    const c = fromHsl(h, s, x);
+    if (contrast(c, fill) >= min) return c;
+  }
+  return contrast(ink, fill) >= min ? ink : "#FFFFFF";
+};
+
+// the lightest part of the dark backdrop (its top glow, where headers sit): dark-tone text is measured on it
+export const DARK_GLOW = "#3C4048";
+
+/** The text colour for something drawn straight on the backdrop (no card of its own): ink on the light
+ *  backdrop, the light tone on the dark one (`dark: true`), `overFootage` when there's no backdrop. */
+export const onBackdrop = (colors: Brand["colors"], props: { full?: boolean; dark?: boolean }, overFootage: string) =>
+  !props.full ? overFootage : props.dark ? "#F5F4F0" : colors.ink;
+
+/** What an overlay event is drawn on: the brand backdrop (`full`, ink-coloured when `dark`) or the footage.
+ *  Set per event by OverlayLayer; components read it with useBackdrop() for `onBackdrop`. */
+export const BackdropContext = createContext<{ full?: boolean; dark?: boolean }>({});
+export const useBackdrop = () => useContext(BackdropContext);
 
 export const BrandContext = createContext<Brand>(defaultBrand);
 export const useBrand = () => useContext(BrandContext);

@@ -245,7 +245,7 @@ export const IsoOffice: React.FC<{
               fontFamily: fonts.mono,
               fontSize: LABEL_FS,
               fontWeight: 700,
-              color: pal.accent,
+              color: pal.accentSmall,
             }}
           >
             <svg width={36} height={28} viewBox="0 0 36 28">

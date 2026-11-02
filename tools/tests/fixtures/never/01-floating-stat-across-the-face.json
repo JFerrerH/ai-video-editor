@@ -1,0 +1,44 @@
+{
+ "item": 1,
+ "kind": "face",
+ "stage": "stills",
+ "take": "bright",
+ "head": [
+  38,
+  63,
+  70,
+  100
+ ],
+ "note": "a stat floating with no card, placed by hand across the speaker's head on a light wall: its kicker doesn't read and the captions have no room around it",
+ "segments": [
+  {
+   "take": "bright",
+   "in": 0.45,
+   "out": 3.05
+  }
+ ],
+ "events": [
+  {
+   "type": "StatScene",
+   "start": 0,
+   "duration": 2.4,
+   "props": {
+    "value": 500,
+    "prefix": "$",
+    "suffix": " mil",
+    "kicker": "Kicker",
+    "label": "a label",
+    "bg": "none",
+    "frame": {
+     "scale": 1,
+     "y": 0
+    },
+    "size": 440
+   }
+  }
+ ],
+ "also": [
+  "contrast",
+  "captions_on_text"
+ ]
+}

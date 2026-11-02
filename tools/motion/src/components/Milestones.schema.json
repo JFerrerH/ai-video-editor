@@ -2,6 +2,7 @@
   "title": "Milestones",
   "description": "Life milestones as icons on a line, each landing at its at.",
   "x-layout": "float",
+  "examples": [{"items": [{"icon": "cap", "at": 0.2, "label": "Study"}, {"icon": "briefcase", "at": 0.5, "label": "Work"}, {"icon": "star", "at": 0.8, "label": "Goal"}]}],
   "type": "object",
   "required": [
     "items"

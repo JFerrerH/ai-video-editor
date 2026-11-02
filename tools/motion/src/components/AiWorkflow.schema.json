@@ -2,6 +2,7 @@
   "title": "AiWorkflow",
   "description": "A robot hub wires up emoji tool nodes one by one; optional content pile at pileAt. Pair with full.",
   "x-layout": "float",
+  "examples": [{"hub": "AI", "nodes": [{"emoji": "📧", "at": 0.2}, {"emoji": "📅", "at": 0.5}, {"emoji": "📊", "at": 0.8}]}],
   "type": "object",
   "required": [
     "nodes"

@@ -52,9 +52,11 @@ Examples below are illustrative. They show the technique, not a style to copy.
    sound (whoosh by default; heavier hits only if the brand wants them).
 4b. **Cutaway vs floating.** Only graphics that fill the screen get a full backdrop (`full: true`):
    phone/product montages, website scrolls, code editors. Cards, receipts, drawers, stats and photos
-   **float over the footage** with no backdrop, shrunk into the band above the head with
-   `frame: {scale, y}` (keep the scaled top ≥ 290 and the bottom above the head at the segment's tightest zoom) and `enterFrom: "above"`
-   so the entrance never crosses the face. **On a light backdrop captions turn plain ink**, key
+   **float over the footage** with no backdrop, in the band above the head, with `enterFrom: "above"` so the
+   entrance never crosses the face. **The engine places them**: leave out `frame`, and a floating overlay whose
+   text would cover the head box (the face step's `head`) is scaled down and centred between the top safe margin
+   and the head; when it would only fit with text under 28 px, `stills` says so (use `"full": true` or fewer
+   words). A hand-set `frame: {scale, x, y}` still works locally; strict mode refuses it. **On a light backdrop captions turn plain ink**, key
    phrases included (no accent colour on a background).
 5. **Cutaways ≤ 3 s, product montages ≤ 7 s.** The voice continues underneath; swipe
    screens on the exact words (`p.word(...)`).
@@ -113,12 +115,19 @@ Examples below are illustrative. They show the technique, not a style to copy.
    `uv run tools/conform.py <project dir> --frame 9:16` → `edit/conformed/<stem>.mov` (same timeline, so the
    original's transcript still fits). `uv run tools/face_centre.py <take>` suggests the face centre; check it on
    a still (`uv run tools/frames.py <take> --at 2 8 --sheet`).
-4b. Fill `edit/short.json` (`tools/new_project.py --shortform` writes it): `sources` (file + face), `segments`
-   (take, in, out, zoom, look, freeze_after, lock_in/lock_out), `brand`, `captions` (fixes, word_fixes, skip),
+4b. Fill `edit/short.json` (`tools/new_project.py --shortform` writes it): `sources` (file + face, + `head` from the
+   face step, else read from `edit/face.json`), `segments` (take, from/to or in/out, zoom, look, freeze_after),
+   `brand`, `captions` (fixes, word_fixes, skip),
    `emphasis`, `events`, `sfx`, `public_files`. Time an event or SFX with an anchor instead of a number:
    `{"word": "launch", "take": "take1", "after": 12.0, "edge": "start", "offset": 0.1}` or
    `{"seg": 3, "edge": "end"}`. Anchors resolve **after** edge refinement, exactly as `p.word()` after
    `p.refine_edges()` does in a `build.py`. `edges: {"above_floor": 28}` for very low noise floors (gotchas).
+   **Cut by words, not seconds:** `{"take": "take1", "from": {"word": "Resulta"}, "to": {"word": "maestría.", "after": 40}}`.
+   The engine puts each edge in the pause before `from` / after `to` (silence measured against the take's own
+   speech, so a breath counts as silence), or at the quietest point between two words that run together, never
+   inside one, and drops every inner pause of 0.30 s or more (dead air) as a jump cut with the segment's zoom and
+   look. `check`'s timeline shows the resolved seconds (pieces as `3.0`, `3.1`). Give `after` (source seconds)
+   when the word occurs more than once. Seconds still work; use them for edges on music or a sound, not a word.
    A `base.mov` from `tools/shotcut.py` (character videos, `character-video` skill) is also a valid
    single source: one locked segment over it, as in `templates/character_build.py`.
 5a. `uv run tools/shortform.py check <edit>/short.json` → timeline, edge report, echo/SFX warnings and
@@ -129,9 +138,17 @@ Examples below are illustrative. They show the technique, not a style to copy.
      (next in ≤ 0.6 s after an out) whose refined edges would cross are `[joined]` at the quietest point between them;
      a pause you trimmed between them stays trimmed.
    - **an edge inside a word** that refinement couldn't move to silence (`segments[7].in 57.50 is inside "empezar"
-     (57.28–57.64): use 57.28 or 57.64`). With `lock_in`/`lock_out` it is a warning instead.
-   - **an edge on sound:** more than `above_floor` + 3 dB (default 12 dB) over the room tone (`… starts in the middle
-     of sound: +20.9 dB over the room tone`). Above `above_floor` (default 9 dB), or on a locked edge, it is a warning.
+     (57.28–57.64): use 57.28 or 57.64`). **A lock never excuses it**: `lock_in`/`lock_out` only keep an edge on sound
+     *between* words (music, a breath). An edge in the silence of Whisper's early stamp isn't inside the word.
+   - **an edge on sound:** more than 3 dB over the take's silence threshold (room tone + `above_floor`, or the speech
+     level − 25 dB in a very quiet room) (`… starts in the middle of sound: +20.9 dB over the room tone`). Above the
+     threshold, or on a locked edge, it is a warning. An in-point at source time 0 is clean (nothing precedes it).
+   - **a false start kept:** the transcript marks restarts (`restarts`; also inline in the packed transcript as
+     `(restart: false start …)`). A segment that plays the abandoned phrase and its restart fails with the cut
+     that removes it (`start it at 41.50`, or end it at the abandoned phrase and start a new segment at the
+     restart). `"keep_restart": true` on the segment makes it a warning, for a repeat that is meant.
+   - **a dark scene on a light backdrop** (`"bg": "dark"` with `"full": true` and no `"dark": true`), or the reverse.
+   Warnings to read: a segment that keeps `untranscribed` speech (speech with no words: listen before keeping it).
    - **event props** that don't match the component's schema (`tools/motion/src/**/<Type>.schema.json`; all of them:
      `uv run tools/overlay_schema.py --export`): unknown keys, missing required ones, wrong types (a number given as a
      string: `"value": "400.000"`), values outside an enum or range.
@@ -142,17 +159,28 @@ Examples below are illustrative. They show the technique, not a style to copy.
    from `check`. Every edge warning needs an envelope plot (±0.6 s, words overlaid, current vs refined edge:
    plot the RMS envelope with matplotlib, mark word starts/ends and both edges, save a PNG and Read it). If a word
    can't be cut cleanly because the next word follows with no gap, **keep the longer phrase**. Clean audio beats
-   hitting 60 s. Use `lock_in`/`lock_out` only for edges you verified by eye.
+   hitting 60 s. `from`/`to` edges are placed for you; use `lock_in`/`lock_out` only for edges on sound between
+   words that you verified by eye (never to get past an in-word error).
    A drawn-out filler ("y…") you drop at an in-point can still get captioned from Whisper's stretched
    stamp: list it in `captions.skip`. Check the transcript's `untranscribed` ranges first: speech the
    transcriber couldn't put words to has no captions and no word anchors.
 6. `uv run tools/shortform.py stills <edit>/short.json [--at t …]` → finished-look frames (cut, zoom, overlays,
    captions, behind-the-speaker layers) in `edit/stills/`, ~3 s each, no render: the segment midpoints (or your
    `--at` times) plus one `ev<NN>_<Type>_<t>.png` per overlay event once its entrance has finished. Read every one
-   and fix layout first. `stills` also warns when an event's text barely shows (`events[2] (KineticType) shows almost
-   no text`: off screen, masked, not in yet) and when captions can't clear a full-layout scene's text; it moves
-   them below the scene's measured content (or above it) for that event on its own. A Remotion failure names the
-   event: `events[N] (<Type>) failed at <t> s: <error>`.
+   and fix layout first. `stills` measures every event's text in the render (`edit/overlay_text.json`: field, box,
+   px height) and warns when:
+   - its text barely shows (`events[2] (KineticType) shows almost no text`: off screen, masked, not in yet);
+   - its text doesn't read against what is really behind it (the event over the cut's own frame, with and without
+     its glyphs: `events[0] (StatScene) text contrast 1.4:1 at 1.20 s is under 4.5:1 (kicker 1.4:1)`; 4.5:1 under
+     48 px tall, 3:1 above). Give floating text a card, or a colour that reads on the wall;
+   - text covers the speaker's face (the head box grown 6 % of the width; text behind the cut-out is exempt);
+   - text renders under 28 px tall (a tiny tracked kicker shrunk with the card);
+   - captions can't clear an overlay's text (they move below it, or above it, for that event on their own).
+   A Remotion failure names the event: `events[N] (<Type>) failed at <t> s: <error>`.
+   **Strict mode** (`--strict` on `check`/`stills`/`render`, `"strict": true` in a job) is for edits nobody
+   reviews by hand: locks, `keep_restart` and hand-set `frame` are refused, and every never-list finding
+   (`uv run tools/shortform.py check --never-list`) and loud edge is an error; `stills --strict` then reports
+   `renderable: false`.
 7. `uv run tools/shortform.py render <edit>/short.json --preview` (~1 min for 60 s). Then verify (below), iterate,
    and render the final without `--preview`. Copy to `exports/<project>_<platform>_<YYYYMMDD>.mp4`.
    The final uses `DELIVERY_X264` (Instagram/TikTok master): source frame rate (don't upsample 30→60),

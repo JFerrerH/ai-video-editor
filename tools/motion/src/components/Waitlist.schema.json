@@ -2,6 +2,7 @@
   "title": "Waitlist",
   "description": "Waitlist sign-up mock: email types in, button presses at submitAt, success state.",
   "x-layout": "float",
+  "examples": [{"title": "Join the list", "placeholder": "Your email", "email": "you@example.com", "button": "Join", "success": "You're in", "submitAt": 1.2}],
   "type": "object",
   "required": [
     "title",

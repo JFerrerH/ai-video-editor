@@ -1,0 +1,25 @@
+{
+ "item": 2,
+ "kind": "contrast",
+ "stage": "stills",
+ "take": "bright",
+ "note": "a white number with no card over a wall of luminance 0.72",
+ "segments": [
+  {
+   "take": "bright",
+   "in": 0.45,
+   "out": 3.05
+  }
+ ],
+ "events": [
+  {
+   "type": "StatScene",
+   "start": 0,
+   "duration": 2.4,
+   "props": {
+    "value": 500,
+    "bg": "none"
+   }
+  }
+ ]
+}

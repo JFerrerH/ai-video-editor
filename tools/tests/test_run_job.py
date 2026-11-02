@@ -204,6 +204,59 @@ class DataOnly(Base):
         self.assertFalse(marker.exists())
 
 
+class Strict(Base):
+    """`strict` on a shortform job: locks refused, never-list findings block, stills not renderable."""
+
+    def setUp(self):
+        super().setUp()
+        from test_short_spec import WORDS, make_take
+        edit = self.root / "edit"
+        (edit / "transcripts").mkdir(parents=True)
+        make_take(self.root / "take1.mov")
+        (edit / "transcripts" / "take1.json").write_text(json.dumps(
+            {"words": [{"type": "word", "text": t, "start": a, "end": b} for t, a, b in WORDS]}))
+        (edit / "short.json").write_text(json.dumps({
+            "version": 1, "brand": "none", "sources": {"take1": {"file": "take1.mov", "face": [54, 96]}},
+            "segments": [{"take": "take1", "in": 0.45, "out": 1.05},
+                         {"take": "take1", "in": 1.45, "out": 3.05, "lock_out": True}]}))
+
+    def test_job_arg(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            res, code = R.run({"op": "shortform", "project": "demo", "args": {"cmd": "check", "strict": True}})
+        self.assertFalse(res["ok"])
+        self.assertTrue(any("segments[1].lock_out" in e and "locks aren't accepted" in e for e in res["errors"]), res)
+        with contextlib.redirect_stderr(io.StringIO()):
+            res, code = R.run({"op": "shortform", "project": "demo", "args": {"cmd": "check"}})
+        self.assertTrue(res["ok"], res)
+
+    def test_stills_not_renderable(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            res, _ = R.run({"op": "shortform", "project": "demo", "args": {"cmd": "stills", "strict": True}})
+        self.assertFalse(res["ok"])
+        self.assertIs(res["renderable"], False)
+
+    def test_probe_findings_block(self):
+        import short_spec as S
+        project = mock.Mock()
+
+        def stills(at, preview, warnings):
+            warnings.append(S.Finding("events[0] (Receipt) text contrast 1.4:1 at 1.20 s is under 3:1", "contrast"))
+            return []
+        project.stills.side_effect = stills
+        ok = {"errors": [], "warnings": [], "duration": 4.0, "timeline": [], "edges": []}
+        with mock.patch("short_spec.check", return_value=ok), \
+                mock.patch("short_spec.load", return_value=(project, {"duration": 4.0, "edges": [], "warnings": []})), \
+                contextlib.redirect_stderr(io.StringIO()):
+            res, _ = R.run({"op": "shortform", "project": "demo", "args": {"cmd": "stills", "strict": True}})
+            self.assertFalse(res["ok"])
+            self.assertIs(res["renderable"], False)
+            self.assertIn("1.4:1", res["errors"][0])
+            res, _ = R.run({"op": "shortform", "project": "demo", "args": {"cmd": "stills"}})
+            self.assertTrue(res["ok"])
+            self.assertIs(res["renderable"], True)
+            self.assertIn("1.4:1", res["warnings"][0])
+
+
 class ResultFields(Base):
     def test_schema_op(self):
         before = self.tree()

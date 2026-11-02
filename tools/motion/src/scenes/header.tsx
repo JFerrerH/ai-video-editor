@@ -42,7 +42,7 @@ export const SceneHeader: React.FC<{ bg?: BgKind; kicker?: string; title?: strin
             fontWeight: 600,
             letterSpacing: "0.2em",
             textTransform: "uppercase",
-            color: pal.accent,
+            color: pal.accentSmall,
             lineHeight: 1.2,
             marginBottom: title ? KICKER_GAP : 0,
             opacity: k,
@@ -66,7 +66,7 @@ export const SceneHeader: React.FC<{ bg?: BgKind; kicker?: string; title?: strin
                 justifyContent: al === "center" ? "center" : "flex-start",
               }}
             >
-              <RevealLine text={l} emphasis={emphasis} frame={frame} fps={fps} startFrame={3 + i * 5} emphStyle={{ fontStyle: "italic", color: pal.accent }} />
+              <RevealLine text={l} emphasis={emphasis} frame={frame} fps={fps} startFrame={3 + i * 5} emphStyle={{ fontStyle: "italic", color: pal.accentText }} />
             </div>
           ))
         : null}

@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { enter, exit, sec } from "../anim";
-import { SAFE, useBrand } from "../theme";
+import { SAFE, onBackdrop, useBackdrop, useBrand } from "../theme";
 
 /** Big year stamp + a paper document card (thesis, contract, report…). */
 export const DocumentCard: React.FC<{
@@ -17,6 +17,7 @@ export const DocumentCard: React.FC<{
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { colors, fonts } = useBrand();
+  const backdrop = useBackdrop();
   const yIn = enter(frame, fps, 0, 11);
   const cIn = enter(frame, fps, sec(cardAt, fps), 16);
   const out = exit(frame, durationInFrames, 5);
@@ -32,7 +33,7 @@ export const DocumentCard: React.FC<{
           fontSize: 300,
           lineHeight: 1,
           letterSpacing: -12,
-          color: colors.ink,
+          color: onBackdrop(colors, backdrop, colors.ink),
           scale: interpolate(yIn, [0, 1], [1.6, 1]),
           opacity: Math.min(1, yIn * 2),
         }}

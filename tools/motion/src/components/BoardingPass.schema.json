@@ -2,6 +2,7 @@
   "title": "BoardingPass",
   "description": "Boarding pass; the plane flies from → to between flyStart and flyEnd.",
   "x-layout": "float",
+  "examples": [{"kicker": "Next stop", "carrier": "Example Air", "from": "LIS", "to": "MEX", "fromCity": "Lisbon", "toCity": "Mexico City", "details": [{"k": "Seat", "v": "14A"}, {"k": "Gate", "v": "B7"}]}],
   "type": "object",
   "required": [
     "from",

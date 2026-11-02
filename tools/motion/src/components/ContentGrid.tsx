@@ -1,6 +1,6 @@
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
-import { clamp, enter, exit, sec } from "../anim";
+import { NEVER, clamp, enter, exit, sec } from "../anim";
 import { SAFE, useBrand } from "../theme";
 
 /** A vague brief → a disappointing deliverable, floating above the head (no words on it):
@@ -22,7 +22,7 @@ export const ContentGrid: React.FC<{
   const g = enter(frame, fps, gF, 14);
   const bubbleOut = interpolate(frame, [gF - 3, gF + 3], [1, 0], clamp);
   const fF = sec(fillAt, fps);
-  const mF = missAt != null ? sec(missAt, fps) : Infinity;
+  const mF = missAt != null ? sec(missAt, fps) : NEVER;
   const m = frame >= mF ? enter(frame, fps, mF, 7) : 0;
   const wobble = frame >= mF ? Math.sin((frame - mF) * 0.9) * 3 * Math.exp(-(frame - mF) / 10) : 0;
   // deliberately off: clashing hues, nothing like the brand

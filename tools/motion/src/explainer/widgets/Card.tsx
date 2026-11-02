@@ -2,7 +2,7 @@ import React from "react";
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { clamp, easeOut } from "../../anim";
 import { BgKind } from "../../scenes/Bg";
-import { useBrand } from "../../theme";
+import { accentOn, useBrand } from "../../theme";
 import { Rect } from "../slots";
 
 /** What every widget gets: its slot, the scene tone, its entrance (`at`) and optional exit (`out`),
@@ -22,7 +22,9 @@ export const useCardColors = (bg?: BgKind) => {
     muted: dark ? "rgba(245,244,240,0.62)" : colors.muted,
     line: dark ? "rgba(255,255,255,0.10)" : "rgba(26,26,26,0.08)",
     track: dark ? "rgba(255,255,255,0.12)" : "rgba(26,26,26,0.08)",
-    accent: colors.accent,
+    accent: colors.accent, // fills and lines; text takes accentText / accentSmall (under 48 px)
+    accentText: accentOn(colors, dark ? "#26272A" : "#FFFFFF"),
+    accentSmall: accentOn(colors, dark ? "#26272A" : "#FFFFFF", 4.5),
     ok: colors.success,
     shadow: dark ? "0 30px 70px rgba(0,0,0,0.55)" : "0 26px 60px rgba(30,30,20,0.16), 0 2px 6px rgba(30,30,20,0.06)",
   };

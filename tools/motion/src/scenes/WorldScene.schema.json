@@ -2,6 +2,7 @@
   "title": "WorldScene",
   "description": "A continuous world under a moving camera (storyboard engine merges WorldScene beats).",
   "x-layout": "full",
+  "examples": [{"world": {"terrain": {"kind": "snow", "slope": 9}, "objects": [{"id": "ball", "kind": "ball", "x": 380, "r": 55, "value": 100, "prefix": "$"}, {"id": "box", "kind": "block", "x": 900, "w": 240, "h": 210, "tag": "Goal", "label": "$500"}, {"id": "fig", "kind": "figure", "x": 700}]}}],
   "type": "object",
   "required": [
     "world"

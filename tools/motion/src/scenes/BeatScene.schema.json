@@ -2,6 +2,7 @@
   "title": "BeatScene",
   "description": "One beat of a narrated explainer (storyboard engine): grid, widgets, figure, headline.",
   "x-layout": "full",
+  "examples": [{"words": [{"text": "Save", "t": 0.1, "emph": false, "phrase": 0}, {"text": "first", "t": 0.4, "emph": true, "phrase": 0}]}],
   "type": "object",
   "properties": {
     "bg": {

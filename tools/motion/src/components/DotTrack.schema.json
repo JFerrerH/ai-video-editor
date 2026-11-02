@@ -2,6 +2,7 @@
   "title": "DotTrack",
   "description": "Progress as dots: steps checked at stops[i], or days filling from fillStart to fillEnd.",
   "x-layout": "float",
+  "examples": [{"variant": "days", "count": 7, "value": "5 of 7", "unit": "days"}],
   "type": "object",
   "properties": {
     "variant": {

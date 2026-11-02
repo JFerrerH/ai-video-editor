@@ -50,7 +50,7 @@ export const ListScene: React.FC<{
       >
         <div style={{ width: Math.min(innerW, wide ? 1300 : 820) }}>
           {kicker ? (
-            <div style={{ fontFamily: fonts.sans, fontSize: 32, fontWeight: 600, letterSpacing: "0.2em", textTransform: "uppercase", color: pal.accent, marginBottom: 14, opacity: head }}>
+            <div style={{ fontFamily: fonts.sans, fontSize: 32, fontWeight: 600, letterSpacing: "0.2em", textTransform: "uppercase", color: pal.accentSmall, marginBottom: 14, opacity: head }}>
               {kicker}
             </div>
           ) : null}
@@ -63,10 +63,10 @@ export const ListScene: React.FC<{
             {items.map((it, i) => {
               const p = interpolate(frame, [cues[i], cues[i] + 14], [0, 1], { ...clamp, easing: easeOut });
               const pop = spring({ frame: frame - cues[i] - 3, fps, config: { damping: 11, stiffness: 220, mass: 0.6 } });
-              const dim = dimPrevious && i < latest ? 0.45 : 1;
+              const dim = dimPrevious && i < latest ? 0.8 : 1; // dimmer, still readable
               const markerEl =
                 marker === "number" ? (
-                  <span style={{ fontFamily: fonts.sans, fontSize: fs * 0.62, fontWeight: 700, color: pal.accent, fontVariantNumeric: "tabular-nums" }}>
+                  <span style={{ fontFamily: fonts.sans, fontSize: fs * 0.62, fontWeight: 700, color: pal.accentSmall, fontVariantNumeric: "tabular-nums" }}>
                     {String(i + 1).padStart(2, "0")}
                   </span>
                 ) : marker === "dot" ? (

@@ -386,7 +386,7 @@ export const NetworkScene: React.FC<{
                   opacity: isNew ? scroll : 0.45,
                 }}
               >
-                <span style={{ color: isNew ? pal.accent : pal.muted }}>{"› "}</span>
+                <span style={{ color: isNew ? pal.accentSmall : pal.muted }}>{"› "}</span>
                 {l.text}
               </div>
             );

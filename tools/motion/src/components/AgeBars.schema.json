@@ -2,6 +2,7 @@
   "title": "AgeBars",
   "description": "Ratio bars (×1 / ×2 / ×3) that grow on cue, floating above the head.",
   "x-layout": "float",
+  "examples": [{"bars": [{"value": 62, "label": "18–24", "at": 0.2}, {"value": 48, "label": "25–34", "at": 0.5, "highlight": true}, {"value": 31, "label": "35–44", "at": 0.8}], "caption": "Share who save every month"}],
   "type": "object",
   "required": [
     "bars"

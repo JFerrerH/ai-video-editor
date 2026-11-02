@@ -1,0 +1,15 @@
+{
+ "item": 5,
+ "kind": "in_word",
+ "stage": "check",
+ "take": "take2",
+ "note": "a locked in-point in the middle of a word with no silence around it",
+ "segments": [
+  {
+   "take": "take2",
+   "in": 1.2,
+   "out": 3.4,
+   "lock_in": true
+  }
+ ]
+}

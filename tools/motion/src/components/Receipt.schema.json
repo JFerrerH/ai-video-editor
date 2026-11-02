@@ -2,6 +2,7 @@
   "title": "Receipt",
   "description": "Quote / receipt: items tick in one by one, total, then a rubber stamp.",
   "x-layout": "float",
+  "examples": [{"title": "This month", "items": [{"text": "Rent", "at": 0.2, "amount": "$900"}, {"text": "Food", "at": 0.4, "amount": "$320"}], "total": "$1,220", "stamp": "PAID", "stampAt": 0.9}],
   "type": "object",
   "required": [
     "title",

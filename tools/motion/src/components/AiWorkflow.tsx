@@ -1,6 +1,6 @@
 import React from "react";
 import { AbsoluteFill, Sequence, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
-import { clamp, easeInOut, enter, exit, sec } from "../anim";
+import { NEVER, clamp, easeInOut, enter, exit, sec } from "../anim";
 import { useBrand } from "../theme";
 import { PostPile } from "./PostPile";
 
@@ -18,7 +18,7 @@ export const AiWorkflow: React.FC<{
   const { colors } = useBrand();
   const out = exit(frame, durationInFrames, 5);
   const hubIn = enter(frame, fps, 1, 12);
-  const pileF = pileAt != null ? sec(pileAt, fps) : Infinity;
+  const pileF = pileAt != null ? sec(pileAt, fps) : NEVER;
   const flowOut = interpolate(frame, [pileF - 2, pileF + 6], [1, 0], clamp);
   // hub centre and node row (all above the caption band)
   const H = { x: 540, y: 430 };

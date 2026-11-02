@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { clamp, easeInOut, enter, exit, sec } from "../anim";
-import { SAFE, useBrand } from "../theme";
+import { SAFE, readable, useBrand } from "../theme";
 
 /** Boarding pass (travel, conferences, remote work). The plane flies from → to between `flyStart` and `flyEnd` (s).
  *  `carrier` is the airline label top-right (none by default). */
@@ -33,6 +33,7 @@ export const BoardingPass: React.FC<{
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { colors, fonts } = useBrand();
+  const label = readable(colors.muted, "#FFFFFF", colors.ink); // small mono labels on the white pass
   const s = enter(frame, fps, 0, 15);
   const out = exit(frame, durationInFrames, 6);
   const fly = interpolate(frame, [sec(flyStart, fps), sec(flyEnd, fps)], [0, 1], { ...clamp, easing: easeInOut });
@@ -53,14 +54,14 @@ export const BoardingPass: React.FC<{
         }}
       >
         <div style={{ padding: "30px 46px 26px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontFamily: fonts.mono, fontSize: 22, letterSpacing: 5, color: colors.muted }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontFamily: fonts.mono, fontSize: 28, letterSpacing: 5, color: label }}>
             <span>{kicker}</span>
             {carrier ? <span>{carrier}</span> : null}
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 18 }}>
             <div>
               <div style={{ fontFamily: fonts.sans, fontWeight: 600, fontSize: 104, lineHeight: 1, color: colors.ink, letterSpacing: -2 }}>{from}</div>
-              {fromCity ? <div style={{ fontFamily: fonts.mono, fontSize: 22, letterSpacing: 3, color: colors.muted, marginTop: 8 }}>{fromCity}</div> : null}
+              {fromCity ? <div style={{ fontFamily: fonts.mono, fontSize: 28, letterSpacing: 3, color: label, marginTop: 8 }}>{fromCity}</div> : null}
             </div>
             <div style={{ position: "relative", width: trackW, height: 40 }}>
               <div style={{ position: "absolute", top: 19, left: 0, right: 0, borderTop: `3px dotted ${colors.muted}` }} />
@@ -80,7 +81,7 @@ export const BoardingPass: React.FC<{
             </div>
             <div style={{ textAlign: "right" }}>
               <div style={{ fontFamily: fonts.sans, fontWeight: 600, fontSize: 104, lineHeight: 1, color: colors.ink, letterSpacing: -2 }}>{to}</div>
-              {toCity ? <div style={{ fontFamily: fonts.mono, fontSize: 22, letterSpacing: 3, color: colors.muted, marginTop: 8 }}>{toCity}</div> : null}
+              {toCity ? <div style={{ fontFamily: fonts.mono, fontSize: 28, letterSpacing: 3, color: label, marginTop: 8 }}>{toCity}</div> : null}
             </div>
           </div>
         </div>
@@ -89,7 +90,7 @@ export const BoardingPass: React.FC<{
         <div style={{ display: "flex", justifyContent: "space-between", padding: "22px 46px 30px", background: colors.bg }}>
           {details.map((d, i) => (
             <div key={i}>
-              <div style={{ fontFamily: fonts.mono, fontSize: 19, letterSpacing: 4, color: colors.muted }}>{d.k}</div>
+              <div style={{ fontFamily: fonts.mono, fontSize: 28, letterSpacing: 4, color: readable(colors.muted, colors.bg, colors.ink) }}>{d.k}</div>
               <div style={{ fontFamily: fonts.sans, fontWeight: 600, fontSize: 38, color: colors.ink, marginTop: 4 }}>{d.v}</div>
             </div>
           ))}

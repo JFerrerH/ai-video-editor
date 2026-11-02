@@ -1,0 +1,29 @@
+{
+ "item": 4,
+ "kind": "small_text",
+ "stage": "stills",
+ "take": "take1",
+ "note": "a 30 px kicker shrunk to half: 15 px",
+ "segments": [
+  {
+   "take": "take1",
+   "in": 0.45,
+   "out": 3.05
+  }
+ ],
+ "events": [
+  {
+   "type": "StatScene",
+   "start": 0,
+   "duration": 2.4,
+   "props": {
+    "value": 5,
+    "kicker": "Kicker",
+    "full": true,
+    "frame": {
+     "scale": 0.5
+    }
+   }
+  }
+ ]
+}

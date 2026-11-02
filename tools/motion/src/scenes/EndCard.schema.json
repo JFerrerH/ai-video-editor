@@ -2,6 +2,7 @@
   "title": "EndCard",
   "description": "Closing card: logo, title, tagline, CTA pill and url rise in.",
   "x-layout": "full",
+  "examples": [{"title": "Example", "tagline": "Save before you spend", "button": "Follow", "url": "example.com"}],
   "type": "object",
   "properties": {
     "bg": {

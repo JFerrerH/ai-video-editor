@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { enter, exit, sec } from "../anim";
-import { SAFE, useBrand } from "../theme";
+import { SAFE, readable, useBrand } from "../theme";
 import { IconKind, LineIcon } from "./icons";
 
 type Card = { icon: IconKind; kicker?: string; title: string; at: number };
@@ -47,7 +47,7 @@ export const TopicCards: React.FC<{ durationInFrames: number; cards: Card[]; top
                 <LineIcon kind={c.icon} size={52} color={colors.ink} />
               </div>
               {c.kicker ? (
-                <div style={{ fontFamily: fonts.mono, fontSize: 19, letterSpacing: 4, color: colors.muted, marginTop: 4 }}>{c.kicker}</div>
+                <div style={{ fontFamily: fonts.mono, fontSize: 28, fontWeight: 600, letterSpacing: 4, color: readable(colors.muted, "#FFFFFF", colors.ink), marginTop: 4 }}>{c.kicker}</div>
               ) : null}
               <div style={{ fontFamily: fonts.serif, fontSize: 44, lineHeight: 1, color: colors.ink, letterSpacing: -0.5, whiteSpace: "nowrap" }}>
                 {c.title}

@@ -2,6 +2,7 @@
   "title": "FrameworkCard",
   "description": "Kicker plus numbered steps built up stepGap apart from stepsAt; flash at flashAt.",
   "x-layout": "float",
+  "examples": [{"kicker": "The method", "steps": [{"title": "Save first", "lines": ["Move it on payday"]}, {"title": "Name it", "lines": ["One goal per account"]}]}],
   "type": "object",
   "required": [
     "steps"

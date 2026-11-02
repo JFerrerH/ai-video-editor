@@ -40,7 +40,7 @@ export const Counter: React.FC<
       <div style={{ fontFamily: fonts.sans, fontWeight: 800, fontSize: big, lineHeight: 1.05, letterSpacing: "-0.03em", fontVariantNumeric: "tabular-nums" }}>
         {prefix}
         {fmt(shown, decimals, locale)}
-        <span style={{ color: c.accent }}>{suffix}</span>
+        <span style={{ color: c.accentText }}>{suffix}</span>
       </div>
       {spark ? (
         <svg width="100%" viewBox={`-8 -8 ${W + 16} ${H + 16}`} style={{ marginTop: 18, display: "block" }}>
@@ -146,7 +146,7 @@ export const FunnelBars: React.FC<WidgetBase & { title?: string; rows: { label: 
             <div key={i}>
               <div style={{ display: "flex", alignItems: "baseline", gap: fs * 0.5, fontFamily: fonts.sans, fontSize: fs, fontWeight: 600, marginBottom: fs * 0.22 }}>
                 <span>{r.label}</span>
-                {lost > 0 ? <span style={{ fontSize: MIN_TEXT, fontWeight: 700, color: c.accent, opacity: p }}>−{lost}%</span> : null}
+                {lost > 0 ? <span style={{ fontSize: MIN_TEXT, fontWeight: 700, color: c.accentSmall, opacity: p }}>−{lost}%</span> : null}
                 <span style={{ marginLeft: "auto", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{Math.round(r.value * p).toLocaleString(locale)}</span>
               </div>
               <div style={{ height: bar, borderRadius: bar / 2, background: c.track, overflow: "hidden" }}>

@@ -1,22 +1,29 @@
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
-import { Brand, useBrand } from "../theme";
+import { Brand, DARK_GLOW, accentOn, useBrand } from "../theme";
 
 /** Scene background tones. `none` = transparent (the scene sits on whatever is under it). */
 export type BgKind = "light" | "dark" | "accent" | "none";
 
 /** Text colours that read on a given background tone. Scenes take every colour from here,
- *  so one storyboard switches tone without touching the scene props. */
+ *  so one storyboard switches tone without touching the scene props. `accent` is for fills and lines;
+ *  accent TEXT takes `accentText` (≥ 3:1 on the tone) or, under 48 px, `accentSmall` (≥ 4.5:1). */
 export const paletteFor = (kind: BgKind | undefined, colors: Brand["colors"]) => {
+  const on = (fill: string, accent = colors.accent) => ({
+    accent,
+    accentText: accentOn({ ...colors, accent }, fill),
+    accentSmall: accentOn({ ...colors, accent }, fill, 4.5),
+  });
   switch (kind) {
     case "dark":
-      return { fg: "#F5F4F0", muted: "rgba(245,244,240,0.62)", accent: colors.accent, track: "rgba(245,244,240,0.14)" };
+      return { fg: "#F5F4F0", muted: "rgba(245,244,240,0.62)", ...on(DARK_GLOW), track: "rgba(245,244,240,0.14)" };
     case "accent":
-      return { fg: "#FFFFFF", muted: "rgba(255,255,255,0.75)", accent: colors.ink, track: "rgba(255,255,255,0.22)" };
-    case "none":
-      return { fg: "#FFFFFF", muted: "rgba(255,255,255,0.8)", accent: colors.accent, track: "rgba(255,255,255,0.25)" };
+      return { fg: "#FFFFFF", muted: "rgba(255,255,255,0.75)", ...on(colors.accent, colors.ink), track: "rgba(255,255,255,0.22)" };
+    case "none": // over footage: nothing to measure against here (the legibility probe measures the real frame)
+      return { fg: "#FFFFFF", muted: "rgba(255,255,255,0.8)", accent: colors.accent, accentText: colors.accent,
+               accentSmall: colors.accent, track: "rgba(255,255,255,0.25)" };
     default:
-      return { fg: colors.ink, muted: colors.muted, accent: colors.accent, track: "rgba(26,26,26,0.10)" };
+      return { fg: colors.ink, muted: colors.muted, ...on(colors.bg), track: "rgba(26,26,26,0.10)" };
   }
 };
 

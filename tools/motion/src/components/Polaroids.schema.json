@@ -2,6 +2,7 @@
   "title": "Polaroids",
   "description": "Polaroid photos drop in one by one, plus an optional chip.",
   "x-layout": "float",
+  "examples": [{"photos": [{"src": "sample.png", "label": "Before", "at": 0.2}, {"src": "sample.png", "label": "After", "at": 0.6}], "chip": "One year", "chipAt": 1.0}],
   "type": "object",
   "required": [
     "photos"

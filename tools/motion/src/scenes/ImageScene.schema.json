@@ -2,6 +2,7 @@
   "title": "ImageScene",
   "description": "A still with a slow camera move (Ken Burns); optional lower-third.",
   "x-layout": "full",
+  "examples": [{"src": "sample.png", "kicker": "Case", "title": "A real plan"}],
   "type": "object",
   "required": [
     "src"

@@ -1,5 +1,8 @@
 import { Easing, interpolate, spring } from "remotion";
 
+// a frame no event reaches, for "never" times: interpolate() refuses Infinity
+export const NEVER = 1e9;
+
 export const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
 export const easeOut = Easing.bezier(0.16, 1, 0.3, 1);
 export const easeInOut = Easing.bezier(0.65, 0, 0.35, 1);

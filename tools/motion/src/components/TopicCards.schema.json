@@ -2,6 +2,7 @@
   "title": "TopicCards",
   "description": "A row of small topic cards, each popping in on its own cue.",
   "x-layout": "float",
+  "examples": [{"cards": [{"icon": "chart", "kicker": "One", "title": "Budget", "at": 0.2}, {"icon": "heart", "kicker": "Two", "title": "Goals", "at": 0.6}]}],
   "type": "object",
   "required": [
     "cards"

@@ -94,7 +94,7 @@ Text boxes come from D9. Any intersection is a finding.
 
 ### D9. Text element boxes and sizes from the still render
 
-The overlay still render already runs Remotion. A `measure` mode writes `overlay_text.json`: for every DOM element that renders a schema text field, its bounding box and computed font size × scale, using `getBoundingClientRect` and `getComputedStyle` in a `useEffect`, collected by `delayRender`. The schema's text annotations already name which props are text.
+The overlay still render already runs Remotion; the CLI's `remotion still` drops browser logs, so measured stills go through `tools/motion/scripts/stills.mjs` (one bundle, many stills, logs captured). A `measure` mode writes `overlay_text.json`: for every DOM element that renders a schema text field, its bounding box and computed font size × scale, using `getBoundingClientRect` and `getComputedStyle` in a `useEffect`, collected by `delayRender`. The schema's text annotations already name which props are text.
 
 This file feeds three checks:
 - face intersection (D8);
@@ -140,7 +140,7 @@ Components drawing accent text or text borders on a fixed fill call it (`Receipt
 
 ### D7. Contrast matrix test
 
-A Node test script under `tools/motion/` renders one still per registry entry per fixture brand at 540x960 (`--scale=0.5`), using each schema's example props. It then runs the D5 probe through the Python tool on each pair.
+A Node test script under `tools/motion/` renders one still per registry entry per fixture brand at 540x960 (`--scale=0.5`), using each schema's example props. It then runs the D5 probe through the Python tool on each pair. As built: a Python harness (`tools/tests/contrast_matrix.py`, `npm run test:contrast`) renders through `scripts/stills.mjs` and runs the probe's own `low_contrast`; scenes without a dark tone of their own are drawn on the light backdrop only.
 
 It is slow (about 40 entries × 2 brands), so it runs on demand (`npm run test:contrast`) and in the release check, not on every unit test run.
 
@@ -152,7 +152,9 @@ All of this was measured in the 2026-11-02 compiler prototype on 6 held-out take
 - **Early stamps.** Whisper stamps a word to the end of the pause after it, so the search starts at the word's core.
 - **Splits.** A split that removes under 0.08 s showed up as a zoom jump mid-word, so it is skipped.
 
-Reference: `openspec/changes/live-stage/prototype/compile_plan.py` (`env`, `gap_between`, `build_segments`).
+Reference: `openspec/changes/edit-plans/prototype/compile_plan.py` (`env`, `gap_between`, `build_segments`).
+
+Found in implementation: on quiet-floor takes (−77 dB, voice isolation) the silence threshold sits 30 dB over the floor, so the loud-edge check measures against the same threshold, not the floor alone; a cut also moves on past a click merged into its pause; an edge in the silence of an early stamp isn't inside the word. Measured on the prototype's three takes: output silence 18.0 / 22.9 / 16.6 % vs the prototype's 18.4 / 23.8 / 16.6 %, no errors.
 
 ### D14. The media start is a clean edge
 

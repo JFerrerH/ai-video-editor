@@ -2,6 +2,7 @@
   "title": "ProgressBar",
   "description": "Thin accent bar along the top edge: the elapsed fraction of its event.",
   "x-layout": "float",
+  "examples": [{}],
   "type": "object",
   "properties": {
     "height": {

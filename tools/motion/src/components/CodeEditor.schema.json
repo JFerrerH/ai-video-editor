@@ -2,6 +2,7 @@
   "title": "CodeEditor",
   "description": "Dark code editor typing lines, plus a DAY n counter from dayFrom to dayTo.",
   "x-layout": "float",
+  "examples": [{"file": "budget.py", "lines": ["total = 0", "for item in spending:", "    total += item"], "dayLabel": "Day"}],
   "type": "object",
   "required": [
     "file",

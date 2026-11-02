@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
-import { clamp, enter, exit, sec } from "../anim";
-import { SAFE, useBrand } from "../theme";
+import { NEVER, clamp, enter, exit, sec } from "../anim";
+import { DARK_GLOW, SAFE, readable, useBackdrop, useBrand } from "../theme";
 
 type Step = { title: string; lines: string[] };
 
@@ -23,9 +23,10 @@ export const FrameworkCard: React.FC<{
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { colors, fonts } = useBrand();
+  const backdrop = useBackdrop();
   const out = exit(frame, durationInFrames, 5);
   const kin = enter(frame, fps, 1, 14);
-  const fl = flashAt != null ? sec(flashAt, fps) : Infinity;
+  const fl = flashAt != null ? sec(flashAt, fps) : NEVER;
   const flash = interpolate(frame, [fl, fl + 1, fl + 8], [0, 0.85, 0], clamp);
   const snap = interpolate(frame, [fl, fl + 3, fl + 10], [1, 0.965, 1], clamp);
   if (layout === "grid") {
@@ -48,7 +49,7 @@ export const FrameworkCard: React.FC<{
             <div
               style={{
                 fontFamily: fonts.mono,
-                fontSize: 22,
+                fontSize: 28,
                 letterSpacing: 6,
                 color: colors.ink,
                 background: colors.bg,
@@ -117,9 +118,10 @@ export const FrameworkCard: React.FC<{
             style={{
               alignSelf: "center",
               fontFamily: fonts.mono,
-              fontSize: 26,
+              fontSize: 28,
+              fontWeight: 600,
               letterSpacing: 7,
-              color: colors.muted,
+              color: readable(colors.muted, backdrop.full && backdrop.dark ? DARK_GLOW : colors.bg, colors.ink),
               marginBottom: 6,
               opacity: kin,
             }}

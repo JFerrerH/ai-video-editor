@@ -21,6 +21,7 @@ effects, caps and a pacing report. A plan names lines by sentence ID and word an
                                                                  this word in it (a long sentence); at most 6 s
      "low": {"at": "F10", "words": "it is too late"},            the one low moment: words of one kept sentence
      "cta": {"at": "F15", "word": "follow", "handle": "…", "kicker": "…"},
+     "captions": {"fixes": {"Akme": "Acme"}},                    a misheard word and what was said, everywhere
      "assets": {"site/img-04.png": "edit/downloads/site/img-04.png"}}
 
 A time prop of a device (an entrance, a stamp) is the word it lands on, `{"word": "stamp"}`, searched from the
@@ -44,7 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import overlay_schema  # noqa: E402
 
 SENT_GAP = 0.8                    # s: a pause this long ends a sentence
-RESTART_GAP, RESTART_WIN = 0.3, 6.0  # an opening said again within 6 s after a pause of 0.3 s: the first was abandoned
+RESTART_GAP, RESTART_WIN, RESTART_FILLER = 0.3, 6.0, 2  # an opening said again right after a pause of 0.3 s (at most 2 words between): the first was abandoned
 HOLD_MIN, HOLD_MAX = 1.5, 6.0     # s: a graphic is read at a glance, and holds a thought, never longer
 NEXT_GAP = 0.05                   # s between one beat's end and the next one's start
 CUE_MARGIN = 0.3                  # s the last entrance stays readable before the event ends
@@ -93,10 +94,12 @@ class PlanError(Exception):
 
 
 # ── transcript → numbered sentences ─────────────────────────────────────────
-def load_words(root: Path) -> tuple[dict[str, list[dict]], dict[str, list[dict]]]:
-    """({take: words}, {take: the transcript's `restarts`}), takes in name order."""
+def load_words(root: Path, order: list[str] | None = None) -> tuple[dict[str, list[dict]], dict[str, list[dict]]]:
+    """({take: words}, {take: the transcript's `restarts`}), takes in `order` (the rest after them), else in name
+    order. The same order gives the same sentence IDs."""
     words, restarts = {}, {}
-    for f in sorted((root / "edit" / "transcripts").glob("*.json")):
+    rank = {take: n for n, take in enumerate(order or [])}
+    for f in sorted((root / "edit" / "transcripts").glob("*.json"), key=lambda p: (rank.get(p.stem, len(rank)), p.stem)):
         d = json.loads(f.read_text())
         words[f.stem] = [w for w in d["words"] if w.get("type", "word") == "word" and w["text"].strip()]
         restarts[f.stem] = d.get("restarts") or []
@@ -150,7 +153,7 @@ def _mark_restarts(sents: list[dict], words: dict) -> None:
             continue
         head = [norm(ws[i]["text"]) for i in (s["a"], s["a"] + 1)]
         for t in sents[k + 1:]:
-            if t["take"] != s["take"] or t["start"] - s["end"] > RESTART_WIN:
+            if t["take"] != s["take"] or t["start"] - s["end"] > RESTART_WIN or t["a"] - s["b"] - 1 > RESTART_FILLER:
                 break
             tw = words[t["take"]]
             if t["b"] > t["a"] and [norm(tw[i]["text"]) for i in (t["a"], t["a"] + 1)] == head:
@@ -158,8 +161,8 @@ def _mark_restarts(sents: list[dict], words: dict) -> None:
                 break
 
 
-def plan_ids(root: Path) -> list[dict]:
-    words, restarts = load_words(root)
+def plan_ids(root: Path, order: list[str] | None = None) -> list[dict]:
+    words, restarts = load_words(root, order)
     return [{"id": s["id"], "take": s["take"], "start": round(s["start"], 2), "dur": s["dur"], "text": s["text"],
              **({"restart_of": s["restart_of"]} if s.get("restart_of") else {})} for s in sentences(words, restarts)]
 
@@ -199,6 +202,9 @@ def plan_schema() -> dict:
             "cta": {"type": "object", "additionalProperties": False, "required": ["at", "handle"],
                     "properties": {"at": sid, "word": {"type": "string"}, "handle": {"type": "string"},
                                    "kicker": {"type": "string"}}},
+            "captions": {"type": "object", "additionalProperties": False, "required": ["fixes"],
+                         "properties": {"fixes": {"type": "object", "additionalProperties": {"type": "string"},
+                                                  "description": "a misheard word → what was said"}}},
             "assets": {"type": "object", "additionalProperties": {"type": "string"}},
         },
     }
@@ -239,12 +245,17 @@ def validate_plan(plan: Any, sents: list[dict], words: dict) -> list[str]:
     if not isinstance(plan, dict):
         return ["plan: must be a JSON object"]
     by_id = {s["id"]: s for s in sents}
-    allowed = {"version", "brand", "keep", "hook", "beats", "low", "cta", "assets"}
+    allowed = {"version", "brand", "keep", "hook", "beats", "low", "cta", "captions", "assets"}
     for k in sorted(set(plan) - allowed):
         hint = " (plans don't use seconds; use sentence IDs and words)" if k in TIME_WORDS | {"camera", "events", "segments"} else ""
         errors.append(f"plan.{k}: not a plan field{hint}; the fields are {', '.join(sorted(allowed))}")
     if plan.get("version", 1) != 1:
         errors.append("plan.version: must be 1")
+    caps = plan.get("captions", {})
+    fixes = caps.get("fixes") if isinstance(caps, dict) else None
+    if "captions" in plan and (not isinstance(caps, dict) or set(caps) != {"fixes"} or not isinstance(fixes, dict)
+                               or not all(isinstance(v, str) and v.strip() for v in fixes.values())):
+        errors.append('plan.captions: must be {"fixes": {"heard": "said"}}, a misheard word and what was said')
     brand = plan.get("brand", "none")
     if not isinstance(brand, str) or (brand != "none" and not (REPO / "brands" / brand / "brand.json").exists()):
         errors.append(f"plan.brand: no brand kit brands/{brand}/; use \"none\" or a slug that exists")
@@ -440,7 +451,7 @@ def _zoom_plan(segs: list[dict], punch_at: dict[int, dict], low_seg: int | None)
         prev = scale
 
 
-def build(root: Path, plan: Any, repo: Path = REPO, stills: bool = True) -> dict:
+def build(root: Path, plan: Any, repo: Path = REPO, stills: bool = True, order: list[str] | None = None) -> dict:
     """Compile `plan` into `<root>/edit/short.json` and check it with --strict. Raises PlanError for a plan the
     compiler refuses. Returns {"spec", "errors", "warnings", "duration", "pacing", "timeline", "beats"}; the spec
     is written only when `check --strict` and, unless `stills` is false, `stills --strict` pass: the stills measure
@@ -448,7 +459,7 @@ def build(root: Path, plan: Any, repo: Path = REPO, stills: bool = True) -> dict
     to read."""
     import short_spec as SS
 
-    words, restarts = load_words(root)
+    words, restarts = load_words(root, order)
     sents = sentences(words, restarts)
     if errs := validate_plan(plan, sents, words):
         raise PlanError(errs)
@@ -641,8 +652,9 @@ def build(root: Path, plan: Any, repo: Path = REPO, stills: bool = True) -> dict
         if need > dur:
             dur = min(need, limit - st)
         if dev and need - CUE_MARGIN + CUE_MIN > dur + 0.03:  # the margin yields to the room there is; the entrances don't
-            errors.append(f"{x['label']}: its entrances need {need - CUE_MARGIN:.1f} s, but only {dur:.1f} s fit before "
-                          f"{'the next beat' if limit == nxt else 'the end of the video'}; fewer items, or move the next beat")
+            errors.append(f"{x['label']}: its entrances need {need - CUE_MARGIN:.2f} s, but only {dur:.2f} s fit before "
+                          f"{'the next beat' if limit == nxt else 'the end of the video'}; start this beat on an earlier "
+                          f"word, use fewer items, or move the next beat")
         if dur < min(0.5, HOLD_FIXED.get(dev, 0.5)):
             errors.append(f"{x['label']}: only {dur:.1f} s fit before the next beat or the end of the video")
         dur = round(dur, 2)
@@ -713,7 +725,7 @@ def build(root: Path, plan: Any, repo: Path = REPO, stills: bool = True) -> dict
             sp["zoom"] = {"kind": "static", "scale": 1.0}
 
     spec = {**base, "events": events, "camera": camera, "sfx": sfx,
-            "public_files": plan.get("assets", {})}
+            "public_files": plan.get("assets", {}), **({"captions": plan["captions"]} if plan.get("captions") else {})}
     spec_path = edit / "short.json"
     tmp = edit / ".plan-short.json"
     tmp.write_text(json.dumps(spec, ensure_ascii=False, indent=1))

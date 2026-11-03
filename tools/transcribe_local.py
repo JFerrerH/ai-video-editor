@@ -93,12 +93,15 @@ DETECT_S = 30.0  # seconds of speech the language is detected from
 # a word "covers" its first COVER_CAP s (± COVER_PAD); uncovered speech of MIN_HOLE s or more is re-transcribed
 # (0.6: a hidden 1.56 s run was split by a 0.6 s pause into two runs under the old 1.5 s)
 COVER_CAP, COVER_PAD, MIN_HOLE, PATCH_PAD = 1.5, 0.3, 0.6, 0.5
+# a stretch with no words this far under the take's speech is room noise or a breath, not speech nobody transcribed.
+# Measured on 5 real takes: their sentences sit at -8.8 dB or above, such stretches at -16.5 dB or below.
+NOT_SPEECH_DB = -12.0
 # a word lasting longer than max(WORD_MIN, WORD_PER_LETTER × letters + WORD_BASE) s with speech through
 # IMPLAUSIBLE_SPEECH of it hides speech Whisper folded into one stamp
 WORD_MIN, WORD_PER_LETTER, WORD_BASE, IMPLAUSIBLE_SPEECH = 1.0, 0.12, 0.4, 0.6
 # restart marker: an abandoned phrase (ellipsis, or a pause of RESTART_PAUSE s without . ? !) whose first two
-# words start again within RESTART_WINDOW s
-RESTART_PAUSE, RESTART_WINDOW = 0.3, 6.0
+# words start again right after it (at most RESTART_FILLER words later, within RESTART_WINDOW s)
+RESTART_PAUSE, RESTART_WINDOW, RESTART_FILLER = 0.3, 6.0, 2
 # what Whisper says over silence or noise; a patch made of these (plus one stray word at most, or of
 # low-confidence words) is dropped
 HALLUCINATIONS = ("subtítulos", "subtitulos", "amara.org", "thanks for watching", "thank you for watching",
@@ -334,6 +337,16 @@ def fill_holes(words: list[dict], runs: list[tuple[float, float]], retranscribe,
     return with_spacing(plain), patched, _merge([list(r) for r in uncovered(plain, runs)] + left)
 
 
+def audible(holes: list[list[float]], db, hop: float = 0.005) -> list[list[float]]:
+    """The stretches loud enough to be speech, against the level of the take's own speech (`db` is its envelope):
+    above the room's floor isn't enough, or every breath in a pause would count as speech with no words."""
+    import numpy as np
+
+    speech = float(np.percentile(db, 90))
+    return [[a, b] for a, b in holes if len(window := db[int(a / hop):int(b / hop)])
+            and float(np.percentile(window, 90)) - speech >= NOT_SPEECH_DB]
+
+
 # ── false starts ──────────────────────────────────────────────────────────
 def _ends_sentence(text: str) -> bool:
     return bool(re.search(r"[.?!]$", text.strip()))
@@ -345,7 +358,8 @@ def _trails_off(text: str) -> bool:
 
 def mark_restarts(words: list[dict]) -> list[dict]:
     """Likely false starts: a phrase that ends abandoned (an ellipsis, or a pause of RESTART_PAUSE s without
-    . ? !) and whose first two words start again within RESTART_WINDOW s. Deliberate repetition ends a
+    . ? !) and whose first two words start again right after it. Words said in between mean the speaker went on:
+    two sentences that open alike ("And in that…", "And in spite…") aren't a restart. Deliberate repetition ends a
     sentence first, so it isn't marked. [{"abandoned": [from, to], "again": t, "words": "<abandoned text>"}]"""
     ws = [w for w in words if w["type"] == "word"]
     by_again: dict[int, dict] = {}
@@ -361,7 +375,7 @@ def mark_restarts(words: list[dict]) -> list[dict]:
         if i - s < 1:
             continue  # a one-word phrase has no opening to repeat
         head = (_norm(ws[s]["text"]), _norm(ws[s + 1]["text"]))
-        for j in range(i + 1, len(ws) - 1):
+        for j in range(i + 1, min(i + 2 + RESTART_FILLER, len(ws) - 1)):
             if ws[j]["start"] - w["end"] > RESTART_WINDOW:
                 break
             if (_norm(ws[j]["text"]), _norm(ws[j + 1]["text"])) == head:
@@ -419,6 +433,7 @@ def transcribe_one(video: Path, edit_dir: Path, model: str | None, language: str
         return engine.transcribe(audio[int(lo * SR):int(hi * SR)], language, None)
 
     words, patched, untranscribed = fill_holes(to_scribe_words(result), runs, retranscribe, duration)
+    untranscribed = audible(untranscribed, db)
     restarts = mark_restarts(words)
     text = " ".join(w["text"] for w in words if w["type"] == "word")
     payload = {

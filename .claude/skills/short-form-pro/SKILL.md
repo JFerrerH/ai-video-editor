@@ -115,7 +115,8 @@ uv run tools/preview_qa.py footage/<p>               # listens to the preview: w
 prints the plan's JSON Schema.) Run `conform`, `transcribe` and `face` first, as in Workflow 1 and 4.
 
 A plan has **no seconds**. Keys: `keep` (sentence IDs or ranges, in the order they play; a flagged false start is
-refused, keep the repeat), `hook`, `beats`, `low`, `cta`, `assets`, `brand`.
+refused, keep the repeat), `hook`, `beats`, `low`, `cta`, `captions` (`{"fixes": {"heard": "said"}}`, for a misheard
+word), `assets`, `brand`.
 
 - A **beat** is what one moment needs: `at` (a sentence), `word` (where it lands, default the sentence's first) and any
   of `device` (an overlay or stage component and its `props`), `camera` (`push`, `pull`, `side`, `corner`, `none`),
@@ -132,10 +133,10 @@ refused, keep the repeat), `hook`, `beats`, `low`, `cta`, `assets`, `brand`.
   pull whoosh, drawer thud, gauge stamp, notice chime, first sticker pop, whoosh after the low look, click on a
   submit), minus `pluck` and anything the brand's notes reject. It adds **no** device, move or look you didn't ask for.
 - **Restraint is enforced:** at most two punch-ins besides the hook's, one `low` look (a line of at most 3 s, never in
-  the first 3 s), beats one at a time. The pacing report names the longest stretch with no visual change (a new
-  device, a camera move, a cut with a new frame size) and warns past 8 s; it never fills it. If it warns, add a beat
-  where the line earns one, or cut tighter.
-- **Devices are choices, none is required.** A plan with only `keep` and a hook is a valid, quiet edit. Pick a device
+  the first 3 s), beats one at a time. The pacing report names the longest stretch with no graphic or camera move on
+  screen: it warns past 5 s and refuses past 8 s, and never fills it. Add a beat where the line earns one, or cut
+  tighter.
+- **Devices are choices, none is required.** A short plan with only `keep` and a hook can be a valid, quiet edit. Pick a device
   because the line has a concrete thing to show, and let the same object come back (`object`) instead of a new card
   every time.
 

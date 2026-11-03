@@ -40,8 +40,9 @@ Ops (args in brackets are optional):
   brand            cmd=check [dir] → validates <dir>/incoming/* (default dir: brand) into fonts/ and
                    logos/ (invalid files deleted) and checks <dir>/brand.json; one entry per file,
                    `errors` (fail the job) and `warnings` (font entries their file can't honour)
-  plan_ids         → `sentences`: the transcript as numbered sentences F1…Fn (take, start, dur, text, restart_of)
-  plan_build       [plan stills] → edit/short.json compiled from edit/plan.json (sentence IDs and words, no seconds),
+  plan_ids         [order] → `sentences`: the transcript as numbered sentences F1…Fn (take, start, dur, text, restart_of);
+                   order: the take names in the order they were shot (default: name order)
+  plan_build       [plan stills order] → edit/short.json compiled from edit/plan.json (sentence IDs and words, no seconds),
                    then check --strict and (unless stills=false) stills --strict: returns spec, errors, warnings, duration, pacing, timeline
   preview_qa       [spec reuse] → transcribes edit/preview.mp4 and compares it with the edit: `errors` name each
                    fault's output time, segment and fix (unexpected speech, clipped word, repeat, restart, a loud cut)
@@ -199,7 +200,7 @@ def op_plan_ids(root: Path, a: dict) -> dict:
     import edit_plan
 
     try:
-        return {"sentences": edit_plan.plan_ids(root)}
+        return {"sentences": edit_plan.plan_ids(root, a["order"])}
     except edit_plan.PlanError as e:
         return {"errors": e.errors, "error": _one_line(e.errors[0])}
 
@@ -212,7 +213,7 @@ def op_plan_build(root: Path, a: dict) -> dict:
     except ValueError as e:
         raise JobError(f"`plan` is not valid JSON: {e}") from None
     try:
-        res = edit_plan.build(root, plan, stills=a["stills"])
+        res = edit_plan.build(root, plan, stills=a["stills"], order=a["order"])
     except edit_plan.PlanError as e:
         return {"errors": e.errors, "error": f"{len(e.errors)} plan error(s): {_one_line(e.errors[0])}"}
     return {**res, **({"error": f"{len(res['errors'])} spec error(s): {_one_line(res['errors'][0])}"} if res["errors"] else {})}
@@ -502,10 +503,11 @@ OPS: dict[str, Op] = {
         "cmd": Arg("str", required=True, choices=("check",)),
         "dir": Arg("str", default="brand", path="out"),
     }),
-    "plan_ids": Op(op_plan_ids, {}),
+    "plan_ids": Op(op_plan_ids, {"order": Arg("strs")}),
     "plan_build": Op(op_plan_build, {
         "plan": Arg("str", default="edit/plan.json", path="in"),
         "stills": Arg("bool", default=True),
+        "order": Arg("strs"),
     }),
     "preview_qa": Op(op_preview_qa, {
         "spec": Arg("str", default="edit/short.json", path="in"),

@@ -16,6 +16,7 @@ sys.path.insert(0, str(TOOLS))
 sys.path.insert(0, str(TOOLS / "tests"))
 
 import edit_plan as E  # noqa: E402
+import short_spec as SS  # noqa: E402
 from plan_fixture import PlanFixture  # noqa: E402
 
 REPO = TOOLS.parent
@@ -223,8 +224,8 @@ class Compile(PlanFixture):
                 "beats": [{"at": "F3", "word": "tesis", "device": "DocCard", "props": {"kicker": "PLAN", "title": "Un ropero"}},
                           {"at": "F4", "word": "Sin", "device": "Notice", "props": {"from": "Ana", "text": "Viste?"}},
                           {"at": "F4", "word": "nada", "device": "Stickers", "props": {"items": [{"text": "Big Data", "x": 150, "y": 230}]}},
-                          {"at": "F6", "word": "hoy", "device": "Notice", "props": {"from": "Leo", "text": "Listo"}}],
-                "cta": {"at": "F6", "word": "sígueme", "handle": "Link"}}
+                          {"at": "F6", "word": "sígueme", "device": "Notice", "props": {"from": "Leo", "text": "Listo"}}],
+                "cta": {"at": "F6", "word": "mismo", "handle": "Link"}}
         res = self.build(plan)
         spec = self.spec()
         self.assertEqual(len(spec["events"]), 4 + 1 + 1)  # the four beats, the hook and the CTA, nothing else
@@ -378,6 +379,49 @@ class CaptionFixes(PlanFixture):
         with self.assertRaises(E.PlanError) as e:
             build(self.root, {**BASE, "captions": {"word_fixes": [{"at": 12.4, "text": "x"}]}})
         self.assertIn("plan.captions", e.exception.errors[0])
+
+
+
+class SharedScreen(PlanFixture):
+    def test_the_hook_gives_way_to_the_first_graphic(self):
+        plan = {**BASE, "hook": {"title": ["Otro cartel"]}, "keep": ["F1", "F3-F4", "F6"],
+                "beats": [{"at": "F3", "word": "hablaba", "device": "DocCard", "props": {"kicker": "PLAN", "title": "Un ropero"}}]}
+        res = build(self.root, plan)
+        self.assertEqual(res["errors"], [])
+        p, _ = SS.load(self.root / "edit" / "short.json", self.root)
+        hook, card = (next(e for e in p.events if e["type"] == t) for t in ("HookTitle", "DocCard"))
+        self.assertLessEqual(hook["start"] + hook["duration"], card["start"] + 0.01)
+
+    def test_a_graphic_too_early_for_the_hook_is_named(self):
+        plan = {**BASE, "hook": {"title": ["Otro cartel"]}, "keep": ["F1", "F3-F4", "F6"],
+                "beats": [{"at": "F3", "word": "en", "device": "DocCard", "props": {"kicker": "PLAN", "title": "Un ropero"}}]}
+        self.assertIn("HookTitle and DocCard", build(self.root, plan)["errors"][0])
+
+    def test_a_graphic_gives_way_to_the_cta(self):
+        plan = {**BASE, "cta": {"at": "F6", "handle": "Sigueme"},
+                "beats": [{"at": "F4", "word": "Sin", "device": "DocCard", "until": "F6", "props": {"kicker": "PLAN", "title": "Un ropero"}}]}
+        res = build(self.root, plan)
+        self.assertEqual(res["errors"], [])
+        p, _ = SS.load(self.root / "edit" / "short.json", self.root)
+        card, cta = (next(e for e in p.events if e["type"] == t) for t in ("DocCard", "HandleCard"))
+        self.assertLessEqual(card["start"] + card["duration"], cta["start"] + 0.01)
+
+    def test_two_cards_at_once_are_named(self):
+        class P:
+            events = [{"type": "Receipt", "start": 1.0, "duration": 3.0}, {"type": "Flash", "start": 2.0, "duration": 0.3},
+                      {"type": "DocCard", "start": 3.0, "duration": 2.0}, {"type": "Captions", "start": 0.0, "duration": 9.0}]
+        self.assertIn("Receipt and DocCard", E._shared_screen(P)[0])
+
+    def test_a_full_screen_scene_covers_what_is_under_it(self):
+        class P:
+            events = [{"type": "HookTitle", "start": 0.0, "duration": 2.0},
+                      {"type": "PostPile", "start": 1.0, "duration": 2.0, "props": {"full": True}}]
+        self.assertEqual(E._shared_screen(P), [])
+
+    def test_one_after_the_other_is_fine(self):
+        class P:
+            events = [{"type": "Receipt", "start": 1.0, "duration": 2.0}, {"type": "DocCard", "start": 3.0, "duration": 2.0}]
+        self.assertEqual(E._shared_screen(P), [])
 
 
 if __name__ == "__main__":

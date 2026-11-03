@@ -595,11 +595,20 @@ def build(root: Path, plan: Any, repo: Path = REPO, stills: bool = True, order: 
     event_beat: dict[int, int] = {}
     cue_words: dict[int, dict] = {}
 
+    cta_st = None  # the CTA's card takes over the space: a graphic before it ends in time
+    if plan.get("cta"):
+        cs = by_id[plan["cta"]["at"]]
+        ci = _find(words, cs, plan["cta"]["word"]) if plan["cta"].get("word") else cs["a"]
+        ck = first_in_seg(cs["take"], ci)
+        cta_st = bounds[ck][0] if ck is not None else out_t(cs["take"], words[cs["take"]][ci]["start"])
+
     for j, x in enumerate(timed):
         b, s, w, st = x["b"], x["s"], x["w"], x["st"]
         take = s["take"]
         dev = b.get("device")
         nxt = timed[j + 1]["st"] - NEXT_GAP if j + 1 < len(timed) else total
+        if cta_st is not None and cta_st > st:
+            nxt = min(nxt, cta_st - NEXT_GAP)
         limit = min(nxt, total, st + HOLD_MAX)
         dur = HOLD_FIXED[dev] if dev in HOLD_FIXED else min(max(x["hold"] - st, HOLD_MIN), HOLD_MAX)
         dur = min(dur, nxt - st)
@@ -693,8 +702,12 @@ def build(root: Path, plan: Any, repo: Path = REPO, stills: bool = True, order: 
             punch_at[0] = _src_anchor(words[segs[0]["take"]][mid])
         lines = [{"text": t, **({"emphasis": hook["emphasis"]} if hook.get("emphasis") and hook["emphasis"] in t else {})}
                  for t in hook["title"]]
+        # the hook gives way to the first graphic: two cards never share the space above the head
+        first = min((x["st"] for x in beats if x["b"].get("device") and x["b"]["device"] not in HOLD_FIXED
+                     and not x["b"].get("props", {}).get("full")), default=HOOK_MAX)
         events.insert(0, {"type": "HookTitle", "start": 0, "layer": "front", "name": "hook",
-                          "duration": round(min(HOOK_MAX, max(HOOK_MIN, segs[0]["_dur"])), 2), "props": {"lines": lines}})
+                          "duration": round(max(HOLD_MIN, min(HOOK_MAX, max(HOOK_MIN, segs[0]["_dur"]), first - NEXT_GAP)), 2),
+                          "props": {"lines": lines}})
         event_beat = {i + 1: n for i, n in event_beat.items()}
         add_sfx("hook", 0.06)
     low_seg = next((k for k, g in enumerate(segs) if g["low"]), None)
@@ -712,7 +725,10 @@ def build(root: Path, plan: Any, repo: Path = REPO, stills: bool = True, order: 
         i = _find(words, s, cta["word"]) if cta.get("word") else s["a"]
         k0 = first_in_seg(s["take"], i)
         start = _anchor(s["take"], words[s["take"]][i]) if k0 is None else {"seg": k0, "edge": "start"}
-        events.append({"type": "HandleCard", "start": start, "end": {"seg": len(spec_segs) - 1, "edge": "end"},
+        later = [x["st"] for x in timed if x["b"].get("device") and x["b"]["device"] not in HOLD_FIXED and x["st"] > cta_st]
+        until = {"duration": round(max(HOLD_MIN, min(later) - NEXT_GAP - cta_st), 2)} if later \
+            else {"end": {"seg": len(spec_segs) - 1, "edge": "end"}}  # the next graphic takes over, or it holds to the end
+        events.append({"type": "HandleCard", "start": start, **until,
                        "layer": "front", "name": "cta",
                        "props": {"handle": cta["handle"], **({"kicker": cta["kicker"]} if cta.get("kicker") else {})}})
         add_sfx("cta", start)
@@ -738,6 +754,7 @@ def build(root: Path, plan: Any, repo: Path = REPO, stills: bool = True, order: 
             pacing = _pacing(p2, rep["duration"])
             if pacing.get("error"):
                 res["errors"].append(pacing["error"])
+            res["errors"] += _shared_screen(p2)
             if stills:
                 found = list(rep["warnings"])
                 p2.stills(None, preview=True, warnings=found)
@@ -800,6 +817,19 @@ def _cut_hint(msg: str) -> str:
         return (msg + " (a cut made for the plan: the `low` line, a punch-in sentence or a kept run must begin and end at a "
                 "pause; pick words that follow one, or keep the neighbouring sentence)")
     return msg
+
+
+def _shared_screen(p: Any) -> list[str]:
+    """Two graphics on screen at once, one over the other. A Flash is over at once; a full-screen scene covers the rest."""
+    shown = sorted((e for e in p.events if e["type"] not in ("Captions", *HOLD_FIXED) and not e.get("props", {}).get("full")),
+                   key=lambda e: e["start"])
+    out = []
+    for a, b in zip(shown, shown[1:]):
+        over = a["start"] + a["duration"] - b["start"]
+        if over > NEXT_GAP:
+            out.append(f"{a['type']} and {b['type']} are both on screen for {over:.2f} s from {b['start']:.2f} s, one over the "
+                       f"other; start the second on a later word, or end the first sooner with `through`")
+    return out
 
 
 def _pacing(p: Any, total: float) -> dict:

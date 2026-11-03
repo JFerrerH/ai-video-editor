@@ -1,0 +1,35 @@
+{
+  "_doc": "The stage's camera moves on the 1080x1920 frame, read by stage/camera.ts (the picture) and shortform.py (where the head goes).",
+  "pull": {
+    "scale": 0.8,
+    "origin": [
+      540,
+      760
+    ],
+    "tx": 0
+  },
+  "side": {
+    "scale": 1.3,
+    "origin": [
+      540,
+      700
+    ],
+    "tx": -170
+  },
+  "corner": {
+    "scale": 0.3,
+    "origin": [
+      1040,
+      1880
+    ],
+    "tx": 0
+  },
+  "push": {
+    "origin": [
+      540,
+      700
+    ],
+    "tx": 0,
+    "defaultAmount": 0.07
+  }
+}

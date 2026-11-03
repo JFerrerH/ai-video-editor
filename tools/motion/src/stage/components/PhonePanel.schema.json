@@ -3,6 +3,7 @@
   "description": "Real screens in a phone; the screen changes on cue. `corner` mode is the hero while a corner camera move is on (layer \"panel\"); `side` sits on the free wall next to a side move.",
   "x-layout": "float",
   "x-event-props": false,
+  "x-place": "own",
   "x-layers": [
     "front",
     "panel"

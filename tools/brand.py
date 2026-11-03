@@ -47,6 +47,19 @@ class BrandKit:
         return BRANDS / self.slug / "brand.md" if self.slug else None
 
 
+def _luminance(hex_: str) -> float:
+    r, g, b = (int(hex_[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def ink_on_light(colors: dict) -> dict:
+    """Cards are light and take `ink` for their text, so `ink` is the dark colour of the pair whatever a kit calls
+    them: a dark-mode kit (cream ink on a dark background) would write cream on white. A dark backdrop is `dark`."""
+    if _luminance(colors["ink"]) > _luminance(colors["bg"]):
+        return {**colors, "ink": colors["bg"], "bg": colors["ink"]}
+    return colors
+
+
 def load_brand(slug: str | None) -> BrandKit:
     if not slug or slug == "none":
         return BrandKit(None, {**NEUTRAL, "fontFiles": []})
@@ -69,7 +82,7 @@ def load_brand(slug: str | None) -> BrandKit:
     # a neutral face only when the kit names no font at all.
     kit_fonts = raw.get("fonts", {})
     own = kit_fonts.get("sans") or (font_files[0]["family"] if font_files else None)
-    theme = {"colors": {**NEUTRAL["colors"], **raw.get("colors", {})},
+    theme = {"colors": ink_on_light({**NEUTRAL["colors"], **raw.get("colors", {})}),
              "fonts": {r: kit_fonts.get(r) or own or NEUTRAL["fonts"][r] for r in NEUTRAL["fonts"]},
              "fontFiles": font_files}
     return BrandKit(slug, theme, public, dict(raw.get("captions", {})))

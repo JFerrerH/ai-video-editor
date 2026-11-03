@@ -3,6 +3,7 @@
   "description": "A card falls into a drawer at the bottom of the frame, which shuts at shutAt. (Not the engine's `Drawer`, a different component.)",
   "x-layout": "float",
   "x-event-props": false,
+  "x-place": "own",
   "x-layers": [
     "front"
   ],

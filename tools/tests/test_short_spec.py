@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 TOOLS = Path(__file__).resolve().parent.parent
@@ -74,6 +75,9 @@ BASE = {
                 "props": {"lines": [{"text": "Go"}]}}],
     "sfx": [{"name": "click", "at": {"word": "launch", "take": "take1", "offset": 0.05}, "gain_db": -15}],
 }
+
+
+from errors import ToolError  # noqa: E402
 
 
 class Fixture(unittest.TestCase):
@@ -1158,6 +1162,57 @@ class ChunksTest(unittest.TestCase):
     def test_more_punctuation_breaks(self):
         p = self.project("uno: dos; tres… cuatro")
         self.assertEqual(self.phrases(p, "uno: dos; tres… cuatro"), ["uno:", "dos;", "tres…", "cuatro"])
+
+
+
+class AnyFrameRate(unittest.TestCase):
+    """conform keeps 24 and 25 fps. A zoomed segment must last as long as its audio at any of them."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = Path(tempfile.mkdtemp())
+        cls.root = cls.tmp / "demo"
+        (cls.root / "edit" / "transcripts").mkdir(parents=True)
+        for fps in (24, 25, 30):
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"color=c=gray:s=108x192:r={fps}:d=3.5",
+                            "-f", "lavfi", "-i", "aevalsrc='sin(2*PI*220*t)':s=48000:d=3.5", "-shortest", "-c:v", "libx264",
+                            "-c:a", "pcm_s16le", str(cls.root / f"t{fps}.mov")], check=True)
+            (cls.root / "edit" / "transcripts" / f"t{fps}.json").write_text(json.dumps({"words": []}))
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp)
+
+    def project(self, fps: int):
+        spec = {"version": 1, "brand": "none", "sources": {f"t{fps}": {"file": f"t{fps}.mov", "face": [54, 96]}},
+                "segments": [{"take": f"t{fps}", "in": 0.5, "out": 3.0, "lock_in": True, "lock_out": True,
+                              "zoom": {"kind": "punch", "base": 1.0, "peak": 1.12, "at": 1.0}}]}
+        path = self.root / "edit" / "short.json"
+        path.write_text(json.dumps(spec))
+        return S.load(path, self.root)[0]
+
+    def test_a_zoomed_segment_keeps_its_length(self):
+        for fps in (24, 25, 30):
+            p = self.project(fps)
+            s = p.segments[0]
+            out = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{s.t_in:.3f}", "-t", f"{s.dur:.3f}", "-i", str(p.sources[s.take]),
+                                  "-vf", p._vf(s, 108, 192), "-f", "null", "-", "-progress", "pipe:1"],
+                                 capture_output=True, text=True, check=True).stdout
+            frames = int(out.split("frame=")[-1].split()[0])
+            self.assertAlmostEqual(frames / 30, s.dur, delta=0.07, msg=f"{fps} fps")
+
+    def test_a_still_near_the_end_of_a_zoomed_segment(self):
+        p = self.project(24)
+        dst = self.root / "edit" / "base.png"
+        p._base_frame(p.offsets()[1] - 0.05, 108, 192, dst)
+        self.assertTrue(dst.exists())
+
+    def test_a_frame_that_cannot_be_made_is_named(self):
+        p = self.project(30)
+        with mock.patch.object(p, "_vf", return_value="trim=start=999,format=yuv420p"):
+            with self.assertRaises(ToolError) as e:
+                p._base_frame(1.0, 108, 192, self.root / "edit" / "none.png")
+        self.assertIn("no frame at 1.00 s", str(e.exception.summary))
 
 
 if __name__ == "__main__":

@@ -489,7 +489,8 @@ class Project:
         k = 2  # zoompan rounds to whole pixels → upscale first to halve jitter
         ex = f"max(0,min(iw-iw/zoom,{cx * k}-iw/zoom/2))"
         ey = f"max(0,min(ih-ih/zoom,{cy * k}-ih/zoom/2))"
-        return (f"setpts=PTS-STARTPTS,scale={1080 * k}:{1920 * k}:flags=bicubic,"
+        # zoompan emits one frame per input frame, stamped at `fps`: a source at another rate would change speed
+        return (f"setpts=PTS-STARTPTS,fps={self.fps},scale={1080 * k}:{1920 * k}:flags=bicubic,"
                 f"zoompan=z='{zoom_expr(z, s.dur)}':x='{ex}':y='{ey}':d=1:s={w}x{h}:fps={self.fps},"
                 f"{post}{hold},format=yuv420p")
 
@@ -642,6 +643,9 @@ class Project:
         local = min(t - offs[i], max(0.0, s.dur - 1 / self.fps))  # inside a freeze: its held frame
         run(["ffmpeg", "-y", "-ss", f"{s.t_in:.3f}", "-t", f"{s.dur:.3f}", "-i", str(self.sources[s.take]),
              "-vf", f"{self._vf(s, w, h)},trim=start={local:.4f}", "-frames:v", "1", str(dst)])
+        if not dst.exists():  # ffmpeg exits 0 with no frames, and the render would only say it can't load the image
+            raise ToolError([], f"no frame at {local:.3f} s of segment {i} ({s.dur:.3f} s long)",
+                            f"no frame at {t:.2f} s of the video: segment {i} is shorter than it should be")
         return dst
 
     def head_box(self, e: dict) -> list[float] | None:

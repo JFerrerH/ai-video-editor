@@ -236,6 +236,20 @@ class Implausible(unittest.TestCase):
         self.assertTrue(any(a <= 38.7 and b >= 42.3 for a, b in untranscribed), untranscribed)
 
 
+class Audible(unittest.TestCase):
+    def test_quiet_stretch_is_not_speech(self):
+        """Real levels: speech at -24 dB, a floor at -52 dB, a breath in a pause at -40 dB."""
+        import numpy as np
+        db = np.full(4000, -24.0)   # 20 s of speech at a 5 ms hop
+        db[1000:1400] = -40.0       # 5.0–7.0 s: 16 dB under the speech
+        db[2000:2400] = -30.0       # 10.0–12.0 s: quiet speech
+        self.assertEqual(T.audible([[5.0, 7.0], [10.0, 12.0]], db), [[10.0, 12.0]])
+
+    def test_a_hole_past_the_end_is_dropped(self):
+        import numpy as np
+        self.assertEqual(T.audible([[100.0, 101.0]], np.full(400, -24.0)), [])
+
+
 class Restarts(unittest.TestCase):
     def words(self, text: str, gaps: dict[int, float] = {}):
         out, t = [], 10.0
@@ -259,6 +273,16 @@ class Restarts(unittest.TestCase):
 
     def test_deliberate_repetition(self):
         ws = self.words("I spend this much on food. I spend this much on rent.", gaps={5: 0.5})
+        self.assertEqual(T.mark_restarts(ws), [])
+
+    def test_filler_before_the_repeat(self):
+        ws = self.words("the first would be… uh no the first would be to remove the fear")
+        (r,) = T.mark_restarts(ws)
+        self.assertEqual(r["again"], ws[6]["start"])
+
+    def test_sentences_that_open_alike(self):
+        """Real take: a pause after a comma, more words, then a sentence with the same first two words."""
+        ws = self.words("Y en ese libro hablaba de mi casa, de mi calle y mi barrio. Y en contra de todo lo dejé.", gaps={7: 0.4})
         self.assertEqual(T.mark_restarts(ws), [])
 
     def test_too_far_apart(self):

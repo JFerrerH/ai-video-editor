@@ -37,6 +37,25 @@ class Sentences(PlanFixture):
         self.assertEqual(s["F3"]["start"], 4.1)
         self.assertNotIn("restart_of", s["F3"])
 
+    def test_sentences_that_open_alike_are_not_flagged(self):
+        ws = [{"text": t, "start": a, "end": a + 0.2} for t, a in
+              (("Y", 0.0), ("en", 0.3), ("esa", 0.6), ("tesis", 0.9), ("Hablaba", 2.0), ("de", 2.3), ("ropa.", 2.6),
+               ("Y", 4.0), ("en", 4.3), ("contra", 4.6), ("mía.", 4.9))]
+        self.assertFalse([s for s in E.sentences({"t": ws}) if s.get("restart_of")])
+
+    def test_take_order(self):
+        import json
+        import shutil
+        other = self.root / "edit" / "transcripts" / "a-first-by-name.json"
+        shutil.copy(self.root / "edit" / "transcripts" / "take1.json", other)
+        try:
+            self.assertEqual(E.plan_ids(self.root)[0]["take"], "a-first-by-name")
+            self.assertEqual(E.plan_ids(self.root, ["take1"])[0]["take"], "take1")
+            self.assertEqual(E.plan_ids(self.root, ["take1", "missing"])[-1]["take"], "a-first-by-name")
+            self.assertTrue(json.loads(other.read_text()))
+        finally:
+            other.unlink()
+
     def test_ids_are_stable(self):
         self.assertEqual(E.plan_ids(self.root), E.plan_ids(self.root))
         self.assertEqual(list(self.ids()), [f"F{k}" for k in range(1, 8)])
@@ -345,6 +364,20 @@ class SkillExamples(unittest.TestCase):
                 self.assertIn(b.get("device", "Flash"), overlay_schema.COMPONENTS)
                 for path, v, _, _ in overlay_schema.time_fields(b["device"], b["props"]) if b.get("device") else []:
                     self.assertIsInstance(v, dict, f"{b['device']}.{path} is a time: a word, not seconds")
+
+
+
+class CaptionFixes(PlanFixture):
+    def test_fixes_reach_the_spec(self):
+        res = build(self.root, {**BASE, "captions": {"fixes": {"Hola": "Holaa"}}})
+        self.assertEqual(res["errors"], [])
+        spec = json.loads((self.root / "edit" / "short.json").read_text())
+        self.assertEqual(spec["captions"], {"fixes": {"Hola": "Holaa"}})
+
+    def test_only_fixes(self):
+        with self.assertRaises(E.PlanError) as e:
+            build(self.root, {**BASE, "captions": {"word_fixes": [{"at": 12.4, "text": "x"}]}})
+        self.assertIn("plan.captions", e.exception.errors[0])
 
 
 if __name__ == "__main__":

@@ -1086,7 +1086,7 @@ class ProbeTest(Fixture):
         frame = p.events[0]["props"]["frame"]
         self.assertLess(frame["y"], 0)  # moved up
         box = json.loads((self.root / "edit" / "overlay_boxes.json").read_text())[p._box_key(p.events[0])]["text"]
-        self.assertLessEqual(box[3], 565)
+        self.assertLessEqual(box[3], HEAD[1] * 10 - SF.HEAD_GAP)  # just above the head
         self.assertGreaterEqual(box[1], SF.PLACE_TOP)
         # without a head box (no person) nothing moves
         p, _ = self.probe("take1", name)
@@ -1260,7 +1260,12 @@ class HeadPerMoment(unittest.TestCase):
     def test_placement_uses_the_band_up_to_the_head(self):
         frame, s = SF.Project._place([240, 200, 840, 400], [100, 500, 980, 900], [40])
         self.assertEqual(s, 1.0)
-        self.assertEqual(frame["y"], SF.PLACE_TOP - 200)
+        self.assertEqual(frame["y"], 500 - 200 - 200)  # its bottom just above the head, not up at the limit
+
+    def test_a_card_rises_only_as_far_as_it_must(self):
+        frame, s = SF.Project._place([240, 200, 840, 500], [100, 300, 980, 900], [60])
+        self.assertLess(s, 1.0)
+        self.assertEqual(frame["y"], round(SF.PLACE_TOP - s * 200))  # the whole band: at the limit, and scaled to fit
 
     def test_a_move_that_holds_goes_by_where_it_puts_the_head(self):
         p = self.project()

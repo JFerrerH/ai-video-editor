@@ -793,16 +793,16 @@ class Project:
 
     @staticmethod
     def _place(content: list[float], head: list[float], sizes: list[float]) -> tuple[dict | None, float]:
-        """The `frame` that puts a floating overlay's content in the band between the top safe margin and the
-        head, centred, scaled down (never up) to fit: (frame, scale), frame None when its smallest text would
-        drop under MIN_TEXT px."""
+        """The `frame` that puts a floating overlay's content just above the head, centred, rising only as far as it
+        must and no higher than PLACE_TOP, scaled down (never up) to fit that band: (frame, scale), frame None when its
+        smallest text would drop under MIN_TEXT px."""
         x0, y0, x1, y1 = content
         band = head[1] - PLACE_TOP
         s = min(1.0, band / max(1, y1 - y0), (1080 - 2 * SAFE_SIDE) / max(1, x1 - x0))
         if s <= 0 or (sizes and min(sizes) * s < MIN_TEXT):
             return None, max(0.0, s)
         # Overlay.tsx: transform origin top centre, then `translate`: p' = origin + translate + s · (p − origin)
-        return {"scale": round(s, 3), "x": round(-s * ((x0 + x1) / 2 - 540)), "y": round(PLACE_TOP - s * y0)}, s
+        return {"scale": round(s, 3), "x": round(-s * ((x0 + x1) / 2 - 540)), "y": round(max(PLACE_TOP, head[1] - s * (y1 - y0)) - s * y0)}, s
 
     def measure_events(self, scale: float = 0.5, probe: bool = True, missing_only: bool = False,
                        warnings: list[str] | None = None) -> None:
@@ -857,7 +857,8 @@ class Project:
                 continue
             card = alpha_box(res[(k, "alone")][0], solid=200)  # the card itself, not its soft shadow
             boxes_ = [t["box"] for t in texts] + ([card] if card else [])
-            if not any(hits(b, head) for b in boxes_):
+            # on the head, or over the limit at the top: a default position can be either in another framing
+            if not any(hits(b, head) for b in boxes_) and min(b[1] for b in boxes_) >= PLACE_TOP:
                 continue
             before = keys[id(e)]
             content = [min(b[0] for b in boxes_), min(b[1] for b in boxes_), max(b[2] for b in boxes_),

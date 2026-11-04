@@ -22,7 +22,7 @@ export const BehindWord: React.FC<{
   return (
     <AbsoluteFill style={{ opacity: vis }}>
       {lead ? (
-        <div style={{ position: "absolute", top: y - 80, width: "100%", textAlign: "center", fontFamily: fonts.mono, fontWeight: 700, fontSize: 48, letterSpacing: 6, color: color ?? colors.tint1, textTransform: "uppercase" }}>
+        <div style={{ position: "absolute", top: y - 80, width: "100%", textAlign: "center", fontFamily: fonts.mono, fontWeight: 700, fontSize: 56, letterSpacing: 6, color: color ?? colors.tint1, textTransform: "uppercase" }}>
           {lead}
         </div>
       ) : null}

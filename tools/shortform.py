@@ -21,6 +21,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -79,6 +80,11 @@ HIDDEN_VISIBLE = 0.85
 # text over footage (1080-wide px): WCAG contrast 4.5:1 under LARGE_TEXT px tall, 3:1 from it; nothing under
 # MIN_TEXT px; text stays HEAD_MARGIN × the frame width clear of the speaker's head box on every side
 LARGE_TEXT, MIN_TEXT, HEAD_MARGIN = 48, 28, 0.06
+HEAD_GAP = 40  # px of air between a graphic and the top of the head
+# a floating graphic's highest point. Published Reels guides put the top bar at 220-270 px with no official spec, and
+# below that a close-up leaves no room above the head; the owner chose the room, after watching it (2026-11-03)
+PLACE_TOP = 100
+MIN_ROOM = 2 * MIN_TEXT  # px above the head under which not even a line of text fits
 SAFE_SIDE = 130  # px from each side edge (tools/motion/src/theme.ts SAFE.side)
 # silence is measured against the take's speech (Project._quiet): SPEECH_DROP dB under its 90th percentile,
 # quiet runs QUIET_MERGE s apart or closer merged
@@ -137,9 +143,11 @@ LOOKS = {
 # echo and a little level back. Two 1.1 kHz low-passes were tried and rejected: too muffled to understand.
 LOW_VOICE = "highpass=f=220,lowpass=f=2400,aecho=0.85:0.6:40|80:0.22|0.1,volume=1.6dB"
 
-# the corner move's speaker bubble on the 1080x1920 stage (tools/motion/src/stage/camera.ts): scale 0.3 about the
-# bottom-right corner, with a 10 px white ring
-BUBBLE_TOP = 1920 - round(0.3 * 1920) - 10
+# the stage's camera moves, shared with tools/motion/src/stage/camera.ts
+CAMERA_MOVES = json.loads((Path(__file__).resolve().parent / "motion" / "src" / "stage" / "camera.json").read_text())
+# the corner move's speaker bubble on the 1080x1920 stage: scaled about the bottom-right corner, with a 10 px white ring
+BUBBLE_TOP = 1920 - round(CAMERA_MOVES["corner"]["scale"] * 1920) - 10
+CAMERA_HOLDS = 0.8  # a move on screen for this share of an event: the event is seen with the head where the move puts it
 # word-synced devices: emphasis, not restatement (the echo rule exempts them; captions don't emphasise what they show)
 SYNCED = ("Stickers", "BehindWord")
 SYNCED_MAX_WORDS = 3
@@ -592,6 +600,50 @@ class Project:
         e = {k: e[k] for k in ("type", "duration", "props")}
         return hashlib.sha1(json.dumps([e, self.brand], sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:16]
 
+    def _under_camera(self, box: list[float], a: float, b: float) -> list[float]:
+        """Where a camera move on screen between `a` and `b` puts this box. A move that holds for most of the time goes
+        by where it puts the head; one that only passes through counts both, the head goes through both."""
+        out = list(box)
+        for m in self.camera:
+            on = min(b, m["end"]) - max(a, m["start"])
+            if on <= 0:
+                continue
+            move = CAMERA_MOVES[m["kind"]]
+            s = 1 + m.get("amount", move["defaultAmount"]) if m["kind"] == "push" else move["scale"]
+            (ox, oy), tx = move["origin"], move["tx"]
+            moved = [ox + s * (box[0] - ox) + tx, oy + s * (box[1] - oy), ox + s * (box[2] - ox) + tx, oy + s * (box[3] - oy)]
+            if on >= CAMERA_HOLDS * (b - a):
+                out = moved
+            else:
+                out = [min(out[0], moved[0]), min(out[1], moved[1]), max(out[2], moved[2]), max(out[3], moved[3])]
+        return out
+
+    def _colour_that_reads(self, blank, groups: list[dict]) -> str | None:
+        """The first of the brand's ink, white and black that reaches each text box's contrast on what is really behind
+        it (4.5:1, or 3:1 for large text). `blank` is the frame without the text."""
+        import numpy as np
+
+        f = blank.shape[1] / 1080
+        behind = []
+        for g in groups:
+            x0, y0, x1, y1 = (max(0, round(v * f)) for v in g["box"])
+            area = blank[y0:y1, x0:x1]
+            if area.size:
+                behind.append((float(_luminance(np.median(area.reshape(-1, 3), axis=0))),
+                               4.5 if g["size"] < LARGE_TEXT else 3.0))
+        if not behind:
+            return None
+
+        def reads(hex_: str) -> bool:
+            lum = float(_luminance(np.array([int(hex_[i:i + 2], 16) for i in (1, 3, 5)])))
+            return all((max(lum, b) + 0.05) / (min(lum, b) + 0.05) >= need for b, need in behind)
+
+        return next((c for c in (self.brand["colors"]["ink"], "#FFFFFF", "#000000") if reads(c)), None)
+
+    def _placed_key(self, e: dict) -> str:
+        """A placement holds for this event over this head: another cut or another take places it again."""
+        return f"{self._box_key(e)}:{self.head_box(e)}"
+
     def _boxes(self) -> dict:
         p = self.edit_dir / "overlay_boxes.json"
         return json.loads(p.read_text()) if p.exists() else {}
@@ -648,9 +700,48 @@ class Project:
                             f"no frame at {t:.2f} s of the video: segment {i} is shorter than it should be")
         return dst
 
+    def _head_tops(self, take: str) -> list[float]:
+        """The top of the speaker's head at each second of a take, in source px: people lean and sit up, and one
+        height for a whole take is wrong for most of it. From the person matte at 1 fps, in the columns around the
+        face so a raised hand doesn't count. Measured once per take."""
+        import numpy as np
+        from face_centre import WORK_W, _duration, make_matte
+
+        cache = self.__dict__.setdefault("_head_tops_cache", {})
+        if take in cache:
+            return cache[take]
+        out = self.edit_dir / f"head_tops_{take}.json"
+        if out.exists():
+            cache[take] = json.loads(out.read_text())
+            return cache[take]
+        info = self.source_info(take)
+        k = info["width"] / WORK_W
+        wh = round(info["height"] / k / 2) * 2
+        matte = self.edit_dir / f"head_tops_{take}.mov"
+        try:
+            make_matte(self.sources[take], 0, _duration(self.sources[take]), matte, fps=1)
+        except (SystemExit, subprocess.CalledProcessError, OSError) as err:  # the take-wide head box still applies
+            print(f"  can't track the head in {take}: {err}", file=sys.stderr)
+            cache[take] = []
+            return []
+        raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(matte), "-vf", f"scale={WORK_W}:{wh}", "-pix_fmt", "gray",
+                              "-f", "rawvideo", "-"], capture_output=True, check=True).stdout
+        frames = np.frombuffer(raw, np.uint8).reshape(-1, wh, WORK_W)
+        # the middle of this person's head, however big it is in the frame: a raised hand or a neighbour doesn't count
+        hx0, _, hx1, _ = (v / k for v in self.head[take])
+        a, b = round(hx0 + (hx1 - hx0) / 4), max(round(hx1 - (hx1 - hx0) / 4), round(hx0 + (hx1 - hx0) / 4) + 1)
+        tops = []
+        for m in frames:
+            rows = np.flatnonzero((m[:, a:b] > 127).sum(axis=1) >= 2)
+            tops.append(round(float(rows[0]) * k, 1) if len(rows) else -1.0)
+        matte.unlink(missing_ok=True)
+        out.write_text(json.dumps(tops))
+        cache[take] = tops
+        return tops
+
     def head_box(self, e: dict) -> list[float] | None:
-        """The speaker's head over an event in 1080x1920 output px, grown by HEAD_MARGIN of the width on every
-        side: the union over the segments the event plays on, at each one's smallest and largest zoom (a push
+        """The speaker's head over an event in 1080x1920 output px, grown by HEAD_MARGIN of the width on the sides
+        and the bottom and HEAD_GAP on top, its top measured while the event is on screen: the union over the segments the event plays on, at each one's smallest and largest zoom (a push
         or punch moves the head). None when no take under it has a head box (no person)."""
         offs, a, b = self.offsets(), e["start"], e["start"] + e["duration"]
         out = None
@@ -659,6 +750,11 @@ class Project:
                 continue
             k = 1080 / self.source_info(s.take)["width"]
             x0, y0, x1, y1 = (v * k for v in self.head[s.take])
+            tops = self._head_tops(s.take)  # how high the head really gets while this event is on screen
+            ta, tb = s.t_in + max(0.0, a - offs[i]), s.t_in + min(s.dur, b - offs[i])
+            here = [t for t in tops[int(ta):int(tb) + 1] if t >= 0]
+            if here:
+                y0 = min(here) * k
             cx, cy = (v * k for v in self.face[s.take])
             zs = {"static": s.zoom[1:2], "push": s.zoom[1:3], "punch": s.zoom[1:3], "outpunch": s.zoom[1:4]}[s.zoom[0]]
             for z in (min(zs), max(zs)):
@@ -669,8 +765,9 @@ class Project:
                                                max(out[2], box[2]), max(out[3], box[3])]
         if out is None:
             return None
+        out = self._under_camera(out, a, b)
         m = HEAD_MARGIN * 1080
-        return [round(out[0] - m), round(out[1] - m), round(out[2] + m), round(out[3] + m)]
+        return [round(out[0] - m), round(out[1] - HEAD_GAP), round(out[2] + m), round(out[3] + m)]
 
     @staticmethod
     def _text_groups(e: dict, texts: list[dict]) -> list[dict]:
@@ -696,16 +793,16 @@ class Project:
 
     @staticmethod
     def _place(content: list[float], head: list[float], sizes: list[float]) -> tuple[dict | None, float]:
-        """The `frame` that puts a floating overlay's content in the band between the top safe margin and the
-        head, centred, scaled down (never up) to fit: (frame, scale), frame None when its smallest text would
-        drop under MIN_TEXT px."""
+        """The `frame` that puts a floating overlay's content just above the head, centred, rising only as far as it
+        must and no higher than PLACE_TOP, scaled down (never up) to fit that band: (frame, scale), frame None when its
+        smallest text would drop under MIN_TEXT px."""
         x0, y0, x1, y1 = content
-        band = head[1] - SAFE_TOP
+        band = head[1] - PLACE_TOP
         s = min(1.0, band / max(1, y1 - y0), (1080 - 2 * SAFE_SIDE) / max(1, x1 - x0))
         if s <= 0 or (sizes and min(sizes) * s < MIN_TEXT):
             return None, max(0.0, s)
         # Overlay.tsx: transform origin top centre, then `translate`: p' = origin + translate + s · (p − origin)
-        return {"scale": round(s, 3), "x": round(-s * ((x0 + x1) / 2 - 540)), "y": round(SAFE_TOP - s * y0)}, s
+        return {"scale": round(s, 3), "x": round(-s * ((x0 + x1) / 2 - 540)), "y": round(max(PLACE_TOP, head[1] - s * (y1 - y0)) - s * y0)}, s
 
     def measure_events(self, scale: float = 0.5, probe: bool = True, missing_only: bool = False,
                        warnings: list[str] | None = None) -> None:
@@ -720,6 +817,13 @@ class Project:
         import overlay_schema as O
         warnings = warnings if warnings is not None else []
         boxes = self._boxes()
+        placed_file = self.edit_dir / "overlay_placed.json"
+        saved, patches = json.loads(placed_file.read_text()) if placed_file.exists() else {}, {}
+        keys = {}
+        for e in self.events:  # where an earlier pass put it; an event or a head that changed has another key
+            keys[id(e)] = self._placed_key(e)
+            if patch := saved.get(keys[id(e)]):
+                e["props"] = {**e.get("props", {}), **patch}
         pub = self.edit_dir / "motion_public"
         for name, src in self.public_files.items():
             stage(src, pub / name)
@@ -732,13 +836,15 @@ class Project:
 
         def floating(e: dict) -> bool:
             p_ = e.get("props", {})
-            # stage components sit where the spec put them (their schema takes no `frame`); only layer front floats
-            return (not p_.get("full") and self.layer_of(e) == "front" and "frame" not in p_
-                    and e["type"] not in O.STAGE)
+            # any graphic on the front layer. A component's schema can say otherwise: `x-place: own` has its place in
+            # the design, `x-place: above-head` goes above the head on any layer (the speaker would hide its text)
+            place = O.schemas().get(e["type"], {}).get("x-place")
+            return (not p_.get("full") and "frame" not in p_ and place != "own"
+                    and (self.layer_of(e) == "front" or place == "above-head"))
 
-        def alpha_box(png: Path) -> list[int] | None:
+        def alpha_box(png: Path, solid: int = 8) -> list[int] | None:
             img = self._rgba(png)
-            ys, xs = (img[:, :, 3] > 8).nonzero()
+            ys, xs = (img[:, :, 3] > solid).nonzero()
             f = 1080 / img.shape[1]
             return [round(xs.min() * f), round(ys.min() * f), round((xs.max() + 1) * f), round((ys.max() + 1) * f)] \
                 if len(ys) else None
@@ -747,17 +853,27 @@ class Project:
         placed = []
         for k, e in todo:  # placement: floating text over the head moves into the band above it
             texts, head = res[(k, "alone")][1] or [], self.head_box(e)
-            if not (texts and head and floating(e)) or not any(hits(t["box"], head) for t in texts):
+            if not (texts and head and floating(e)):
                 continue
-            boxes_ = [t["box"] for t in texts] + [b for b in [alpha_box(res[(k, "alone")][0])] if b]
+            card = alpha_box(res[(k, "alone")][0], solid=200)  # the card itself, not its soft shadow
+            boxes_ = [t["box"] for t in texts] + ([card] if card else [])
+            # on the head, or over the limit at the top: a default position can be either in another framing
+            if not any(hits(b, head) for b in boxes_) and min(b[1] for b in boxes_) >= PLACE_TOP:
+                continue
+            before = keys[id(e)]
             content = [min(b[0] for b in boxes_), min(b[1] for b in boxes_), max(b[2] for b in boxes_),
                        max(b[3] for b in boxes_)]  # its pixels and its text's line boxes
             frame, s = self._place(content, head, [t["size"] for t in texts])
             if frame is None:
+                room = head[1] - PLACE_TOP
+                fix = ('this framing has no room above the head for any card: set "full": true, or use a `corner` or `side` '
+                       "move that makes room" if room < MIN_ROOM else
+                       'set "full": true, or give it fewer words, or use a `corner` or `side` move that makes room')
                 warnings.append(Finding(f"{self._ev_label(e, k)} fits above the speaker's head only at {s:.2f}x, where its "
-                                        f"text would be {min(t['size'] for t in texts) * s:.0f} px tall (under {MIN_TEXT} px); "
-                                        f'set "full": true, or give it fewer words', "face"))
+                                        f"text would be {min(t['size'] for t in texts) * s:.1f} px tall (under {MIN_TEXT} px); "
+                                        f"{fix}", "face"))
                 continue
+            patches[before] = {"frame": frame}
             e["props"] = {**e.get("props", {}), "frame": frame}
             placed.append((k, e))
         res.update(self._batch([(k, "alone", alone(e), {"measure": True}) for k, e in placed], scale, pub, tmp))
@@ -811,7 +927,14 @@ class Project:
                 if g["size"] < MIN_TEXT:
                     warnings.append(Finding(f"{label} {g['field']} text is {g['size']:.0f} px tall, under {MIN_TEXT} px "
                                             f"(at {t:.2f} s); make it larger", "small_text"))
-            if low := low_contrast(comp, comp0, diff, groups):
+            low = low_contrast(comp, comp0, diff, groups)
+            if low and O.schemas().get(e["type"], {}).get("x-text-on-frame") \
+                    and (colour := self._colour_that_reads(comp0, groups)):
+                # text with no card of its own: the plan's colour doesn't read on this frame, this one does
+                patches.setdefault(keys[id(e)], {})["color"] = colour
+                e["props"] = {**props, "color": colour}
+                low = None
+            if low:
                 r, need, _ = min(low)
                 which = ", ".join(f"{fl} {rr:.1f}:1" for rr, _, fl in sorted(low))
                 warnings.append(Finding(f"{label} text contrast {r:.1f}:1 at {t:.2f} s is under {need:g}:1 ({which}); "
@@ -823,6 +946,8 @@ class Project:
                     'set "full": true, or let the engine place it (it does for floating overlays)'
                 warnings.append(Finding(f"{label} text covers the speaker's face at {t:.2f} s ({', '.join(over_face)}); "
                                         f"{fix}", "face"))
+        if patches:  # kept for the render: it measures only what it hasn't seen, so it wouldn't place these again
+            placed_file.write_text(json.dumps({**saved, **patches}, indent=1))
         (self.edit_dir / "overlay_boxes.json").write_text(json.dumps(boxes, indent=1))
         (self.edit_dir / "overlay_text.json").write_text(json.dumps(measured, indent=1, ensure_ascii=False))
         shutil.rmtree(tmp, ignore_errors=True)

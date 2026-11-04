@@ -33,7 +33,7 @@ export const Doc: React.FC<{ p: DocProps; t: number; w?: number }> = ({ p, t, w 
         ))}
       </div>
       {fill > 0.03 ? (
-        <div style={{ position: "absolute", right: 30, top: 22, fontFamily: fonts.sans, fontWeight: 600, fontSize: 50, color: accentOn(colors, "#FFFFFF") }}>
+        <div style={{ position: "absolute", right: 30, top: 22, fontFamily: fonts.sans, fontWeight: 600, fontSize: 50, color: accentOn(colors, fill > 0.5 ? p.fillColor ?? colors.tint1 : "#FFFFFF", 4.5) }}>
           {Math.round(fill * 100)}%
         </div>
       ) : null}

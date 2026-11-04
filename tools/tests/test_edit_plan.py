@@ -16,6 +16,7 @@ sys.path.insert(0, str(TOOLS))
 sys.path.insert(0, str(TOOLS / "tests"))
 
 import edit_plan as E  # noqa: E402
+import short_spec as SS  # noqa: E402
 from plan_fixture import PlanFixture  # noqa: E402
 
 REPO = TOOLS.parent
@@ -223,8 +224,8 @@ class Compile(PlanFixture):
                 "beats": [{"at": "F3", "word": "tesis", "device": "DocCard", "props": {"kicker": "PLAN", "title": "Un ropero"}},
                           {"at": "F4", "word": "Sin", "device": "Notice", "props": {"from": "Ana", "text": "Viste?"}},
                           {"at": "F4", "word": "nada", "device": "Stickers", "props": {"items": [{"text": "Big Data", "x": 150, "y": 230}]}},
-                          {"at": "F6", "word": "hoy", "device": "Notice", "props": {"from": "Leo", "text": "Listo"}}],
-                "cta": {"at": "F6", "word": "sígueme", "handle": "Link"}}
+                          {"at": "F6", "word": "sígueme", "device": "Notice", "props": {"from": "Leo", "text": "Listo"}}],
+                "cta": {"at": "F6", "word": "mismo", "handle": "Link"}}
         res = self.build(plan)
         spec = self.spec()
         self.assertEqual(len(spec["events"]), 4 + 1 + 1)  # the four beats, the hook and the CTA, nothing else
@@ -256,20 +257,19 @@ class Compile(PlanFixture):
         self.assertIn("whoosh", [x["name"] for x in self.spec()["sfx"]])  # the turn after the low look
         self.assertEqual(res["errors"], [])
 
-    def test_stills_refuse_text_that_does_not_read(self):
-        """What `check` can't see: a big word behind the head in nearly the wall's colour."""
+    def test_text_on_the_frame_gets_a_colour_that_reads(self):
+        """What `check` can't see: a big word in nearly the wall's colour takes one that reads there, for the render too."""
         plan = {"keep": ["F1", "F3-F4", "F6"], "beats": [{"at": "F4", "word": "Sin", "device": "BehindWord", "through": "ahora",
                 "props": {"lead": "sin estudiar", "word": "nada", "riseAt": {"word": "nada"}, "color": "#8c8c8c", "size": 160}}]}
         res = E.build(self.root, plan, stills=True)
-        self.assertTrue(any("beat 0" in m and "contrast" in m for m in res["errors"]), res["errors"])
-        self.assertIsNone(res["spec"])
+        self.assertEqual(res["errors"], [])
+        placed = json.loads((self.root / "edit" / "overlay_placed.json").read_text())
+        self.assertTrue(any(p.get("color") and p["color"] != "#8c8c8c" for p in placed.values()), placed)
 
-    def test_behind_word_is_placed_above_the_head(self):
-        self.build({"keep": ["F1", "F3-F4", "F6"], "beats": [{"at": "F4", "word": "Sin", "device": "BehindWord", "through": "ahora",
-                    "props": {"word": "nada", "riseAt": {"word": "nada"}}}]})
-        y = next(e for e in self.spec()["events"] if e["type"] == "BehindWord")["props"]["y"]
-        self.assertLess(y, 630)  # the head box starts at 630 px: the word sits above it, not behind it
-        self.assertGreaterEqual(y, E.SAFE_TOP)
+    def test_behind_word_is_left_to_the_placement(self):
+        self.build({"keep": ["F1", "F3-F4", "F6"], "beats": [{"at": "F4", "word": "Sin", "device": "BehindWord", "props": {"word": "tecnología"}}]})
+        word = next(e for e in self.spec()["events"] if e["type"] == "BehindWord")
+        self.assertNotIn("y", word["props"])  # the stills place it, against the head at that moment
 
     def test_hidden_text_is_a_strict_finding(self):
         import short_spec
@@ -378,6 +378,49 @@ class CaptionFixes(PlanFixture):
         with self.assertRaises(E.PlanError) as e:
             build(self.root, {**BASE, "captions": {"word_fixes": [{"at": 12.4, "text": "x"}]}})
         self.assertIn("plan.captions", e.exception.errors[0])
+
+
+
+class SharedScreen(PlanFixture):
+    def test_the_hook_gives_way_to_the_first_graphic(self):
+        plan = {**BASE, "hook": {"title": ["Otro cartel"]}, "keep": ["F1", "F3-F4", "F6"],
+                "beats": [{"at": "F3", "word": "hablaba", "device": "DocCard", "props": {"kicker": "PLAN", "title": "Un ropero"}}]}
+        res = build(self.root, plan)
+        self.assertEqual(res["errors"], [])
+        p, _ = SS.load(self.root / "edit" / "short.json", self.root)
+        hook, card = (next(e for e in p.events if e["type"] == t) for t in ("HookTitle", "DocCard"))
+        self.assertLessEqual(hook["start"] + hook["duration"], card["start"] + 0.01)
+
+    def test_a_graphic_too_early_for_the_hook_is_named(self):
+        plan = {**BASE, "hook": {"title": ["Otro cartel"]}, "keep": ["F1", "F3-F4", "F6"],
+                "beats": [{"at": "F3", "word": "en", "device": "DocCard", "props": {"kicker": "PLAN", "title": "Un ropero"}}]}
+        self.assertIn("HookTitle and DocCard", build(self.root, plan)["errors"][0])
+
+    def test_a_graphic_gives_way_to_the_cta(self):
+        plan = {**BASE, "cta": {"at": "F6", "handle": "Sigueme"},
+                "beats": [{"at": "F4", "word": "Sin", "device": "DocCard", "until": "F6", "props": {"kicker": "PLAN", "title": "Un ropero"}}]}
+        res = build(self.root, plan)
+        self.assertEqual(res["errors"], [])
+        p, _ = SS.load(self.root / "edit" / "short.json", self.root)
+        card, cta = (next(e for e in p.events if e["type"] == t) for t in ("DocCard", "HandleCard"))
+        self.assertLessEqual(card["start"] + card["duration"], cta["start"] + 0.01)
+
+    def test_two_cards_at_once_are_named(self):
+        class P:
+            events = [{"type": "Receipt", "start": 1.0, "duration": 3.0}, {"type": "Flash", "start": 2.0, "duration": 0.3},
+                      {"type": "DocCard", "start": 3.0, "duration": 2.0}, {"type": "Captions", "start": 0.0, "duration": 9.0}]
+        self.assertIn("Receipt and DocCard", E._shared_screen(P)[0])
+
+    def test_a_full_screen_scene_covers_what_is_under_it(self):
+        class P:
+            events = [{"type": "HookTitle", "start": 0.0, "duration": 2.0},
+                      {"type": "PostPile", "start": 1.0, "duration": 2.0, "props": {"full": True}}]
+        self.assertEqual(E._shared_screen(P), [])
+
+    def test_one_after_the_other_is_fine(self):
+        class P:
+            events = [{"type": "Receipt", "start": 1.0, "duration": 2.0}, {"type": "DocCard", "start": 3.0, "duration": 2.0}]
+        self.assertEqual(E._shared_screen(P), [])
 
 
 if __name__ == "__main__":

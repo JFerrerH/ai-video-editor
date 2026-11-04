@@ -33,6 +33,12 @@ class LoadBrand(unittest.TestCase):
         (d / "brand.json").write_text(json.dumps(data))
         return B.load_brand("acme")
 
+    def test_a_dark_kit_keeps_ink_dark_for_its_cards(self):
+        dark = {"ink": "#F2F0E9", "bg": "#16150F", "accent": "#E8FD5A"}
+        out = B.ink_on_light(dark)
+        self.assertEqual((out["ink"], out["bg"], out["accent"]), ("#16150F", "#F2F0E9", "#E8FD5A"))
+        self.assertEqual(B.ink_on_light(out), out)
+
     def test_weights_become_strings(self):
         k = self.kit({"fontFiles": [{"family": "Brand Sans", "file": "A.ttf", "weight": 300},
                                     {"family": "Brand Sans", "file": "B.ttf", "style": "italic"}]})

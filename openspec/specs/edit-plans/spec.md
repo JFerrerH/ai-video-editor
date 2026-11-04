@@ -88,7 +88,7 @@ Unless told not to, `plan build` SHALL also run `stills --strict` on the compile
 #### Scenario: Text that doesn't read
 
 - **WHEN** a `BehindWord` beat has a colour within 1.3:1 of the wall behind it
-- **THEN** `plan build` exits non-zero with an error naming the beat and its contrast
+- **THEN** the engine gives it the first of the brand's ink, white and black that reads on what is behind it, for the stills and the render. If none does, `plan build` exits non-zero with an error naming the beat and its contrast
 
 ### Requirement: Pacing is enforced, never filled
 
@@ -112,3 +112,12 @@ A plan MAY have `captions: {"fixes": {"heard": "said"}}`, which the compiled spe
 
 - **WHEN** a plan has `captions: {"word_fixes": [{"at": 12.4, "text": "x"}]}`
 - **THEN** `plan build` exits non-zero naming `plan.captions`
+
+### Requirement: Two graphics never share the screen
+
+The hook SHALL end before the first graphic starts, and a graphic before the CTA SHALL end before the CTA starts. A compiled plan with two floating graphics on screen at once SHALL be refused, naming both. A `Flash` doesn't count, and neither does a full-screen scene, which covers what is under it.
+
+#### Scenario: A graphic two seconds in
+
+- **WHEN** a plan's first graphic starts 2 s into the video and the hook would hold for 3 s
+- **THEN** the hook ends before the graphic starts

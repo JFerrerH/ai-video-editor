@@ -142,7 +142,7 @@ word), `assets`, `brand`.
 
 `build` leaves its stills in `edit/stills`: **read them before rendering**, a pass means the measured rules hold, not that the
 edit is rich or good. Floating cards need room above the head; on a bright wall the default white text of a `BehindWord` or the
-small kicker of a card fails, so give a `BehindWord` a dark `color` and no `camera: pull` (the compiler sets its `y` so the word sits above the head; `stills --strict` refuses text of which the speaker leaves under 85 % visible), and use full-screen scenes (`KineticType`
+small kicker of a card fails, so give a `BehindWord` a dark `color` and no `camera: pull` (the stills place it above the head at that moment; `stills --strict` refuses text of which the speaker leaves under 85 % visible), and use full-screen scenes (`KineticType`
 with `full`) or `Stickers` where a card won't fit. The build counts the time with no graphic or camera move on screen: a warning past 5 s, a refusal past 8 s (it never adds anything, so put a device on a word of the line that has something to show).
 
 Errors name the plan field (`plan.beats[3].word`) or the beat (`beat 3 (F7 "la", Stuck)`) and the fix. Then check the

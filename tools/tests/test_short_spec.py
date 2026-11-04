@@ -1086,11 +1086,17 @@ class ProbeTest(Fixture):
         frame = p.events[0]["props"]["frame"]
         self.assertLess(frame["y"], 0)  # moved up
         box = json.loads((self.root / "edit" / "overlay_boxes.json").read_text())[p._box_key(p.events[0])]["text"]
-        self.assertLessEqual(box[3], 565)
-        self.assertGreaterEqual(box[1], 290)
+        self.assertLessEqual(box[3], HEAD[1] * 10 - SF.HEAD_GAP)  # just above the head
+        self.assertGreaterEqual(box[1], SF.PLACE_TOP)
         # without a head box (no person) nothing moves
         p, _ = self.probe("take1", name)
         self.assertNotIn("frame", p.events[0]["props"])
+
+    def test_a_behind_word_goes_above_the_head(self):
+        word = {"type": "BehindWord", "start": 0, "duration": 2.4, "layer": "behind", "props": {"word": "Alex", "riseAt": 0.1, "size": 80, "y": 800}}
+        p, ws = self.probe("take1", word, head=[HEAD[0], 50, HEAD[2], HEAD[3]])
+        self.assertIn("frame", p.events[0]["props"])
+        self.assertLess(p.events[0]["props"]["frame"]["y"], 0)
 
     def test_behind_text_over_the_head(self):
         # under the speaker's cut-out: the speaker covers it, so it isn't text over the face (and isn't moved)
@@ -1103,7 +1109,7 @@ class ProbeTest(Fixture):
         receipt = {"type": "Receipt", "start": 0, "duration": 2.4,
                    "props": {"title": "This month", "items": [{"text": "Rent", "at": 0.2}, {"text": "Food", "at": 0.4}],
                              "total": "$1,220"}}
-        p, ws = self.probe("take1", receipt, head=HEAD)
+        p, ws = self.probe("take1", receipt, head=[HEAD[0], 15, HEAD[2], HEAD[3]])  # no room at all above this head
         w = next(w for w in ws if w.kind == "face")
         self.assertIn("fits above the speaker's head only at", w)
         self.assertIn('"full": true', w)
@@ -1213,6 +1219,106 @@ class AnyFrameRate(unittest.TestCase):
             with self.assertRaises(ToolError) as e:
                 p._base_frame(1.0, 108, 192, self.root / "edit" / "none.png")
         self.assertIn("no frame at 1.00 s", str(e.exception.summary))
+
+
+
+class HeadPerMoment(unittest.TestCase):
+    """A graphic sits above the head as it is while the graphic is on screen, and keeps where it was placed."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = Path(tempfile.mkdtemp())
+        cls.root = cls.tmp / "demo"
+        (cls.root / "edit" / "transcripts").mkdir(parents=True)
+        make_take(cls.root / "t.mov", [("", 0.5, 3.0)])
+        (cls.root / "edit" / "transcripts" / "t.json").write_text(json.dumps({"words": []}))
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp)
+
+    def project(self):
+        spec = {"version": 1, "brand": "none", "sources": {"t": {"file": "t.mov", "face": [54, 96], "head": [30, 40, 80, 90]}},
+                "segments": [{"take": "t", "in": 0.5, "out": 3.0, "lock_in": True, "lock_out": True}]}
+        path = self.root / "edit" / "short.json"
+        path.write_text(json.dumps(spec))
+        return S.load(path, self.root)[0]
+
+    def test_the_head_is_measured_while_the_event_is_on_screen(self):
+        p = self.project()
+        with mock.patch.object(p, "_head_tops", return_value=[50.0, 50.0, 20.0, 60.0]):
+            early = p.head_box({"start": 0.0, "duration": 0.4})   # source 0.5–0.9 s
+            late = p.head_box({"start": 1.6, "duration": 0.9})    # source 2.1–3.0 s
+        self.assertEqual(early[1], 50 * 10 - SF.HEAD_GAP)
+        self.assertEqual(late[1], 20 * 10 - SF.HEAD_GAP)
+
+    def test_without_a_track_the_take_wide_box_applies(self):
+        p = self.project()
+        with mock.patch.object(p, "_head_tops", return_value=[]):
+            self.assertEqual(p.head_box({"start": 0.0, "duration": 1.0})[1], 40 * 10 - SF.HEAD_GAP)
+
+    def test_placement_uses_the_band_up_to_the_head(self):
+        frame, s = SF.Project._place([240, 200, 840, 400], [100, 500, 980, 900], [40])
+        self.assertEqual(s, 1.0)
+        self.assertEqual(frame["y"], 500 - 200 - 200)  # its bottom just above the head, not up at the limit
+
+    def test_a_card_rises_only_as_far_as_it_must(self):
+        frame, s = SF.Project._place([240, 200, 840, 500], [100, 300, 980, 900], [60])
+        self.assertLess(s, 1.0)
+        self.assertEqual(frame["y"], round(SF.PLACE_TOP - s * 200))  # the whole band: at the limit, and scaled to fit
+
+    def test_a_move_that_holds_goes_by_where_it_puts_the_head(self):
+        p = self.project()
+        p.camera = [{"kind": "side", "start": 0.0, "end": 10.0}]
+        side = SF.CAMERA_MOVES["side"]
+        moved = p._under_camera([100.0, 400.0, 500.0, 800.0], 1.0, 3.0)
+        self.assertAlmostEqual(moved[1], side["origin"][1] + side["scale"] * (400 - side["origin"][1]))
+        self.assertAlmostEqual(moved[0], side["origin"][0] + side["scale"] * (100 - side["origin"][0]) + side["tx"])
+
+    def test_a_move_that_passes_through_counts_both(self):
+        p = self.project()
+        p.camera = [{"kind": "side", "start": 2.5, "end": 3.0}]
+        moved = p._under_camera([100.0, 400.0, 500.0, 800.0], 1.0, 3.0)
+        side = SF.CAMERA_MOVES["side"]
+        self.assertAlmostEqual(moved[1], side["origin"][1] + side["scale"] * (400 - side["origin"][1]))  # the highest
+        self.assertEqual(moved[3] >= 800.0, True)
+
+    def test_a_placement_belongs_to_its_head(self):
+        p = self.project()
+        event = {"type": "NameTitle", "start": 0.0, "duration": 1.0, "props": {"text": "Alex"}}
+        with mock.patch.object(p, "_head_tops", return_value=[50.0, 50.0]):
+            near = p._placed_key(event)
+        with mock.patch.object(p, "_head_tops", return_value=[20.0, 20.0]):
+            self.assertNotEqual(near, p._placed_key(event))
+
+    def test_the_camera_ts_uses_the_shared_values(self):
+        ts = (TOOLS / "motion" / "src" / "stage" / "camera.ts").read_text()
+        self.assertIn('from "./camera.json"', ts)
+        self.assertNotRegex(ts, r"\b(1040|1880|170)\b")
+
+    def test_text_on_the_frame_takes_the_colour_that_reads_there(self):
+        import numpy as np
+        p = self.project()
+        p.brand = {"colors": {"ink": "#111111"}}
+        small = [{"box": [100, 100, 500, 200], "size": 30}]
+        light, dark, grey = (np.full((1920, 1080, 3), v, float) for v in (235.0, 15.0, 121.0))
+        self.assertEqual(p._colour_that_reads(light, small), "#111111")
+        self.assertEqual(p._colour_that_reads(dark, small), "#FFFFFF")
+        self.assertEqual(p._colour_that_reads(grey, small), "#000000")  # neither the brand's dark nor white reaches 4.5:1
+
+    def test_no_colour_reads_when_nothing_reaches_the_contrast(self):
+        import numpy as np
+        p = self.project()
+        p.brand = {"colors": {"ink": "#777777"}}
+        half = np.full((1920, 1080, 3), 255.0)
+        half[:, 540:] = 0.0
+        two = [{"box": [100, 100, 500, 200], "size": 30}, {"box": [600, 100, 1000, 200], "size": 30}]
+        self.assertIsNone(p._colour_that_reads(half, two))
+
+    def test_a_card_too_tall_to_read_is_refused(self):
+        frame, s = SF.Project._place([240, 200, 840, 1200], [100, 500, 980, 900], [40])
+        self.assertIsNone(frame)
+        self.assertLess(s, 1.0)
 
 
 if __name__ == "__main__":

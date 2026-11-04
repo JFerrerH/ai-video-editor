@@ -53,7 +53,6 @@ HOLD_FIXED = {"Flash": 0.3}       # s: a device that is over at once
 HOOK_MIN, HOOK_MAX = 2.0, 3.0
 PUNCH_MAX = 2                     # punch-ins besides the hook's
 PUNCH_PEAK = 1.12
-SAFE_TOP = 300                    # px: nothing readable above it (the platform's header)
 BREAK_GAP = 0.25                  # s of pause a punch-in's or the low line's cut needs on each side (else it cuts through a word)
 SPLIT_GAP, MIN_PIECE = 0.65, 1.0  # a pause this long inside a run is a jump cut of its own (a new frame size); never a piece under 1 s
 LOW_MAX, LOW_FROM = 3.0, 3.0      # the low line is at most 3 s and never in the hook
@@ -622,11 +621,6 @@ def build(root: Path, plan: Any, repo: Path = REPO, stills: bool = True, order: 
                 layer = layer or PHONE_PANEL[mode][0]
                 cam = PHONE_PANEL[mode][1] if cam is None else cam
             layer = layer or DEFAULT_LAYER.get(dev, "front")
-            if dev == "BehindWord" and "y" not in props and (head := p.head.get(take)):
-                # the word sits just above the head, not behind it: the speaker would cover most of it
-                top = head[1] * 1080 / p.source_info(take)["width"]
-                half = 0.4 * props.get("size", 196)
-                props["y"] = max(SAFE_TOP, round(top + 30 - 40 - 120 - half))
             if cam is None:
                 cam = DEFAULT_CAMERA.get(dev)
             # time props: the word each lands on, in the beat's own words, from its word on

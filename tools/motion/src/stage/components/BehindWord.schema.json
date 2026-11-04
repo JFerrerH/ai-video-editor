@@ -3,6 +3,8 @@
   "description": "A large word rising behind the speaker's head, optionally struck through. Use layer \"behind\" so the speaker covers it; keep it in the band above the shoulders.",
   "x-layout": "float",
   "x-event-props": false,
+  "x-place": "above-head",
+  "x-text-on-frame": true,
   "x-layers": [
     "behind",
     "front"

@@ -257,20 +257,19 @@ class Compile(PlanFixture):
         self.assertIn("whoosh", [x["name"] for x in self.spec()["sfx"]])  # the turn after the low look
         self.assertEqual(res["errors"], [])
 
-    def test_stills_refuse_text_that_does_not_read(self):
-        """What `check` can't see: a big word behind the head in nearly the wall's colour."""
+    def test_text_on_the_frame_gets_a_colour_that_reads(self):
+        """What `check` can't see: a big word in nearly the wall's colour takes one that reads there, for the render too."""
         plan = {"keep": ["F1", "F3-F4", "F6"], "beats": [{"at": "F4", "word": "Sin", "device": "BehindWord", "through": "ahora",
                 "props": {"lead": "sin estudiar", "word": "nada", "riseAt": {"word": "nada"}, "color": "#8c8c8c", "size": 160}}]}
         res = E.build(self.root, plan, stills=True)
-        self.assertTrue(any("beat 0" in m and "contrast" in m for m in res["errors"]), res["errors"])
-        self.assertIsNone(res["spec"])
+        self.assertEqual(res["errors"], [])
+        placed = json.loads((self.root / "edit" / "overlay_placed.json").read_text())
+        self.assertTrue(any(p.get("color") and p["color"] != "#8c8c8c" for p in placed.values()), placed)
 
-    def test_behind_word_is_placed_above_the_head(self):
-        self.build({"keep": ["F1", "F3-F4", "F6"], "beats": [{"at": "F4", "word": "Sin", "device": "BehindWord", "through": "ahora",
-                    "props": {"word": "nada", "riseAt": {"word": "nada"}}}]})
-        y = next(e for e in self.spec()["events"] if e["type"] == "BehindWord")["props"]["y"]
-        self.assertLess(y, 630)  # the head box starts at 630 px: the word sits above it, not behind it
-        self.assertGreaterEqual(y, E.SAFE_TOP)
+    def test_behind_word_is_left_to_the_placement(self):
+        self.build({"keep": ["F1", "F3-F4", "F6"], "beats": [{"at": "F4", "word": "Sin", "device": "BehindWord", "props": {"word": "tecnología"}}]})
+        word = next(e for e in self.spec()["events"] if e["type"] == "BehindWord")
+        self.assertNotIn("y", word["props"])  # the stills place it, against the head at that moment
 
     def test_hidden_text_is_a_strict_finding(self):
         import short_spec

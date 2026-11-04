@@ -88,7 +88,7 @@ Unless told not to, `plan build` SHALL also run `stills --strict` on the compile
 #### Scenario: Text that doesn't read
 
 - **WHEN** a `BehindWord` beat has a colour within 1.3:1 of the wall behind it
-- **THEN** `plan build` exits non-zero with an error naming the beat and its contrast
+- **THEN** the engine gives it the first of the brand's ink, white and black that reads on what is behind it, for the stills and the render. If none does, `plan build` exits non-zero with an error naming the beat and its contrast
 
 ### Requirement: Pacing is enforced, never filled
 

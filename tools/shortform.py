@@ -618,6 +618,28 @@ class Project:
                 out = [min(out[0], moved[0]), min(out[1], moved[1]), max(out[2], moved[2]), max(out[3], moved[3])]
         return out
 
+    def _colour_that_reads(self, blank, groups: list[dict]) -> str | None:
+        """The first of the brand's ink, white and black that reaches each text box's contrast on what is really behind
+        it (4.5:1, or 3:1 for large text). `blank` is the frame without the text."""
+        import numpy as np
+
+        f = blank.shape[1] / 1080
+        behind = []
+        for g in groups:
+            x0, y0, x1, y1 = (max(0, round(v * f)) for v in g["box"])
+            area = blank[y0:y1, x0:x1]
+            if area.size:
+                behind.append((float(_luminance(np.median(area.reshape(-1, 3), axis=0))),
+                               4.5 if g["size"] < LARGE_TEXT else 3.0))
+        if not behind:
+            return None
+
+        def reads(hex_: str) -> bool:
+            lum = float(_luminance(np.array([int(hex_[i:i + 2], 16) for i in (1, 3, 5)])))
+            return all((max(lum, b) + 0.05) / (min(lum, b) + 0.05) >= need for b, need in behind)
+
+        return next((c for c in (self.brand["colors"]["ink"], "#FFFFFF", "#000000") if reads(c)), None)
+
     def _placed_key(self, e: dict) -> str:
         """A placement holds for this event over this head: another cut or another take places it again."""
         return f"{self._box_key(e)}:{self.head_box(e)}"
@@ -797,8 +819,10 @@ class Project:
         boxes = self._boxes()
         placed_file = self.edit_dir / "overlay_placed.json"
         saved, patches = json.loads(placed_file.read_text()) if placed_file.exists() else {}, {}
+        keys = {}
         for e in self.events:  # where an earlier pass put it; an event or a head that changed has another key
-            if patch := saved.get(self._placed_key(e)):
+            keys[id(e)] = self._placed_key(e)
+            if patch := saved.get(keys[id(e)]):
                 e["props"] = {**e.get("props", {}), **patch}
         pub = self.edit_dir / "motion_public"
         for name, src in self.public_files.items():
@@ -812,9 +836,11 @@ class Project:
 
         def floating(e: dict) -> bool:
             p_ = e.get("props", {})
-            # any graphic on the front layer; a component whose schema says `x-place: own` has its place in the design
-            return (not p_.get("full") and self.layer_of(e) == "front" and "frame" not in p_
-                    and O.schemas().get(e["type"], {}).get("x-place") != "own")
+            # any graphic on the front layer. A component's schema can say otherwise: `x-place: own` has its place in
+            # the design, `x-place: above-head` goes above the head on any layer (the speaker would hide its text)
+            place = O.schemas().get(e["type"], {}).get("x-place")
+            return (not p_.get("full") and "frame" not in p_ and place != "own"
+                    and (self.layer_of(e) == "front" or place == "above-head"))
 
         def alpha_box(png: Path, solid: int = 8) -> list[int] | None:
             img = self._rgba(png)
@@ -833,7 +859,7 @@ class Project:
             boxes_ = [t["box"] for t in texts] + ([card] if card else [])
             if not any(hits(b, head) for b in boxes_):
                 continue
-            before = self._placed_key(e)
+            before = keys[id(e)]
             content = [min(b[0] for b in boxes_), min(b[1] for b in boxes_), max(b[2] for b in boxes_),
                        max(b[3] for b in boxes_)]  # its pixels and its text's line boxes
             frame, s = self._place(content, head, [t["size"] for t in texts])
@@ -849,8 +875,6 @@ class Project:
             patches[before] = {"frame": frame}
             e["props"] = {**e.get("props", {}), "frame": frame}
             placed.append((k, e))
-        if patches:  # kept for the render: it measures only what it hasn't seen, so it wouldn't place these again
-            placed_file.write_text(json.dumps({**saved, **patches}, indent=1))
         res.update(self._batch([(k, "alone", alone(e), {"measure": True}) for k, e in placed], scale, pub, tmp))
         # the probe: each event drawn on the stage (the cut's own frame, the camera, the speaker's cut-out when it is
         # behind) with its glyphs and without them; the difference is exactly the text a viewer reads
@@ -902,7 +926,14 @@ class Project:
                 if g["size"] < MIN_TEXT:
                     warnings.append(Finding(f"{label} {g['field']} text is {g['size']:.0f} px tall, under {MIN_TEXT} px "
                                             f"(at {t:.2f} s); make it larger", "small_text"))
-            if low := low_contrast(comp, comp0, diff, groups):
+            low = low_contrast(comp, comp0, diff, groups)
+            if low and O.schemas().get(e["type"], {}).get("x-text-on-frame") \
+                    and (colour := self._colour_that_reads(comp0, groups)):
+                # text with no card of its own: the plan's colour doesn't read on this frame, this one does
+                patches.setdefault(keys[id(e)], {})["color"] = colour
+                e["props"] = {**props, "color": colour}
+                low = None
+            if low:
                 r, need, _ = min(low)
                 which = ", ".join(f"{fl} {rr:.1f}:1" for rr, _, fl in sorted(low))
                 warnings.append(Finding(f"{label} text contrast {r:.1f}:1 at {t:.2f} s is under {need:g}:1 ({which}); "
@@ -914,6 +945,8 @@ class Project:
                     'set "full": true, or let the engine place it (it does for floating overlays)'
                 warnings.append(Finding(f"{label} text covers the speaker's face at {t:.2f} s ({', '.join(over_face)}); "
                                         f"{fix}", "face"))
+        if patches:  # kept for the render: it measures only what it hasn't seen, so it wouldn't place these again
+            placed_file.write_text(json.dumps({**saved, **patches}, indent=1))
         (self.edit_dir / "overlay_boxes.json").write_text(json.dumps(boxes, indent=1))
         (self.edit_dir / "overlay_text.json").write_text(json.dumps(measured, indent=1, ensure_ascii=False))
         shutil.rmtree(tmp, ignore_errors=True)

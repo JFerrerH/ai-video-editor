@@ -15,9 +15,10 @@ Also, the hook kept its 3 s even when the first graphic came in at 2 s, and a gr
 - A floating graphic can go up to 100 px. The owner chose this after watching it, knowing it enters the zone the guides reserve for the top bar.
 - The whole card counts against the head, with 40 px of air on top.
 - A placement is saved in `edit/overlay_placed.json` and applied again by the render.
-- Every graphic on the front layer is placed the same way, stage components too. A schema marks the exceptions with `x-place: own` (`PhonePanel`, `StageDrawer`), not a list in code.
+- Every graphic on the front layer is placed the same way, stage components too. A schema marks the exceptions: `x-place: own` keeps its place (`PhonePanel`, `StageDrawer`), and `x-place: above-head` goes above the head on any layer (`BehindWord`, so the compiler no longer computes its `y` from fixed numbers).
 - The placement takes the camera into account: a move that holds over a graphic goes by where it puts the head. Its values live in `stage/camera.json`, read by the picture and by the check.
 - The head's columns come from that person's own head box, so a close-up and a wide shot are measured alike.
+- Text with no card of its own (`BehindWord`, `x-text-on-frame` in its schema) keeps the plan's colour if it reads on the frame; otherwise it takes the first of the brand's ink, white and black that does, measured on what is behind it.
 - `ink` is the dark colour of a kit's `ink` and `bg` pair, so a dark-mode kit doesn't write cream on white cards.
 - The hook and any graphic before the CTA end before the next card starts. Two floating graphics at once are refused, naming both; a full-screen scene covers what is under it.
 

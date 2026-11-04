@@ -1092,6 +1092,12 @@ class ProbeTest(Fixture):
         p, _ = self.probe("take1", name)
         self.assertNotIn("frame", p.events[0]["props"])
 
+    def test_a_behind_word_goes_above_the_head(self):
+        word = {"type": "BehindWord", "start": 0, "duration": 2.4, "layer": "behind", "props": {"word": "Alex", "riseAt": 0.1, "size": 80, "y": 800}}
+        p, ws = self.probe("take1", word, head=[HEAD[0], 50, HEAD[2], HEAD[3]])
+        self.assertIn("frame", p.events[0]["props"])
+        self.assertLess(p.events[0]["props"]["frame"]["y"], 0)
+
     def test_behind_text_over_the_head(self):
         # under the speaker's cut-out: the speaker covers it, so it isn't text over the face (and isn't moved)
         name = {"type": "NameTitle", "start": 0, "duration": 2.4, "props": {"text": "Alex", "behind": True}}
@@ -1284,6 +1290,25 @@ class HeadPerMoment(unittest.TestCase):
         ts = (TOOLS / "motion" / "src" / "stage" / "camera.ts").read_text()
         self.assertIn('from "./camera.json"', ts)
         self.assertNotRegex(ts, r"\b(1040|1880|170)\b")
+
+    def test_text_on_the_frame_takes_the_colour_that_reads_there(self):
+        import numpy as np
+        p = self.project()
+        p.brand = {"colors": {"ink": "#111111"}}
+        small = [{"box": [100, 100, 500, 200], "size": 30}]
+        light, dark, grey = (np.full((1920, 1080, 3), v, float) for v in (235.0, 15.0, 121.0))
+        self.assertEqual(p._colour_that_reads(light, small), "#111111")
+        self.assertEqual(p._colour_that_reads(dark, small), "#FFFFFF")
+        self.assertEqual(p._colour_that_reads(grey, small), "#000000")  # neither the brand's dark nor white reaches 4.5:1
+
+    def test_no_colour_reads_when_nothing_reaches_the_contrast(self):
+        import numpy as np
+        p = self.project()
+        p.brand = {"colors": {"ink": "#777777"}}
+        half = np.full((1920, 1080, 3), 255.0)
+        half[:, 540:] = 0.0
+        two = [{"box": [100, 100, 500, 200], "size": 30}, {"box": [600, 100, 1000, 200], "size": 30}]
+        self.assertIsNone(p._colour_that_reads(half, two))
 
     def test_a_card_too_tall_to_read_is_refused(self):
         frame, s = SF.Project._place([240, 200, 840, 1200], [100, 500, 980, 900], [40])

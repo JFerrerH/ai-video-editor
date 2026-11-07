@@ -114,6 +114,12 @@ uv run tools/preview_qa.py footage/<p>               # listens to the preview: w
 (The same three steps are the headless ops `plan_ids`, `plan_build`, `preview_qa`; `uv run tools/edit_plan.py schema`
 prints the plan's JSON Schema.) Run `conform`, `transcribe` and `face` first, as in Workflow 1 and 4.
 
+Sentences also end at the transcript's `breaks`: a false start is its own flagged sentence even after a line with no
+final punctuation, and so is a stretch of speech with no words (`untranscribed`). To drop either, leave its sentence out
+of `keep`. If `plan build` is refused for kept speech with no words, the error names the sentences next to it: leave one
+out. A transcript made before `breaks` existed can't split there (the error says so): run `transcribe` again on that take
+(delete its `edit/transcripts/<take>.json` first), then `plan ids`, since the IDs change.
+
 A plan has **no seconds**. Keys: `keep` (sentence IDs or ranges, in the order they play; a flagged false start is
 refused, keep the repeat), `hook`, `beats`, `low`, `cta`, `captions` (`{"fixes": {"heard": "said"}}`, for a misheard
 word), `assets`, `brand`.

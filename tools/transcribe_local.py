@@ -19,8 +19,11 @@ Completeness (Whisper can skip whole stretches of speech without a word):
   - speech (the RMS envelope, tools/audio_env.py) that no word covers for 0.6 s or more is transcribed
     again on its own, with no prompt, and merged: `source.patched` lists each patch {from, to, words}
   - speech still without words is listed in `untranscribed` ([[from, to], …]) and printed as a warning
+  - a word stretched over a pause and the speech after it (speech under it that no word covers) is replaced the same way,
+    and a replacement word stamped in silence starts at the next speech
   - likely false starts ("phrase… phrase again") are listed in `restarts` [{abandoned: [from, to], again, words}]
     and shown inline in the packed transcript (an audio_event entry at the restart)
+  - `breaks` [t, …]: where a sentence must end (a false start's edges, a range with no words' edges), for edit_plan.py
 
 Backends (chosen at runtime; `--backend` forces one):
   - mlx            Apple Silicon macOS: mlx-whisper on Metal, default install
@@ -100,8 +103,12 @@ NOT_SPEECH_DB = -12.0
 # IMPLAUSIBLE_SPEECH of it hides speech Whisper folded into one stamp
 WORD_MIN, WORD_PER_LETTER, WORD_BASE, IMPLAUSIBLE_SPEECH = 1.0, 0.12, 0.4, 0.6
 # restart marker: an abandoned phrase (ellipsis, or a pause of RESTART_PAUSE s without . ? !) whose first two
-# words start again right after it (at most RESTART_FILLER words later, within RESTART_WINDOW s)
-RESTART_PAUSE, RESTART_WINDOW, RESTART_FILLER = 0.3, 6.0, 2
+# words start again right after it (at most RESTART_FILLER words later, within RESTART_WINDOW s). The phrase may hold
+# pauses shorter than RESTART_INNER s (after a comma); one that crosses a pause must repeat three words, not two,
+# unless it was abandoned for RESTART_LONG s or more. A word stamped in the last SNAP_TAIL s of a speech run, over
+# the pause after it, starts at the next run
+RESTART_PAUSE, RESTART_WINDOW, RESTART_FILLER, RESTART_INNER, RESTART_LONG = 0.3, 6.0, 2, 0.8, 1.0
+SNAP_TAIL = 0.3
 # what Whisper says over silence or noise; a patch made of these (plus one stray word at most, or of
 # low-confidence words) is dropped
 HALLUCINATIONS = ("subtítulos", "subtitulos", "amara.org", "thanks for watching", "thank you for watching",
@@ -273,12 +280,29 @@ def _speech_share(a: float, b: float, runs: list[tuple[float, float]]) -> float:
     return sum(max(0.0, min(b, r1) - max(a, r0)) for r0, r1 in runs) / max(1e-6, b - a)
 
 
+def _hides_speech(w: dict, runs: list[tuple[float, float]]) -> bool:
+    """Speech under `w` of MIN_HOLE s or more beyond what a word covers (its first COVER_CAP s)."""
+    inside = [(max(a, w["start"]), min(b, w["end"])) for a, b in runs if b > w["start"] and a < w["end"]]
+    return bool(uncovered([{"type": "word", "start": w["start"], "end": w["end"]}], inside))
+
+
 def implausible(w: dict, runs: list[tuple[float, float]]) -> bool:
-    """A word longer than its letters allow, with speech through most of it: Whisper folded speech into it."""
+    """A word longer than its letters allow that Whisper folded speech into: speech through most of it, or speech
+    under it that no word covers (a word stretched over a pause and what came after)."""
     letters = sum(c.isalnum() for c in w["text"])
     dur = w["end"] - w["start"]
     return dur > max(WORD_MIN, WORD_PER_LETTER * letters + WORD_BASE) \
-        and _speech_share(w["start"], w["end"], runs) >= IMPLAUSIBLE_SPEECH
+        and (_speech_share(w["start"], w["end"], runs) >= IMPLAUSIBLE_SPEECH or _hides_speech(w, runs))
+
+
+def _on_speech(w: dict, runs: list[tuple[float, float]]) -> dict:
+    """A retried word stamped in silence starts at the next speech run (Whisper stamps a window's first word early),
+    when that run starts before the word ends. A start in the tail of the run before (under SNAP_TAIL s from its end,
+    the word running past it) is the same stamp, early."""
+    if any(a <= w["start"] <= b and not (b - w["start"] < SNAP_TAIL and b < w["end"]) for a, b in runs):
+        return w
+    nxt = next((a for a, _ in runs if a > w["start"] + 1e-6 and a >= w["start"]), None)
+    return {**w, "start": round(nxt, 3)} if nxt is not None and nxt < w["end"] else w
 
 
 def _shifted(result: dict, lo: float) -> list[dict]:
@@ -308,7 +332,7 @@ def fill_holes(words: list[dict], runs: list[tuple[float, float]], retranscribe,
         new = []
         for w in _shifted(retranscribe(lo, hi), lo):
             if a <= (w["start"] + w["end"]) / 2 <= b:  # the retry's padding repeats the neighbours: drop them
-                new.append({**w, "start": max(a, w["start"]), "end": min(b, w["end"])})
+                new.append(_on_speech({**w, "start": max(a, w["start"]), "end": min(b, w["end"])}, runs))
         if new and not _hallucination(new):
             plain = [w for w in plain if w is not bad] + new
             patched.append({"from": a, "to": b, "words": len(new), "replaced": bad["text"]})
@@ -321,7 +345,7 @@ def fill_holes(words: list[dict], runs: list[tuple[float, float]], retranscribe,
         for w in _shifted(retranscribe(lo, hi), lo):
             mid = (w["start"] + w["end"]) / 2  # an implausible word doesn't block its own repair
             if lo <= w["start"] <= hi and not any(x["start"] <= mid <= x["end"] for x in solid):
-                new.append(w)
+                new.append(_on_speech(w, runs))
         if new and not _hallucination(new):
             plain += new
             patched.append({"from": a, "to": b, "words": len(new)})
@@ -358,9 +382,12 @@ def _trails_off(text: str) -> bool:
 
 def mark_restarts(words: list[dict]) -> list[dict]:
     """Likely false starts: a phrase that ends abandoned (an ellipsis, or a pause of RESTART_PAUSE s without
-    . ? !) and whose first two words start again right after it. Words said in between mean the speaker went on:
-    two sentences that open alike ("And in that…", "And in spite…") aren't a restart. Deliberate repetition ends a
-    sentence first, so it isn't marked. [{"abandoned": [from, to], "again": t, "words": "<abandoned text>"}]"""
+    . ? !) and whose first two words start again right after it. The repeat is found first, then the phrase's start
+    is the nearest earlier place those two words open a phrase (no sentence end between, no
+    pause of RESTART_INNER s or more inside). Words said in between mean the speaker went on: two sentences that open
+    alike ("And in that…", "And in spite…") aren't a restart, and neither is a list ("de mi casa, de mi calle")
+    unless the repeat runs three words. Deliberate repetition ends a sentence first, so it isn't marked.
+    [{"abandoned": [from, to], "again": t, "words": "<abandoned text>"}]"""
     ws = [w for w in words if w["type"] == "word"]
     by_again: dict[int, dict] = {}
     for i, w in enumerate(ws):
@@ -368,23 +395,51 @@ def mark_restarts(words: list[dict]) -> list[dict]:
         if nxt is None or not (_trails_off(w["text"]) or
                                (nxt["start"] - w["end"] >= RESTART_PAUSE and not _ends_sentence(w["text"]))):
             continue
-        s = i  # back to the previous sentence end or pause
-        while s > 0 and not _ends_sentence(ws[s - 1]["text"]) and not _trails_off(ws[s - 1]["text"]) \
-                and ws[s]["start"] - ws[s - 1]["end"] < RESTART_PAUSE:
-            s -= 1
-        if i - s < 1:
-            continue  # a one-word phrase has no opening to repeat
-        head = (_norm(ws[s]["text"]), _norm(ws[s + 1]["text"]))
+        gap = lambda m: ws[m]["start"] - ws[m - 1]["end"]  # noqa: E731
+        plain = i  # back to the previous sentence end or pause
+        while plain > 0 and not _ends_sentence(ws[plain - 1]["text"]) and not _trails_off(ws[plain - 1]["text"]) \
+                and gap(plain) < RESTART_PAUSE:
+            plain -= 1
+        lo = i  # as far back as the phrase may reach, across short pauses
+        while lo > 0 and not _ends_sentence(ws[lo - 1]["text"]) and not _trails_off(ws[lo - 1]["text"]) \
+                and gap(lo) < RESTART_INNER:
+            lo -= 1
         for j in range(i + 1, min(i + 2 + RESTART_FILLER, len(ws) - 1)):
             if ws[j]["start"] - w["end"] > RESTART_WINDOW:
                 break
-            if (_norm(ws[j]["text"]), _norm(ws[j + 1]["text"])) == head:
+            head = (_norm(ws[j]["text"]), _norm(ws[j + 1]["text"]))
+            for k in range(min(plain, i - 1), lo - 1, -1):  # the nearest earlier opening, never mid-phrase
+                if (_norm(ws[k]["text"]), _norm(ws[k + 1]["text"])) != head:
+                    continue
+                if k < plain and ws[j]["start"] - w["end"] < RESTART_LONG and not (
+                        k + 2 <= i and j + 2 < len(ws) and _norm(ws[k + 2]["text"]) == _norm(ws[j + 2]["text"])):
+                    continue  # across a pause, two words could be a list; three, or a long wait, are a repeat
                 prev = by_again.get(j)
-                if prev is None or ws[s]["start"] < prev["abandoned"][0]:
-                    by_again[j] = {"abandoned": [ws[s]["start"], w["end"]], "again": ws[j]["start"],
-                                   "words": " ".join(x["text"] for x in ws[s:i + 1])}
+                if prev is None or ws[k]["start"] < prev["abandoned"][0]:
+                    by_again[j] = {"abandoned": [ws[k]["start"], w["end"]], "again": ws[j]["start"],
+                                   "words": " ".join(x["text"] for x in ws[k:i + 1])}
+                break
+            if j in by_again:
                 break
     return [by_again[j] for j in sorted(by_again)]
+
+
+def sentence_breaks(words: list[dict], restarts: list[dict], untranscribed: list[list[float]]) -> list[float]:
+    """Where a sentence must end, so a plan can leave a false start or a range with no words out by sentence ID:
+    each restart's abandoned start and `again`, and for each untranscribed range the first word that ends inside or
+    after its start and the first word that starts after its end."""
+    ws = [w for w in words if w["type"] == "word"]
+    out = {r["abandoned"][0] for r in restarts} | {r["again"] for r in restarts}
+    for a, b in untranscribed:
+        for w in ws:
+            if w["end"] > a:
+                out.add(w["start"])
+                break
+        for w in ws:
+            if w["start"] >= b:
+                out.add(w["start"])
+                break
+    return sorted(out)
 
 
 def with_restart_marks(words: list[dict], restarts: list[dict]) -> list[dict]:
@@ -435,6 +490,7 @@ def transcribe_one(video: Path, edit_dir: Path, model: str | None, language: str
     words, patched, untranscribed = fill_holes(to_scribe_words(result), runs, retranscribe, duration)
     untranscribed = audible(untranscribed, db)
     restarts = mark_restarts(words)
+    breaks = sentence_breaks(words, restarts, untranscribed)
     text = " ".join(w["text"] for w in words if w["type"] == "word")
     payload = {
         "language_code": result.get("language") or language,
@@ -443,6 +499,7 @@ def transcribe_one(video: Path, edit_dir: Path, model: str | None, language: str
         "words": with_restart_marks(words, restarts),
         "untranscribed": untranscribed,
         "restarts": restarts,
+        "breaks": breaks,
         "source": {"engine": ENGINE[backend], "model": model, "file": str(video), "prompt": prompt, "patched": patched},
     }
     out_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False))

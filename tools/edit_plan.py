@@ -93,23 +93,26 @@ class PlanError(Exception):
 
 
 # ── transcript → numbered sentences ─────────────────────────────────────────
-def load_words(root: Path, order: list[str] | None = None) -> tuple[dict[str, list[dict]], dict[str, list[dict]]]:
-    """({take: words}, {take: the transcript's `restarts`}), takes in `order` (the rest after them), else in name
-    order. The same order gives the same sentence IDs."""
-    words, restarts = {}, {}
+def load_words(root: Path, order: list[str] | None = None) -> tuple[dict, dict, dict]:
+    """({take: words}, {take: the transcript's `restarts`}, {take: its `breaks`}), takes in `order` (the rest after
+    them), else in name order. The same order gives the same sentence IDs."""
+    words, restarts, breaks = {}, {}, {}
     rank = {take: n for n, take in enumerate(order or [])}
     for f in sorted((root / "edit" / "transcripts").glob("*.json"), key=lambda p: (rank.get(p.stem, len(rank)), p.stem)):
         d = json.loads(f.read_text())
         words[f.stem] = [w for w in d["words"] if w.get("type", "word") == "word" and w["text"].strip()]
         restarts[f.stem] = d.get("restarts") or []
+        breaks[f.stem] = d.get("breaks") or []
     if not words:
         raise PlanError([f"no transcripts in {root / 'edit' / 'transcripts'}; run transcribe first"])
-    return words, restarts
+    return words, restarts, breaks
 
 
-def sentences(words: dict[str, list[dict]], restarts: dict[str, list[dict]] | None = None) -> list[dict]:
-    """Sentences F1…Fn across the takes. One ends on final punctuation or a pause of `SENT_GAP`, or where its own
-    opening (two words) is said again after a pause: the first half was abandoned."""
+def sentences(words: dict[str, list[dict]], restarts: dict[str, list[dict]] | None = None,
+              breaks: dict[str, list[float]] | None = None) -> list[dict]:
+    """Sentences F1…Fn across the takes. One ends on final punctuation or a pause of `SENT_GAP`, before a word that
+    starts at one of the take's `breaks` (a transcript without them numbers as before), or where its own opening
+    (two words) is said again after a pause: the first half was abandoned."""
     sents: list[dict] = []
     for take, ws in words.items():
         cur: list[int] = []
@@ -121,7 +124,8 @@ def sentences(words: dict[str, list[dict]], restarts: dict[str, list[dict]] | No
             again = (nxt is not None and len(cur) >= 2 and gap >= RESTART_GAP and i + 2 < len(ws)
                      and [norm(ws[cur[0]]["text"]), norm(ws[cur[1]]["text"])]
                      == [norm(nxt["text"]), norm(ws[i + 2]["text"])])
-            if re.search(r"[.?!]$", t) or t.endswith(("…", "...")) or gap >= SENT_GAP or again:
+            split = nxt is not None and any(abs(nxt["start"] - b) < 1e-3 for b in (breaks or {}).get(take, ()))
+            if re.search(r"[.?!]$", t) or t.endswith(("…", "...")) or gap >= SENT_GAP or again or split:
                 sents.append({"take": take, "a": cur[0], "b": cur[-1]})
                 cur = []
         if cur:
@@ -161,9 +165,9 @@ def _mark_restarts(sents: list[dict], words: dict) -> None:
 
 
 def plan_ids(root: Path, order: list[str] | None = None) -> list[dict]:
-    words, restarts = load_words(root, order)
+    words, restarts, breaks = load_words(root, order)
     return [{"id": s["id"], "take": s["take"], "start": round(s["start"], 2), "dur": s["dur"], "text": s["text"],
-             **({"restart_of": s["restart_of"]} if s.get("restart_of") else {})} for s in sentences(words, restarts)]
+             **({"restart_of": s["restart_of"]} if s.get("restart_of") else {})} for s in sentences(words, restarts, breaks)]
 
 
 def print_ids(root: Path) -> None:
@@ -458,8 +462,8 @@ def build(root: Path, plan: Any, repo: Path = REPO, stills: bool = True, order: 
     to read."""
     import short_spec as SS
 
-    words, restarts = load_words(root, order)
-    sents = sentences(words, restarts)
+    words, restarts, breaks = load_words(root, order)
+    sents = sentences(words, restarts, breaks)
     if errs := validate_plan(plan, sents, words):
         raise PlanError(errs)
     by_id = {s["id"]: s for s in sents}
@@ -741,7 +745,7 @@ def build(root: Path, plan: Any, repo: Path = REPO, stills: bool = True, order: 
     tmp.write_text(json.dumps(spec, ensure_ascii=False, indent=1))
     try:
         res = SS.check(tmp, root, strict=True)
-        res["errors"] = [_beat_name(e, event_beat, plan) for e in res["errors"]]
+        res["errors"] = [_hole_hint(_beat_name(e, event_beat, plan), sents, any(breaks.values())) for e in res["errors"]]
         pacing = {}
         if not res["errors"]:
             p2, rep = SS.load(tmp, root, strict=True)
@@ -802,6 +806,30 @@ def _beat_name(msg: str, event_beat: dict[int, int], plan: dict) -> str:
                 if re.search(r"(At|at)\b", msg.split(" (")[0]) else "")
     return re.sub(r"events\[(\d+)\]", lambda m: f"beat {event_beat[int(m[1])]}" if int(m[1]) in event_beat
                   else {"0": "events[0]"}.get(m[1], m[0]), msg)
+
+
+def _hole_hint(msg: str, sents: list[dict], has_breaks: bool) -> str:
+    """A kept run holding speech with no words: name the sentences a plan can leave out, not a cut it can't make."""
+    m = re.search(r"\((\S+) [\d.]+–[\d.]+\) keeps ([\d.]+)–([\d.]+), speech the transcript has no words for", msg)
+    if not m:
+        return msg
+    take, a, b = m[1], float(m[2]), float(m[3])
+    head = msg.split("; listen to it")[0]
+    mine = [s for s in sents if s["take"] == take]
+    before = [s for s in mine if s["end"] <= a + 0.05]
+    after = [s for s in mine if s["start"] >= b - 0.05]
+    over = [s for s in mine if s not in before and s not in after]
+    if not has_breaks and any(s["start"] < a - 0.05 or s["end"] > b + 0.05 for s in over):
+        names = ", ".join(s["id"] for s in over)
+        return (f"{head}; it sits inside {names}, which a plan can't split: prepare the footage again (transcribe, then "
+                f"plan ids) so the transcript can end a sentence there")
+    if over:
+        names = " and ".join(s["id"] for s in over)
+        return f"{head}; it is {names}: leave {names} out of `keep`"
+    p, n = (before[-1]["id"] if before else None), (after[0]["id"] if after else None)
+    if p and n:
+        return f"{head}; it sits between {p} and {n}: leave {p} or {n} out of `keep`"
+    return f"{head}; leave {p or n} out of `keep`"
 
 
 def _cut_hint(msg: str) -> str:

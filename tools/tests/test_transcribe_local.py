@@ -236,6 +236,38 @@ class Implausible(unittest.TestCase):
         self.assertTrue(any(a <= 38.7 and b >= 42.3 for a, b in untranscribed), untranscribed)
 
 
+    def test_word_stretched_over_a_pause_and_a_retake(self):
+        # 3 letters, 4.3 s: 2.3 s of silence, then 2 s of speech nobody transcribed (under 60 % of the word)
+        runs = [(98.7, 100.78)]
+        self.assertTrue(T.implausible({"text": "the", "start": 96.48, "end": 100.78}, runs))
+        first = scribe(("so", 95.0, 95.4), ("the", 96.48, 100.78), ("end.", 101.2, 101.6))
+        retranscribe, _ = self.stub([("I", 96.42, 98.9), ("wonder", 98.9, 99.6), ("why", 99.7, 100.6)])
+        words, patched, untranscribed = T.fill_holes(first, runs + [(94.9, 95.5), (101.1, 101.7)], retranscribe, 105.0)
+        got = [w for w in words if w["type"] == "word"]
+        self.assertEqual([w["text"] for w in got], ["so", "I", "wonder", "why", "end."])
+        self.assertEqual([p.get("replaced") for p in patched], ["the"])
+        self.assertEqual(untranscribed, [])
+
+    def test_recovered_word_stamped_in_the_pause(self):
+        first = scribe(("ok", 50.0, 55.0))  # speech only from 52.3: the retry stamps its first word early
+        retranscribe, _ = self.stub([("so", 50.0, 52.6), ("then", 52.7, 53.4), ("this", 53.5, 54.2)])
+        words, patched, _ = T.fill_holes(first, [(52.3, 55.0)], retranscribe, 60.0)
+        got = [w for w in words if w["type"] == "word"]
+        self.assertEqual((got[0]["text"], got[0]["start"]), ("so", 52.3))
+        self.assertEqual([w["start"] for w in got[1:]], [52.7, 53.5])  # the others stay as measured
+
+    def test_recovered_word_stamped_in_the_tail_of_the_previous_run(self):
+        first = scribe(("ok", 96.0, 100.8))  # speech to 96.65, a pause, then speech from 98.78
+        retranscribe, _ = self.stub([("ser", 96.0, 96.48), ("igual", 96.48, 99.02), ("tengo", 99.02, 99.4)])
+        words, _, _ = T.fill_holes(first, [(93.5, 96.65), (98.78, 105.0)], retranscribe, 106.0)
+        got = {w["text"]: w["start"] for w in words if w["type"] == "word"}
+        self.assertEqual((got["ser"], got["igual"], got["tengo"]), (96.0, 98.78, 99.02))
+
+    def test_long_word_over_silence_hides_nothing(self):
+        # 3 s word, speech only in its first 0.3 s: a word covers that, so nothing to re-transcribe
+        self.assertFalse(T.implausible({"text": "so", "start": 1.0, "end": 4.0}, [(1.0, 1.3)]))
+
+
 class Audible(unittest.TestCase):
     def test_quiet_stretch_is_not_speech(self):
         """Real levels: speech at -24 dB, a floor at -52 dB, a breath in a pause at -40 dB."""
@@ -271,6 +303,31 @@ class Restarts(unittest.TestCase):
         self.assertEqual(r["again"], ws[5]["start"])
         self.assertEqual(r["words"], "we start with the plan")
 
+    def test_pause_inside_the_abandoned_phrase(self):
+        ws = self.words("anyway I wonder, have you ever been anyway I wonder, have you ever been the youngest here?",
+                        gaps={2: 0.5, 6: 2.0})
+        (r,) = T.mark_restarts(ws)
+        self.assertEqual(r["abandoned"], [ws[0]["start"], ws[6]["end"]])
+        self.assertEqual(r["again"], ws[7]["start"])
+
+    def test_two_words_across_a_long_wait(self):
+        """Real take: "Igual, tengo mucha curiosidad, ¿les ha tocado ser" … 2.3 s … "igual tengo curiosidad les ha…"."""
+        ws = self.words("Igual, tengo mucha curiosidad, ¿les ha tocado ser igual tengo curiosidad les ha tocado ser los",
+                        gaps={3: 0.5, 7: 2.0})
+        (r,) = T.mark_restarts(ws)
+        self.assertEqual((r["abandoned"], r["again"]), ([ws[0]["start"], ws[7]["end"]], ws[8]["start"]))
+
+    def test_long_abandoned_phrase(self):
+        """Real take: a 6 s phrase trailing off, then the same opening 2.6 s later."""
+        ws = self.words("estas son las habilidades que más practico con líderes adoptando inteligencia artificial en su día "
+                        "a día para sus... estas son las dos habilidades que más practico", gaps={18: 2.4})
+        (r,) = T.mark_restarts(ws)
+        self.assertEqual((r["abandoned"][0], r["again"]), (ws[0]["start"], ws[19]["start"]))
+
+    def test_list_across_a_pause_is_not_a_restart(self):
+        ws = self.words("I wrote about de mi casa, de mi calle y mi barrio.", gaps={5: 0.4})
+        self.assertEqual(T.mark_restarts(ws), [])
+
     def test_deliberate_repetition(self):
         ws = self.words("I spend this much on food. I spend this much on rent.", gaps={5: 0.5})
         self.assertEqual(T.mark_restarts(ws), [])
@@ -296,6 +353,27 @@ class Restarts(unittest.TestCase):
         self.assertEqual(ev["start"], ws[9]["start"])
         self.assertIn("restart", ev["text"])
         self.assertEqual([w for w in out if w["type"] == "word"], ws)
+
+
+class Breaks(unittest.TestCase):
+    def words(self, *spec):
+        return [{"type": "word", "text": t, "start": a, "end": b} for t, a, b in spec]
+
+    def test_around_a_false_start(self):
+        ws = self.words(("a", 93.5, 94.0), ("b", 96.0, 96.5), ("a", 98.7, 99.0), ("b", 99.1, 99.5))
+        rs = [{"abandoned": [93.5, 96.5], "again": 98.7, "words": "a b"}]
+        self.assertEqual(T.sentence_breaks(ws, rs, []), [93.5, 98.7])
+
+    def test_around_a_hole(self):
+        ws = self.words(("x", 51.0, 51.9), ("y", 53.1, 53.5))
+        self.assertEqual(T.sentence_breaks(ws, [], [[52.1, 53.0]]), [53.1])
+
+    def test_a_stretched_word_that_failed_stands_alone(self):
+        ws = self.words(("x", 37.0, 37.5), ("so", 38.68, 42.34), ("y", 43.0, 43.4))
+        self.assertEqual(T.sentence_breaks(ws, [], [[38.68, 42.34]]), [38.68, 43.0])
+
+    def test_nothing_to_break(self):
+        self.assertEqual(T.sentence_breaks(self.words(("x", 1.0, 1.4)), [], []), [])
 
 
 class NoPromptForOthers(unittest.TestCase):

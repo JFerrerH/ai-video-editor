@@ -12,7 +12,7 @@
 
 - [x] 2.1 Read `breaks` in `load_words`, and end a sentence before a word at a break in `sentences()`
 - [x] 2.2 Add tests: false start after an unpunctuated line, and a transcript with no `breaks` keeping its IDs
-- [x] 2.3 Rewrite the refusal in `_cut_hint` for both cases, with tests that a hole between sentences and one inside a sentence name the right fix
+- [x] 2.3 Rewrite the refusal (`_hole_hint`) for both cases, with tests that a hole between sentences and one inside a sentence name the right fix
 
 ## 3. Docs
 

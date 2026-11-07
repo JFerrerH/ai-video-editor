@@ -44,6 +44,27 @@ class Sentences(PlanFixture):
                ("Y", 4.0), ("en", 4.3), ("contra", 4.6), ("mía.", 4.9))]
         self.assertFalse([s for s in E.sentences({"t": ws}) if s.get("restart_of")])
 
+    def line(self, text, t0, step=0.3):
+        return [{"text": w, "start": round(t0 + step * i, 2), "end": round(t0 + step * i + 0.2, 2)}
+                for i, w in enumerate(text.split())]
+
+    def test_false_start_after_an_unpunctuated_line(self):
+        a = self.line("I kept it in a drawer for years", 0.0)          # ends 2.3
+        b = self.line("and then I told", 3.0)                           # starts 0.7 s after: under SENT_GAP
+        c = self.line("and then I told my sister everything.", 6.0)
+        ws = {"t": a + b + c}
+        rs = {"t": [{"abandoned": [3.0, 3.9], "again": 6.0, "words": "and then I told"}]}
+        self.assertEqual(len(E.sentences(ws, rs)), 2)  # without breaks the drawer line and the false start run together
+        sents = E.sentences(ws, rs, {"t": [3.0, 6.0]})
+        self.assertEqual([s["text"] for s in sents],
+                         ["I kept it in a drawer for years", "and then I told", "and then I told my sister everything."])
+        self.assertEqual([s.get("restart_of") for s in sents], [None, "F3", None])
+
+    def test_transcript_without_breaks_keeps_its_ids(self):
+        ws = {"t": self.line("one two three. four five", 0.0) + self.line("six seven", 5.0)}
+        self.assertEqual(E.sentences(ws), E.sentences(ws, {}, {}))
+        self.assertEqual(E.sentences(ws), E.sentences(ws, {}, {"t": []}))
+
     def test_take_order(self):
         import json
         import shutil
@@ -329,6 +350,35 @@ class SoundBans(PlanFixture):
         self.assertIn("pluck", E.ALWAYS_BANNED)
         self.assertFalse(any(name == "pluck" for name, _ in E.SFX.values()))
         self.assertFalse(any("pluck" in alts for alts in E.SFX_SUBSTITUTE.values()))
+
+
+class HoleHint(PlanFixture):
+    """Kept speech with no words: the error names a fix a plan can apply."""
+
+    def build_with(self, untranscribed, breaks, keep):
+        f = self.root / "edit" / "transcripts" / "take1.json"
+        original = f.read_text()
+        d = json.loads(original)
+        f.write_text(json.dumps({**d, "untranscribed": untranscribed, **({"breaks": breaks} if breaks is not None else {})}))
+        try:
+            return build(self.root, {"keep": keep})
+        finally:
+            f.write_text(original)
+
+    def test_hole_between_two_sentences(self):
+        # no words for 8.5–8.6, between "estudiar" and "nada": the transcript ends a sentence there (F4 | F5)
+        res = self.build_with([[8.5, 8.6]], [8.6], ["F4", "F5"])
+        (e,) = [e for e in res["errors"] if "8.50–8.60" in e]
+        self.assertIn("between F4 and F5", e)
+        self.assertIn("leave F4 or F5 out of `keep`", e)
+        self.assertNotIn("listen", e)
+        self.assertFalse(self.build_with([[8.5, 8.6]], [8.6], ["F4"])["errors"])
+
+    def test_hole_inside_a_sentence_of_an_older_transcript(self):
+        res = self.build_with([[8.5, 8.6]], None, ["F4"])  # inside "Sin estudiar nada ahora."
+        (e,) = [e for e in res["errors"] if "8.50–8.60" in e]
+        self.assertIn("F4", e)
+        self.assertIn("prepare the footage again", e)
 
 
 class Cli(PlanFixture):

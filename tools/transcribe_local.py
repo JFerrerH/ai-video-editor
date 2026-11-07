@@ -301,7 +301,7 @@ def _on_speech(w: dict, runs: list[tuple[float, float]]) -> dict:
     the word running past it) is the same stamp, early."""
     if any(a <= w["start"] <= b and not (b - w["start"] < SNAP_TAIL and b < w["end"]) for a, b in runs):
         return w
-    nxt = next((a for a, _ in runs if a > w["start"] + 1e-6 and a >= w["start"]), None)
+    nxt = next((a for a, _ in runs if a > w["start"] + 1e-6), None)
     return {**w, "start": round(nxt, 3)} if nxt is not None and nxt < w["end"] else w
 
 

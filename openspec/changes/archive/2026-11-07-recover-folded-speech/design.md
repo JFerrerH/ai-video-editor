@@ -27,7 +27,7 @@ Non-goals: keeping wordless speech on purpose, `keep` by word, changing `SENT_GA
 
 **D4. `breaks` in the transcript, not computed in `edit_plan`.** Splitting at holes and restarts inside `sentences()` from data old transcripts already hold would renumber them: `plan_build` would disagree with the IDs a hosted service stored at preparation. A field only new transcriptions write gives old transcripts identical IDs, with no version flag. Alternative rejected: lowering `SENT_GAP` renumbers every take.
 
-**D5. The hint lives in `_cut_hint`.** `shortform check` keeps its message for people working by hand. `edit_plan` already rewrites check errors into plan terms, so it maps the range to sentences there.
+**D5. The hint lives in `edit_plan` (`_hole_hint`).** `shortform check` keeps its message for people working by hand. `edit_plan` already rewrites check errors into plan terms, so it maps the range to sentences there.
 
 ## Risks / Trade-offs
 

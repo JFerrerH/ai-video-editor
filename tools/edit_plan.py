@@ -584,9 +584,7 @@ def build(root: Path, plan: Any, repo: Path = REPO, stills: bool = True, order: 
     for x in beats:
         if x["b"].get("punch"):
             k = seg_of(x["s"]["take"], x["i"])
-            if k in punch_at:
-                errors.append(f"{x['label']}: segment {k} already has a punch-in; one per cut")
-            punch_at[k] = _src_anchor(x["w"])
+            punch_at[k] = _src_anchor(x["w"])  # one per cut: the precheck refused a second
     hook = plan.get("hook")
     if hook:
         mid = (segs[0]["a"] + segs[0]["b"]) // 2

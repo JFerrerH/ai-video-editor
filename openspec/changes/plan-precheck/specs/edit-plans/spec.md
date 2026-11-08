@@ -2,7 +2,7 @@
 
 ### Requirement: Precheck without audio
 
-`plan_precheck.check(plan, transcripts, order, schemas, brand)` SHALL return every error and warning that needs only the plan, the transcript JSON, the take order, the component schemas and the brand's rejected sounds: plan shape and sentence IDs, false starts, schema limits, beat timing and entrance fit, echo, pacing, and cuts with no pause in the word times.
+`plan_precheck.check(plan, transcripts, order, brands)` SHALL return every error and warning that needs only the plan, the transcript JSON, the take order, the slugs of the brand kits that exist and the component schemas the engine ships in `tools/motion/src`: plan shape and sentence IDs, false starts, schema limits, beat timing and entrance fit, echo, pacing, and cuts with no pause in the word times.
 
 #### Scenario: Echo found without audio
 

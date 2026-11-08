@@ -139,6 +139,15 @@ def cut_plan(plan: dict, words: dict, by_id: dict) -> dict:
         for a, nxt in zip(cuts, cuts[1:]):
             is_low = bool(low_ids) and r["take"] == by_id[low["at"]]["take"] and (a, nxt - 1) == low_ids
             segs.append({"take": r["take"], "a": a, "b": nxt - 1, "low": is_low})
+    seen: dict[int, int] = {}
+    for n, b in enumerate(plan.get("beats") or []):  # a zoom belongs to a cut: one punch-in each
+        if b.get("punch"):
+            s = by_id[b["at"]]
+            i = E._find(words, s, b["word"]) if b.get("word") else s["a"]
+            k = next(k for k, g in enumerate(segs) if g["take"] == s["take"] and g["a"] <= i <= g["b"])
+            if k in seen:
+                errors.append(f"plan.beats[{n}]: segment {k} already has a punch-in (plan.beats[{seen[k]}]); one per cut")
+            seen[k] = n
     return {"story": story, "segs": segs, "low_ids": low_ids, "breaks": breaks, "errors": errors}
 
 
@@ -467,13 +476,6 @@ def check_words(plan: dict, words: dict, by_id: dict, timing: bool = True) -> di
             {"text": t, **({"emphasis": hook["emphasis"]} if hook.get("emphasis") and hook["emphasis"] in t else {})}
             for t in hook["title"]]}})
         spans.append((0, d))
-    punch: set[int] = set()
-    for x in beats:
-        if x["b"].get("punch"):
-            k = next(k for k, g in enumerate(segs) if g["take"] == x["s"]["take"] and g["a"] <= x["i"] <= g["b"])
-            if k in punch:
-                errors.append(f"{x['label']}: segment {k} already has a punch-in; one per cut")
-            punch.add(k)
     low = plan.get("low")
     if low:
         low_seg = next(k for k, g in enumerate(segs) if g["low"])

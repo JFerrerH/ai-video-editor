@@ -84,6 +84,29 @@ class SameAsTheBuild(PlanFixture):
         self.assertEqual(res["errors"], [], res)
         self.assertTrue(any("F4 ends where" in w for w in res["warnings"]), res)
 
+    def test_two_punch_ins_in_one_cut(self):
+        plan = {"keep": ["F1", "F3-F4", "F6"], "beats": [{"at": "F4", "word": "Sin", "punch": True},
+                                                          {"at": "F4", "word": "nada", "punch": True}]}
+        errs = self.both(plan)
+        self.assertTrue(any("already has a punch-in" in e for e in errs), errs)
+
+    def test_a_stretched_stamp_misleads_only_the_precheck(self):
+        # "Hola" is stamped from 0.0 though its sound starts at 0.5: the word-time clock plays 0.5 s of silence
+        # the audio cut drops, so the precheck's timing errors are listed apart and the build decides from the audio
+        words = [(t, 0.0 if t == "Hola" else a, b) for t, a, b in WORDS]
+        plan = {"keep": ["F1", "F3-F4", "F6"], "hook": {"title": ["Hola mundo hoy"]}}
+        res = PC.check(plan, transcript(words))
+        self.assertTrue(res["timed_errors"] and set(res["timed_errors"]) <= set(res["errors"]), res)
+        f = self.root / "edit" / "transcripts" / "take1.json"
+        original = f.read_text()
+        f.write_text(json.dumps(transcript(words)["take1"]))
+        try:
+            self.assertEqual(self.build_errors({"keep": ["F1", "F3-F4", "F6"], "hook": {"title": ["Otro cartel"]}, "beats": [
+                {"at": "F4", "word": "Sin", "device": "Notice", "props": {"from": "A", "text": "B"}, "through": "nada"},
+                {"at": "F6", "word": "hoy", "device": "Notice", "props": {"from": "A", "text": "B"}}]}), [])
+        finally:
+            f.write_text(original)
+
     def test_a_short_pause_is_still_a_cut(self):
         self.assertEqual(PC.check({"keep": ["F6"]}, transcript())["errors"], [])  # "ahora," → "hoy": 0.1 s
 

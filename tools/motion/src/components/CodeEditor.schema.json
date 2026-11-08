@@ -11,18 +11,22 @@
   "properties": {
     "file": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 30
     },
     "lines": {
       "type": "array",
+      "maxItems": 6,
       "items": {
-        "type": "string"
+        "type": "string",
+        "maxLength": 40
       },
       "x-text": true
     },
     "dayLabel": {
       "type": "string",
       "x-text": true,
+      "maxLength": 20,
       "default": "DÍA"
     },
     "dayFrom": {

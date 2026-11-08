@@ -10,6 +10,7 @@
   "properties": {
     "slots": {
       "type": "array",
+      "maxItems": 8,
       "items": {
         "type": "object",
         "required": [

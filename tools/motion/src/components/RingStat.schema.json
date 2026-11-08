@@ -16,7 +16,8 @@
     },
     "label": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 20
     },
     "fillAt": {
       "type": "number",

@@ -92,6 +92,34 @@ class Sentences(PlanFixture):
         self.assertTrue(any("F2 is a false start" in m and "keep F3" in m for m in cm.exception.errors), cm.exception.errors)
 
 
+class NoAir(PlanFixture):
+    """A kept sentence whose next sentence starts 0.1 s after it, in the middle of the video."""
+
+    GAP_WORDS = [("Uno", 0.5, 0.9), ("dos.", 1.0, 1.5), ("Tres", 1.6, 2.0), ("cuatro.", 2.1, 2.6),
+                 ("Cinco", 4.0, 4.4), ("seis.", 4.5, 5.0)]
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        from plan_fixture import make_take
+        make_take(cls.root / "edit" / "conformed" / "take1.mov", cls.GAP_WORDS, d=6.0)
+        (cls.root / "edit" / "transcripts" / "take1.json").write_text(json.dumps(
+            {"language_code": "es", "words": [{"type": "word", "text": t, "start": a, "end": b} for t, a, b in cls.GAP_WORDS]}))
+
+    def test_names_the_sentence_before_any_still(self):
+        res = E.build(self.root, {"keep": ["F1", "F3"]}, stills=True)  # F1 flows into F2 (0.1 s), F2 is left out
+        (msg,) = [m for m in res["errors"] if "of air a cut needs" in m]
+        self.assertIn("segments[0].out", msg)
+        self.assertIn("ends F1", msg)
+        self.assertIn("keep the sentence after it too", msg)
+        self.assertIsNone(res["stills"])  # refused before the stills
+        self.assertFalse((self.root / "edit" / "stills").exists())
+
+    def test_a_real_pause_builds(self):
+        res = E.build(self.root, {"keep": ["F1", "F2"]}, stills=False)  # one run; the pause after it is 1.4 s
+        self.assertEqual(res["errors"], [])
+
+
 class PlanShape(PlanFixture):
     def errors(self, plan: dict) -> list[str]:
         with self.assertRaises(E.PlanError) as cm:

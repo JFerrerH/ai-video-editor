@@ -23,6 +23,7 @@
     },
     "screens": {
       "type": "array",
+      "maxItems": 6,
       "items": {
         "type": "object",
         "required": [
@@ -40,7 +41,8 @@
           },
           "label": {
             "type": "string",
-            "x-text": true
+            "x-text": true,
+            "maxLength": 20
           }
         }
       }
@@ -81,7 +83,8 @@
         },
         "url": {
           "type": "string",
-          "x-text": true
+          "x-text": true,
+          "maxLength": 40
         }
       }
     }

@@ -19,17 +19,20 @@
     },
     "kicker": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 24
     },
     "title": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 40
     },
     "emphasis": {
       "type": "string"
     },
     "nodes": {
       "type": "array",
+      "maxItems": 12,
       "items": {
         "type": "object",
         "required": [
@@ -42,7 +45,8 @@
           },
           "label": {
             "type": "string",
-            "x-text": true
+            "x-text": true,
+            "maxLength": 20
           },
           "color": {
             "type": "string"
@@ -117,6 +121,7 @@
     },
     "chips": {
       "type": "array",
+      "maxItems": 8,
       "items": {
         "type": "object",
         "required": [
@@ -129,7 +134,8 @@
           },
           "text": {
             "type": "string",
-            "x-text": true
+            "x-text": true,
+            "maxLength": 60
           },
           "at": {
             "type": "number",
@@ -140,6 +146,7 @@
     },
     "messages": {
       "type": "array",
+      "maxItems": 12,
       "items": {
         "type": "object",
         "required": [
@@ -166,6 +173,7 @@
     },
     "log": {
       "type": "array",
+      "maxItems": 12,
       "items": {
         "type": "object",
         "required": [
@@ -175,7 +183,8 @@
         "properties": {
           "text": {
             "type": "string",
-            "x-text": true
+            "x-text": true,
+            "maxLength": 60
           },
           "at": {
             "type": "number",

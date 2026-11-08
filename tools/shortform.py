@@ -78,6 +78,15 @@ HEAD_GAP = 40  # px of air between a graphic and the top of the head
 PLACE_TOP = 100
 MIN_ROOM = 2 * MIN_TEXT  # px above the head under which not even a line of text fits
 SAFE_SIDE = 130  # px from each side edge (tools/motion/src/theme.ts SAFE.side)
+# every drawn box stays inside its card and between PLACE_TOP and SAFE_BOTTOM, with INSIDE_TOL px to spare for
+# rounding and a card's slight rotation
+INSIDE_TOL = 2
+# the video ends on a held last frame this many seconds after its cut, and the audio fades out in the silence there.
+# Measured 2026-11-08 on the audio of the twelve approved exports (time from the last speech energy, the 90th
+# percentile of the file's level minus 30 dB, to the end of the file): 0.04 to 0.30 s, the talking-head shorts
+# 0.04, 0.11 and 0.30 s, and the longest of them is the one that reads as a finished ending, not a cut
+END_TAIL = 0.30
+END_FADE = 0.10  # the longest fade-out at the end; it never reaches into sound: the silence the cut has, 30 ms at least
 # silence is measured against the take's speech (Project._quiet): SPEECH_DROP dB under its 90th percentile,
 # quiet runs QUIET_MERGE s apart or closer merged
 SPEECH_DROP, QUIET_MERGE = 25.0, 0.05
@@ -493,6 +502,15 @@ class Project:
                 f"zoompan=z='{zoom_expr(z, s.dur)}':x='{ex}':y='{ey}':d=1:s={w}x{h}:fps={self.fps},"
                 f"{post}{hold},format=yuv420p")
 
+    def end_fade(self, s: Seg) -> float:
+        """The fade-out of the video's last clip: over the silence that ends it, up to END_FADE s and 30 ms at least."""
+        quiet = self._quiet(s.take, 9.0)
+        k = min(len(quiet), int(s.t_out / 0.005))
+        n = 0
+        while n < k and quiet[k - 1 - n] and n * 0.005 < END_FADE:
+            n += 1
+        return round(min(END_FADE, max(0.03, n * 0.005)), 3)
+
     def extract(self, preview: bool) -> list[Path]:
         w, h = (720, 1280) if preview else (1080, 1920)
         d = self.edit_dir / ("clips_preview" if preview else "clips_graded")
@@ -502,7 +520,8 @@ class Project:
             # Exact length: N video frames and N*(48000/fps) audio samples, so offsets()
             # matches the concat and overlays/captions/SFX never drift.
             n = round(s.out_dur * self.fps)
-            af = (f"afade=t=in:st=0:d=0.03,afade=t=out:st={s.dur - 0.03:.3f}:d=0.03,"
+            fade = self.end_fade(s) if i == len(self.segments) - 1 else 0.03
+            af = (f"afade=t=in:st=0:d=0.03,afade=t=out:st={s.dur - fade:.3f}:d={fade:.3f},"
                   f"apad,atrim=end_sample={n * 48000 // self.fps}")
             p = d / f"seg_{i:02d}.mov"
             # -t is an INPUT option here so tpad/apad can extend the output (freeze frames)
@@ -650,17 +669,19 @@ class Project:
 
     def _batch(self, jobs: list[tuple[int, str, dict, dict]], scale: float, pub: Path, tmp: Path) -> dict:
         """Render [(k, tag, event, extra top-level props)] each alone at its still time, from one Remotion bundle
-        (tools/motion/scripts/stills.mjs). → {(k, tag): (png, measured texts | None)}."""
+        (tools/motion/scripts/stills.mjs). An `extra` key `_t` draws the event at that output time instead of its still
+        time. → {(k, tag): (png, measured texts | None, measured shapes | None)}."""
         total = self.offsets()[-1]
         spec, keys = [], []
         for k, tag, e, extra in jobs:
             pj = tmp / f"ev{k}_{tag}.json"
+            extra = dict(extra)
+            t = extra.pop("_t", None) or self._still_time(e)
             pj.write_text(json.dumps({"durationInSeconds": round(total, 3), "brand": self.brand, "events": [e], **extra},
                                      ensure_ascii=False))
-            t = self._still_time(e)
             spec.append({"props": str(pj), "frame": min(round(t * self.fps), round(total * self.fps) - 1),
                          "out": str((tmp / f"ev{k}_{tag}.png").resolve()), "scale": scale})
-            keys.append((k, tag, e))
+            keys.append((k, tag, e, t))
         if not spec:
             return {}
         cmd = ["node", "scripts/stills.mjs"]
@@ -668,12 +689,12 @@ class Project:
                            text=True, cwd=MOTION)
         lines = [json.loads(ln) for ln in r.stdout.splitlines() if ln.startswith("{")]
         out = {}
-        for (k, tag, e), res in zip(keys, lines):
+        for (k, tag, e, t), res in zip(keys, lines):
             if "error" in res:
-                label, t = self._ev_label(e, k), self._still_time(e)
+                label = self._ev_label(e, k)
                 raise ToolError(cmd, res["error"], f"{label} failed at {t:.2f} s: {cause_line(res['error'])}")
-            texts = next((m["texts"] for m in res["measure"] or []), None) if res.get("measure") is not None else None
-            out[(k, tag)] = (Path(res["out"]), texts)
+            m = next(iter(res["measure"] or []), None) if res.get("measure") is not None else None
+            out[(k, tag)] = (Path(res["out"]), m["texts"] if m else None, m["shapes"] if m else None)
         if len(lines) < len(keys):
             raise ToolError(cmd, r.stderr or r.stdout)
         return out
@@ -795,6 +816,56 @@ class Project:
         # Overlay.tsx: transform origin top centre, then `translate`: p' = origin + translate + s · (p − origin)
         return {"scale": round(s, 3), "x": round(-s * ((x0 + x1) / 2 - 540)), "y": round(max(PLACE_TOP, head[1] - s * (y1 - y0)) - s * y0)}, s
 
+    def _measure_times(self, e: dict) -> list[float]:
+        """Output times, besides the still time, at which to measure an event: just after each reveal cue's entrance has
+        finished (`cue_finish`), so an item that comes in later is measured when it is on screen. A cue at or after the
+        schema's `x-still-before` cue (the text has left by then) is skipped."""
+        import overlay_schema as O
+        if e["type"] not in O.schemas():
+            return []
+        fin = O.cue_finish(e["type"], e.get("props", {}), self.fps, e["duration"])
+        before = O.schemas()[e["type"]].get("x-still-before")
+        gone = next((c for path, c, _ in fin if path == before), None) if before else None
+        last, still, out = self.offsets()[-1] - 1 / self.fps, self._still_time(e), []
+        for path, _, end in fin:
+            if path == before or end >= e["duration"] or (gone is not None and end >= gone):
+                continue
+            t = round(min(e["start"] + end + 1 / self.fps, last), 2)
+            if t != still and t not in out:
+                out.append(t)
+        return out
+
+    def _outside(self, e: dict, label: str, measured: list[tuple[float, list[dict], list[dict]]]) -> list[Finding]:
+        """Text and drawn shapes that cross the edge of their card (the nearest ancestor drawing a background) or leave
+        the frame (sideways, above PLACE_TOP or below SAFE_BOTTOM), by more than INSIDE_TOL px: one finding for each
+        thing and edge, at the first time it shows. `measured`: [(output time, texts, shapes)] from the render."""
+        seen: dict[tuple[str, str], Finding] = {}
+
+        def crosses(box, card, text=True):
+            if card:
+                for edge, over in (("left", card[0] - box[0]), ("top", card[1] - box[1]),
+                                   ("right", box[2] - card[2]), ("bottom", box[3] - card[3])):
+                    if over > INSIDE_TOL:
+                        yield f"its card's {edge} edge", over
+            # text keeps to the safe area; a shape (a drawer at the bottom of the frame) only to the frame
+            top, bottom = (PLACE_TOP, SAFE_BOTTOM) if text else (0, 1920)
+            for edge, over in (("the frame's left edge", -box[0]), ("the frame's right edge", box[2] - 1080),
+                               (f"the top limit ({top} px)", top - box[1]), (f"the bottom limit ({bottom} px)", box[3] - bottom)):
+                if over > INSIDE_TOL:
+                    yield edge, over
+
+        for t, texts, shapes in measured:
+            things = [(f'text "{x["text"][:30]}"' if not (g := self._text_groups(e, [x])) else f"{g[0]['field']} text",
+                       x["box"], x.get("card"), True) for x in texts]
+            things += [(f"the {x['tag']} shape", x["box"], x.get("card"), False) for x in shapes]
+            for what, box, card, text in things:
+                for edge, over in crosses(box, card, text):
+                    seen.setdefault((what, edge), Finding(
+                        f"{label} {what} at {box} runs {over:.0f} px past {edge} at {t:.2f} s; "
+                        + ("shorten the text, or make the card larger" if text else "make its card larger, or move it"),
+                        "outside"))
+        return list(seen.values())
+
     def measure_events(self, scale: float = 0.5, probe: bool = True, missing_only: bool = False,
                        warnings: list[str] | None = None) -> None:
         """Draw each event alone at its still time and measure it. Content boxes of full-layout events and the
@@ -868,6 +939,16 @@ class Project:
             e["props"] = {**e.get("props", {}), "frame": frame}
             placed.append((k, e))
         res.update(self._batch([(k, "alone", alone(e), {"measure": True}) for k, e in placed], scale, pub, tmp))
+        # geometry: every text and shape inside its card and the safe area, at the still time and at each later entrance
+        times = {k: self._measure_times(e) for k, e in todo if probe}
+        later = self._batch([(k, f"at{j}", alone(e), {"measure": True, "_t": t})
+                             for k, e in todo for j, t in enumerate(times.get(k, []))], scale, pub, tmp)
+        for k, e in todo:
+            if not probe:
+                break
+            seen = [(self._still_time(e), *res[(k, "alone")][1:])]
+            seen += [(t, *later[(k, f"at{j}")][1:]) for j, t in enumerate(times[k])]
+            warnings += self._outside(e, self._ev_label(e, k), [(t, tx or [], sh or []) for t, tx, sh in seen])
         # the probe: each event drawn on the stage (the cut's own frame, the camera, the speaker's cut-out when it is
         # behind) with its glyphs and without them; the difference is exactly the text a viewer reads
         stage_res = self._stage_batch(
@@ -880,7 +961,7 @@ class Project:
 
         measured = {}  # → edit/overlay_text.json
         for k, e in todo:
-            key, png, texts = self._box_key(e), *res[(k, "alone")]
+            key, png, texts, _ = self._box_key(e), *res[(k, "alone")]
             texts = texts or []
             measured[str(e.get("index", k))] = {"type": e["type"], "t": self._still_time(e),
                                                 "texts": self._text_groups(e, texts)}
@@ -1347,17 +1428,25 @@ class Project:
                 continue  # clear of the caption band
             below, above = y1 + CAP_GAP, y0 - CAP_GAP - cap_h
             span = [round(e["start"], 3), round(e["start"] + e["duration"], 3)]
-            if below + cap_h <= SAFE_BOTTOM:
+            head = self.head_box(e)  # a band that clears the graphic must clear the speaker's head too
+            clear = lambda y: head is None or y + cap_h <= head[1] or y >= head[3]  # noqa: E731
+            if below + cap_h <= SAFE_BOTTOM and clear(below):
                 avoid.append(span + [below])
-            elif above >= SAFE_TOP:
+            elif above >= SAFE_TOP and clear(above):
                 avoid.append(span + [above])
             else:
                 what = "content" if "box" in b else "text"
+                head_blocks = (below + cap_h <= SAFE_BOTTOM) or (above >= SAFE_TOP)  # a band fits the page, but not the head
+                if head_blocks:
+                    kind, why, fix = "face", (f"no band below or above it clears the speaker's head ({head[1]}–{head[3]} px) "
+                                              f"as well"), 'give it fewer words, set "full": true, or use a `corner` or `side` move'
+                else:
+                    kind, why, fix = "captions_on_text", (f"they fit neither below it (would end at {below + cap_h} px, past "
+                                                          f"{SAFE_BOTTOM}) nor above it (would start at {above} px, above {SAFE_TOP})"), \
+                        'give it fewer words, or set "full": true'
                 warns.append(Finding(
                     f"captions cover {self._ev_label(e, k)} text at {b.get('t', e['start']):.2f} s: its {what} ({y0}–{y1} px) "
-                    f"reaches the captions at {top} px, and they fit neither below it (would end at {below + cap_h} px, "
-                    f"past {SAFE_BOTTOM}) nor above it (would start at {above} px, above {SAFE_TOP}); give it fewer words, "
-                    f'or set "full": true', "captions_on_text"))
+                    f"reaches the captions at {top} px, and {why}; {fix}", kind))
         return avoid, warns
 
     def caption_warnings(self) -> list[str]:

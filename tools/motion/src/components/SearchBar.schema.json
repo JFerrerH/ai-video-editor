@@ -10,7 +10,8 @@
   "properties": {
     "query": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 40
     },
     "typeEnd": {
       "type": "number",

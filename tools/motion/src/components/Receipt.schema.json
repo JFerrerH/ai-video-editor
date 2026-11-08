@@ -12,10 +12,12 @@
   "properties": {
     "title": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 40
     },
     "items": {
       "type": "array",
+      "maxItems": 12,
       "items": {
         "type": "object",
         "required": [
@@ -25,7 +27,8 @@
         "properties": {
           "text": {
             "type": "string",
-            "x-text": true
+            "x-text": true,
+            "maxLength": 60
           },
           "at": {
             "type": "number",
@@ -33,18 +36,21 @@
           },
           "amount": {
             "type": "string",
-            "x-text": true
+            "x-text": true,
+            "maxLength": 12
           }
         }
       }
     },
     "total": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 12
     },
     "stamp": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 14
     },
     "stampAt": {
       "type": "number",

@@ -11,15 +11,18 @@
   "properties": {
     "year": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 6
     },
     "kicker": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 24
     },
     "title": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 40
     },
     "emphasis": {
       "type": "string",
@@ -27,7 +30,8 @@
     },
     "author": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 30
     },
     "cardAt": {
       "type": "number",

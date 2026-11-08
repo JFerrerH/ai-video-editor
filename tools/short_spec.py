@@ -44,7 +44,7 @@ lists as `untranscribed` is a warning.
 
 Strict mode (`check(…, strict=True)`, `--strict`, job arg `"strict": true`) is for edits nobody reviews by
 hand: `lock_in`, `lock_out` and `keep_restart` are errors, and every finding whose kind is in STRICT_KINDS
-(the never-list and loud edges) is an error instead of a warning. `NEVER_LIST` names them.
+(the never-list, loud edges, text outside its card, cuts with no air) is an error instead of a warning. `NEVER_LIST` names them.
 
 Zooms: static {scale} | push {from, to} | punch {base, peak, at} | outpunch {from, to, peak, at}, where a
 punch's `at` is a SOURCE time in the segment's take: seconds, or {"word", "after"?, "edge"?, "offset"?}.
@@ -72,7 +72,7 @@ from pathlib import Path
 from typing import Any
 
 import overlay_schema
-from shortform import LOOKS, REPO, SFX_DIR, Finding, Project, Seg, _norm
+from shortform import END_TAIL, LOOKS, REPO, SFX_DIR, Finding, Project, Seg, _norm
 
 ASSETS = REPO / "assets"
 BRANDS = REPO / "brands"
@@ -128,7 +128,7 @@ NEVER_LIST = [
     (10, "`frame` given by hand", ("frame",)),
 ]
 # finding kinds that are errors in strict mode: the never-list, loud edges and text that doesn't show
-STRICT_KINDS = {k for _, _, kinds in NEVER_LIST for k in kinds} | {"loud_edge", "no_text", "hidden"}
+STRICT_KINDS = {k for _, _, kinds in NEVER_LIST for k in kinds} | {"loud_edge", "no_text", "hidden", "outside", "no_air"}
 
 
 def strict_split(warnings: list[str]) -> tuple[list[str], list[str]]:
@@ -794,6 +794,35 @@ def _edge_rules(p: Project, details: list[dict], above_floor: float) -> tuple[li
     return errors, warnings, energy
 
 
+def _air_rules(p: Project, details: list[dict], above_floor: float, pre: float, post: float) -> list[Finding]:
+    """`no_air`: an edge whose silence (the quiet run it sits in, between the sound before and the sound after) is
+    shorter than the refinement's own air: `pre` before an in-point, `post` after an out-point. Edges the video's
+    start and end make (the tail handles the last out-point), joins, and edges on sound (`loud_edge`, `in_word`
+    report those) are left out."""
+    out = []
+    last = len(p.segments) - 1
+    for d in details:
+        if d["tag"] == "joined" or (d["edge"] == "out" and d["seg"] == last) or (d["edge"] == "in" and d["t"] <= HOP):
+            continue
+        quiet = p._quiet(p.segments[d["seg"]].take, above_floor)
+        k = min(len(quiet) - 1, int(d["t"] / HOP))
+        if not quiet[k]:
+            continue
+        a, b = k, k
+        while a > 0 and quiet[a - 1]:
+            a -= 1
+        while b + 1 < len(quiet) and quiet[b + 1]:
+            b += 1
+        air, need = (b + 1 - a) * HOP, post if d["edge"] == "out" else pre
+        if air < need - 1e-9:
+            where = f"segments[{d['seg']}].{d['edge']} {d['t']:.2f}"
+            other = (f"the next sound starts at {(b + 1) * HOP:.2f}" if d["edge"] == "out"
+                     else f"the sound before it ends at {a * HOP:.2f}")
+            out.append(Finding(f"{where} has {air:.2f} s of silence {'after' if d['edge'] == 'out' else 'before'} the "
+                               f"speech it keeps, under the {need:g} s of air a cut needs ({other})", "no_air"))
+    return out
+
+
 def _transcript(p: Project, take: str) -> dict:
     cache = p.__dict__.setdefault("_transcript_cache", {})
     if take not in cache:
@@ -1046,6 +1075,7 @@ def load(spec_path: Path, root: Path | None = None, strict: bool = False) -> tup
     errors += _overlaps(p, spec["segments"], refined=True, skip=reported)[0]
     edge_errors, warnings, energy = _edge_rules(p, details, above)
     errors += edge_errors
+    warnings += _air_rules(p, details, above, pre, post)
     kept_errors, kept_warnings = _kept_speech(p, spec["segments"], strict)
     errors += kept_errors
     warnings += kept_warnings
@@ -1065,6 +1095,7 @@ def load(spec_path: Path, root: Path | None = None, strict: bool = False) -> tup
             errors.append(f'segments[{i}] has look "low" and lasts {s.dur:.2f} s; the low line is '
                           f"{LOW_LENGTH[0]:.1f}–{LOW_LENGTH[1]:.1f} s long")
     p.pieces = _split_dead_air(p, spec["segments"], above, pre, post)
+    p.segments[-1].freeze_after = max(p.segments[-1].freeze_after, END_TAIL)  # the video never stops on a syllable
     offs = p.offsets()
     bounds = [(offs[p.pieces.index(i)], offs[len(p.pieces) - p.pieces[::-1].index(i)])
               for i in range(len(spec["segments"]))]

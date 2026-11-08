@@ -11,7 +11,8 @@
   "properties": {
     "label": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 20
     },
     "from": {
       "type": "number",
@@ -35,7 +36,8 @@
     },
     "note": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 40
     },
     "mono": {
       "type": "boolean"

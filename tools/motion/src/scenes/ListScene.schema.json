@@ -11,6 +11,7 @@
     "title": {"type": "string", "x-text": true, "maxLength": 200},
     "items": {
       "type": "array",
+      "maxItems": 12,
       "items": {
         "type": "object",
         "required": ["text"],

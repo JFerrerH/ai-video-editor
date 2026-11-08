@@ -61,11 +61,13 @@
     },
     "kicker": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 24
     },
     "title": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 40
     },
     "darken": {
       "type": "number",

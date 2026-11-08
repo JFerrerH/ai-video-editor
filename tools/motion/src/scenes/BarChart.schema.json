@@ -19,14 +19,17 @@
     },
     "kicker": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 24
     },
     "title": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 40
     },
     "bars": {
       "type": "array",
+      "maxItems": 6,
       "items": {
         "type": "object",
         "required": [
@@ -36,7 +39,8 @@
         "properties": {
           "label": {
             "type": "string",
-            "x-text": true
+            "x-text": true,
+            "maxLength": 20
           },
           "value": {
             "type": "number"
@@ -49,11 +53,13 @@
     },
     "unit": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 8
     },
     "prefix": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 6
     },
     "decimals": {
       "type": "integer",

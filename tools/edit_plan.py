@@ -634,7 +634,8 @@ def build(root: Path, plan: Any, repo: Path = REPO, stills: bool = True, order: 
     tmp.write_text(json.dumps(spec, ensure_ascii=False, indent=1))
     try:
         res = SS.check(tmp, root, strict=True)
-        res["errors"] = [_hole_hint(_beat_name(e, event_beat, plan), sents, any(breaks.values())) for e in res["errors"]]
+        res["errors"] = [_air_hint(_hole_hint(_beat_name(e, event_beat, plan), sents, any(breaks.values())), segs, sents)
+                         for e in res["errors"]]
         pacing = {}
         if not res["errors"]:
             p2, rep = SS.load(tmp, root, strict=True)
@@ -719,6 +720,21 @@ def _hole_hint(msg: str, sents: list[dict], has_breaks: bool) -> str:
     if p and n:
         return f"{head}; it sits between {p} and {n}: leave {p} or {n} out of `keep`"
     return f"{head}; leave {p or n} out of `keep`"
+
+
+def _air_hint(msg: str, segs: list[dict], sents: list[dict]) -> str:
+    """A `no_air` error (a cut with less silence than it needs) names the kept sentence at that edge and what to do."""
+    m = re.match(r"segments\[(\d+)\]\.(in|out) [\d.]+ has [\d.]+ s of silence (?:before|after) the speech it keeps", msg)
+    if not m or int(m[1]) >= len(segs):
+        return msg
+    g, edge = segs[int(m[1])], m[2]
+    i = g["b"] if edge == "out" else g["a"]
+    sent = next((s for s in sents if s["take"] == g["take"] and s["a"] <= i <= s["b"]), None)
+    if not sent:
+        return msg
+    side, other = ("ends", "the sentence after it") if edge == "out" else ("starts", "the sentence before it")
+    return (f"{msg}; the cut {side} {sent['id']} (\"{sent['text'][:40]}\") with no pause there: keep {other} too, "
+            f"or {'end' if edge == 'out' else 'start'} at another sentence")
 
 
 def _cut_hint(msg: str) -> str:

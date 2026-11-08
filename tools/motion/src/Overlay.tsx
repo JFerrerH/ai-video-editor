@@ -106,13 +106,58 @@ export const HIDE_TEXT = `* { color: transparent !important; text-shadow: none !
   -webkit-text-stroke-color: transparent !important; } text, tspan { fill: transparent !important;
   stroke: transparent !important; }`;
 
+type Box = [number, number, number, number]; // x0, y0, x1, y1 in composition px
+
 export type MeasuredText = {
   text: string;
-  box: [number, number, number, number]; // x0, y0, x1, y1 in composition px
+  box: Box;
   size: number; // font size × every ancestor's scale, in composition px
+  card?: Box; // the nearest ancestor that draws a background, border or image (the event's root excluded)
 };
 
-/** The visible text nodes under `root`: box, rendered size and text. Invisible ones (opacity, hidden,
+/** An element that draws something: a background colour, an image or a border. */
+export type MeasuredShape = { tag: string; box: Box; card?: Box };
+
+const round = (r: DOMRect): Box => [r.left, r.top, r.right, r.bottom].map((v) => Math.round(v)) as Box;
+
+const draws = (cs: CSSStyleDeclaration): boolean => {
+  const bg = cs.backgroundColor.match(/[\d.]+/g)?.map(Number) ?? [];
+  const solid = bg.length >= 3 && (bg.length < 4 || bg[3] > 0.05);
+  const border = ["Top", "Right", "Bottom", "Left"].some(
+    (side) =>
+      parseFloat(cs.getPropertyValue(`border-${side.toLowerCase()}-width`)) > 0 &&
+      cs.getPropertyValue(`border-${side.toLowerCase()}-style`) !== "none" &&
+      (cs.getPropertyValue(`border-${side.toLowerCase()}-color`).match(/[\d.]+/g)?.map(Number)[3] ?? 1) > 0.05,
+  );
+  return solid || cs.backgroundImage !== "none" || border;
+};
+
+/** The box of the nearest ancestor of `el` (below `root`) that draws a background, border or image. */
+const cardOf = (el: HTMLElement, root: HTMLElement): Box | undefined => {
+  for (let a = el.parentElement; a && a !== root; a = a.parentElement) {
+    if (draws(getComputedStyle(a))) return round(a.getBoundingClientRect());
+  }
+  return undefined;
+};
+
+/** How visible `el` is: the product of its ancestors' opacity (0 when hidden), and their summed scale. */
+const visibility = (el: HTMLElement, root: HTMLElement) => {
+  let scale = 1;
+  let opacity = 1;
+  for (let a: HTMLElement | null = el; a && a !== root.parentElement; a = a.parentElement) {
+    const cs = getComputedStyle(a);
+    opacity *= parseFloat(cs.opacity);
+    if (cs.visibility === "hidden" || cs.display === "none") opacity = 0;
+    if (cs.transform && cs.transform !== "none") {
+      const m = new DOMMatrixReadOnly(cs.transform);
+      scale *= Math.hypot(m.b, m.d);
+    }
+    if (cs.scale && cs.scale !== "none") scale *= parseFloat(cs.scale.split(" ").pop() ?? "1");
+  }
+  return { scale, opacity };
+};
+
+/** The visible text nodes under `root`: box, rendered size, text and card. Invisible ones (opacity, hidden,
  *  zero size) are skipped: they can't cover a face or be unreadable. */
 const measureText = (root: HTMLElement): MeasuredText[] => {
   const out: MeasuredText[] = [];
@@ -125,37 +170,40 @@ const measureText = (root: HTMLElement): MeasuredText[] => {
     range.selectNodeContents(n);
     const r = range.getBoundingClientRect();
     if (r.width < 1 || r.height < 1) continue;
-    let scale = 1;
-    let opacity = 1;
-    for (let a: HTMLElement | null = el; a && a !== root.parentElement; a = a.parentElement) {
-      const cs = getComputedStyle(a);
-      opacity *= parseFloat(cs.opacity);
-      if (cs.visibility === "hidden" || cs.display === "none") opacity = 0;
-      if (cs.transform && cs.transform !== "none") {
-        const m = new DOMMatrixReadOnly(cs.transform);
-        scale *= Math.hypot(m.b, m.d);
-      }
-      if (cs.scale && cs.scale !== "none") scale *= parseFloat(cs.scale.split(" ").pop() ?? "1");
-    }
+    const { scale, opacity } = visibility(el, root);
     if (opacity < 0.05) continue;
     out.push({
       text,
-      box: [r.left, r.top, r.right, r.bottom].map((v) => Math.round(v)) as MeasuredText["box"],
+      box: round(r),
       size: Math.round(parseFloat(getComputedStyle(el).fontSize) * scale * 10) / 10,
+      card: cardOf(el, root),
     });
   }
   return out;
 };
 
-/** Measure mode: once the frame has laid out, logs one line `MEASURE [{event, texts}]` (each event's
- *  `measureText`), which tools/shortform.py reads from the still render's output. */
+/** Every visible element under `root` that draws a background, border or image, with its card. */
+const measureShapes = (root: HTMLElement): MeasuredShape[] => {
+  const out: MeasuredShape[] = [];
+  root.querySelectorAll<HTMLElement>("*").forEach((el) => {
+    if (!draws(getComputedStyle(el))) return;
+    const r = el.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1 || visibility(el, root).opacity < 0.05) return;
+    const cls = typeof el.className === "string" ? el.className.trim().split(/\s+/)[0] : "";
+    out.push({ tag: el.tagName.toLowerCase() + (cls ? "." + cls : ""), box: round(r), card: cardOf(el, root) });
+  });
+  return out;
+};
+
+/** Measure mode: once the frame has laid out, logs one line `MEASURE [{event, texts, shapes}]` (each event's
+ *  `measureText` and `measureShapes`), which tools/shortform.py reads from the still render's output. */
 export const MeasureText: React.FC = () => {
   const [handle] = useState(() => delayRender("Measuring text"));
   useEffect(() => {
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         const roots = Array.from(document.querySelectorAll<HTMLElement>("[data-event]"));
-        const out = roots.map((r) => ({ event: Number(r.dataset.event), texts: measureText(r) }));
+        const out = roots.map((r) => ({ event: Number(r.dataset.event), texts: measureText(r), shapes: measureShapes(r) }));
         console.log("MEASURE " + JSON.stringify(out));
         continueRender(handle);
       }),

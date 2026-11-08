@@ -42,6 +42,8 @@ Ops (args in brackets are optional):
                    `errors` (fail the job) and `warnings` (font entries their file can't honour)
   plan_ids         [order] → `sentences`: the transcript as numbered sentences F1…Fn (take, start, dur, text, restart_of);
                    order: the take names in the order they were shot (default: name order)
+  plan_precheck    [plan order] → `errors`, `warnings`, `duration`, `pacing` for edit/plan.json from the transcripts alone (no audio,
+                   no render, standard library only): what plan_build would refuse before it opens the audio
   plan_build       [plan stills order] → edit/short.json compiled from edit/plan.json (sentence IDs and words, no seconds),
                    then check --strict and (unless stills=false) stills --strict: returns spec, errors, warnings, duration, pacing, timeline
   preview_qa       [spec reuse] → transcribes edit/preview.mp4 and compares it with the edit: `errors` name each
@@ -203,6 +205,22 @@ def op_plan_ids(root: Path, a: dict) -> dict:
         return {"sentences": edit_plan.plan_ids(root, a["order"])}
     except edit_plan.PlanError as e:
         return {"errors": e.errors, "error": _one_line(e.errors[0])}
+
+
+def op_plan_precheck(root: Path, a: dict) -> dict:
+    import edit_plan
+    import plan_precheck
+
+    try:
+        plan = json.loads(a["plan"].read_text())
+    except ValueError as e:
+        raise JobError(f"`plan` is not valid JSON: {e}") from None
+    try:
+        transcripts = {f.stem: json.loads(f.read_text()) for f in (root / "edit" / "transcripts").glob("*.json")}
+        res = plan_precheck.check(plan, transcripts, a["order"])
+    except edit_plan.PlanError as e:
+        return {"errors": e.errors, "error": f"{len(e.errors)} plan error(s): {_one_line(e.errors[0])}"}
+    return {**res, **({"error": f"{len(res['errors'])} plan error(s): {_one_line(res['errors'][0])}"} if res["errors"] else {})}
 
 
 def op_plan_build(root: Path, a: dict) -> dict:
@@ -504,6 +522,10 @@ OPS: dict[str, Op] = {
         "dir": Arg("str", default="brand", path="out"),
     }),
     "plan_ids": Op(op_plan_ids, {"order": Arg("strs")}),
+    "plan_precheck": Op(op_plan_precheck, {
+        "plan": Arg("str", default="edit/plan.json", path="in"),
+        "order": Arg("strs"),
+    }),
     "plan_build": Op(op_plan_build, {
         "plan": Arg("str", default="edit/plan.json", path="in"),
         "stills": Arg("bool", default=True),

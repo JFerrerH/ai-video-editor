@@ -558,6 +558,17 @@ class PlanOps(unittest.TestCase):
         self.assertIn("longest_s", res["pacing"])
         self.assertIn("edit/short.json", res["outputs"])
 
+    def test_plan_precheck(self):
+        self.write_plan({"keep": ["F1", "F3-F4", "F6"], "hook": {"title": ["Hola mundo hoy"]}})
+        res, code = self.run_op("plan_precheck")
+        self.assertNotEqual(code, 0, res)
+        self.assertTrue(any(e.startswith("ECHO HookTitle") for e in res["errors"]), res)
+        self.write_plan({"keep": ["F1", "F3-F4", "F6"], "beats": [
+            {"at": "F3", "word": "tesis", "device": "DocCard", "props": {"kicker": "PLAN", "title": "Un ropero"}}]})
+        res, code = self.run_op("plan_precheck")
+        self.assertEqual((code, res["errors"]), (0, []), res)
+        self.assertGreater(res["duration"], 5)
+
     def test_plan_build_refuses_seconds(self):
         self.write_plan({"keep": ["F1"], "beats": [{"at": "F1", "device": "DocCard", "start": 12.4,
                                                     "props": {"kicker": "A", "title": "B"}}]})

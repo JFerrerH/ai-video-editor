@@ -20,12 +20,16 @@ The precheck module SHALL import only the Python standard library and modules th
 
 ### Requirement: The build runs the precheck first
 
-`plan_build` SHALL run the precheck's checks that do not depend on when anything plays (plan shape, false starts, schema of the plan, cuts the plan makes) before compiling, and stop on their errors with the same messages. The checks that do depend on timing (entrances that fit, echo, graphics sharing the screen, pacing) SHALL be computed by the same code from the audio-measured cut, so the build and the precheck give the same finding in the same words, and a plan the audio accepts is never refused for a time that only the precheck's word-time clock got wrong.
+`plan_build` SHALL run the precheck's checks that do not depend on when anything plays (plan shape, false starts, schema of the plan, cuts the plan makes) before compiling, and stop on their errors with the same messages.
 
 #### Scenario: Same errors both ways
 
 - **WHEN** a plan has an entrance that doesn't fit before the next beat
 - **THEN** `plan_precheck` and `plan_build` return the same error, naming the same beat and fix (a measured time may differ by hundredths)
+
+### Requirement: The build measures the timing checks from the audio
+
+`plan_build` SHALL compute the timing checks (entrances that fit, echo, graphics sharing the screen, pacing) with the precheck's own functions on the audio-measured cut, so a plan the audio accepts is never refused for a time only the word-time clock got wrong.
 
 #### Scenario: The word-time clock is only approximate
 

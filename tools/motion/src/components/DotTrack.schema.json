@@ -15,6 +15,7 @@
     },
     "stops": {
       "type": "array",
+      "maxItems": 8,
       "items": {
         "type": "number",
         "x-time": "event"
@@ -38,11 +39,13 @@
     },
     "value": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 12
     },
     "unit": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 8
     },
     "top": {
       "type": "number",

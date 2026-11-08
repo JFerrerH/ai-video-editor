@@ -10,11 +10,13 @@
   "properties": {
     "kicker": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 24
     },
     "handle": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 30
     },
     "logo": {
       "type": "string",

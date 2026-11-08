@@ -10,15 +10,18 @@
   "properties": {
     "kicker": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 24
     },
     "title": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 40
     },
     "subtitle": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 50
     },
     "subtitleAt": {
       "type": "number",
@@ -27,6 +30,7 @@
     },
     "rows": {
       "type": "array",
+      "maxItems": 8,
       "items": {
         "type": "object",
         "required": [
@@ -40,7 +44,8 @@
           },
           "text": {
             "type": "string",
-            "x-text": true
+            "x-text": true,
+            "maxLength": 60
           },
           "at": {
             "type": "number",

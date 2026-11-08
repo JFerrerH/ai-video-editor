@@ -9,6 +9,7 @@
     "bg": {"type": "string", "enum": ["light", "dark", "accent", "none"]},
     "lines": {
       "type": "array",
+      "maxItems": 6,
       "items": {
         "type": "object",
         "required": ["text"],

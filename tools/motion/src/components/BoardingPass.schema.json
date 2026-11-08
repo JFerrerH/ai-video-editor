@@ -11,30 +11,37 @@
   "properties": {
     "kicker": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 24
     },
     "carrier": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 20
     },
     "from": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 6
     },
     "to": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 6
     },
     "fromCity": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 20
     },
     "toCity": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 20
     },
     "details": {
       "type": "array",
+      "maxItems": 6,
       "items": {
         "type": "object",
         "required": [
@@ -44,11 +51,13 @@
         "properties": {
           "k": {
             "type": "string",
-            "x-text": true
+            "x-text": true,
+            "maxLength": 16
           },
           "v": {
             "type": "string",
-            "x-text": true
+            "x-text": true,
+            "maxLength": 30
           }
         }
       }

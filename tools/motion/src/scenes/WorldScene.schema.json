@@ -13,6 +13,7 @@
     },
     "words": {
       "type": "array",
+      "maxItems": 40,
       "items": {
         "type": "object",
         "required": [
@@ -24,7 +25,8 @@
         "properties": {
           "text": {
             "type": "string",
-            "x-text": true
+            "x-text": true,
+            "maxLength": 60
           },
           "t": {
             "type": "number",
@@ -67,6 +69,7 @@
         },
         "objects": {
           "type": "array",
+          "maxItems": 24,
           "items": {
             "type": "object"
           }
@@ -77,6 +80,7 @@
     },
     "actions": {
       "type": "array",
+      "maxItems": 24,
       "items": {
         "type": "object",
         "required": [
@@ -179,6 +183,7 @@
           },
           "steps": {
             "type": "array",
+            "maxItems": 6,
             "items": {
               "type": "string"
             }
@@ -192,7 +197,8 @@
     },
     "burst": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 20
     }
   }
 }

@@ -10,6 +10,7 @@
   "properties": {
     "messages": {
       "type": "array",
+      "maxItems": 12,
       "items": {
         "type": "object",
         "required": [

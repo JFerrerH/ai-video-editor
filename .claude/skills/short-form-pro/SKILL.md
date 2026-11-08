@@ -275,8 +275,20 @@ search bar show what the speaker is saying; a word behind the head lands the quo
    A Remotion failure names the event: `events[N] (<Type>) failed at <t> s: <error>`.
    **Strict mode** (`--strict` on `check`/`stills`/`render`, `"strict": true` in a job) is for edits nobody
    reviews by hand: locks, `keep_restart` and hand-set `frame` are refused, and every never-list finding
-   (`uv run tools/shortform.py check --never-list`) and loud edge is an error; `stills --strict` then reports
-   `renderable: false`.
+   (`uv run tools/shortform.py check --never-list`), loud edge and layout invariant is an error; `stills --strict`
+   then reports `renderable: false`. The invariants, which hold for every component, brand and framing:
+   - `outside`: every text and drawn shape sits inside its card (the nearest ancestor with a background) and the
+     frame (text between 100 and 1536 px vertically), measured at the finish of every entrance, not only at the
+     still. Shorten the text or lower the list; the schema limits (`maxLength`, `maxItems`) refuse the worst cases
+     before any still.
+   - `face` for captions: when captions move off a graphic, the new band must also clear the head; if no band does
+     it is a finding (fewer words, `"full": true`, or a `corner`/`side` move), never captions over the eyes.
+   - `no_air`: a cut with less silence than the edge refinement's air (0.10 s before an in-point, 0.12 s after an
+     out-point). In plans it names the sentence: keep the neighbouring sentence, or start/end at another one.
+   - The video ends with a tail: the last clip holds its picture `END_TAIL` (0.30 s, `tools/shortform.py`) and
+     the audio fades out in the silence there, so it never stops on a syllable.
+   `uv run tools/layout_matrix.py` draws every component at its schema limits (widest letters) on three brand
+   fixtures and two framings and exits 1 on any finding: run it before releasing a component or a limit change.
 7. `uv run tools/shortform.py render <edit>/short.json --preview` (~1 min for 60 s). Then verify (below), iterate,
    and render the final without `--preview`. Copy to `exports/<project>_<platform>_<YYYYMMDD>.mp4`.
    The final uses `DELIVERY_X264` (Instagram/TikTok master): source frame rate (don't upsample 30→60),

@@ -1205,7 +1205,7 @@ class AnyFrameRate(unittest.TestCase):
                                   "-vf", p._vf(s, 108, 192), "-f", "null", "-", "-progress", "pipe:1"],
                                  capture_output=True, text=True, check=True).stdout
             frames = int(out.split("frame=")[-1].split()[0])
-            self.assertAlmostEqual(frames / 30, s.dur, delta=0.07, msg=f"{fps} fps")
+            self.assertAlmostEqual(frames / 30, s.dur + s.freeze_after, delta=0.07, msg=f"{fps} fps")  # the last segment holds the end tail
 
     def test_a_still_near_the_end_of_a_zoomed_segment(self):
         p = self.project(24)

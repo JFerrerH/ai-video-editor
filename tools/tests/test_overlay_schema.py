@@ -209,5 +209,39 @@ class CoverageTest(unittest.TestCase):
         self.assertEqual(problems, [])
 
 
+class LimitsTest(unittest.TestCase):
+    """Every rendered text field declares maxLength and every list maxItems (specs/overlay-schema)."""
+
+    def walk(self, name, s, path=""):
+        if s.get("x-text"):
+            target = s.get("items", {}) if s.get("type") == "array" else s
+            if "maxLength" not in target:
+                yield f"{name}.{path}: text without maxLength"
+        if s.get("type") == "array":
+            if "maxItems" not in s:
+                yield f"{name}.{path}: list without maxItems"
+            yield from self.walk(name, s.get("items", {}), path + "[]")
+        for k, v in s.get("properties", {}).items():
+            yield from self.walk(name, v, f"{path}.{k}" if path else k)
+        for b in s.get("oneOf", []):
+            yield from self.walk(name, b, path)
+
+    def test_every_text_field_and_list_has_its_limit(self):
+        missing = [m for n, s in sorted(O.schemas().items()) if n != "event" for m in self.walk(n, s)]
+        self.assertEqual(missing, [])
+
+    def test_validation_refuses_values_over_the_limits(self):
+        bars = [{"value": 1, "label": "x", "at": 0.1}] * 99
+        self.assertIn("at most", msgs("AgeBars", {"bars": bars})["bars"])
+        long = [{"value": 1, "label": "x" * 999, "at": 0.1}]
+        self.assertIn("characters, got 999", msgs("AgeBars", {"bars": long})["bars[0].label"])
+
+    def test_examples_stay_within_limits(self):
+        for n, s in O.schemas().items():
+            for ex in s.get("examples", []):
+                if n != "event":
+                    self.assertEqual(O.validate(n, ex), [], n)
+
+
 if __name__ == "__main__":
     unittest.main()

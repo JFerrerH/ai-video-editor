@@ -11,7 +11,8 @@
   "properties": {
     "docTitle": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 40
     },
     "closeAt": {
       "type": "number",
@@ -25,5 +26,6 @@
         "frames": 6
       }
     }
-  ]
+  ],
+  "x-still-before": "closeAt"
 }

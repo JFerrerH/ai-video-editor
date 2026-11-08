@@ -15,23 +15,28 @@
   "properties": {
     "title": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 40
     },
     "placeholder": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 40
     },
     "email": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 40
     },
     "button": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 20
     },
     "success": {
       "type": "string",
-      "x-text": true
+      "x-text": true,
+      "maxLength": 40
     },
     "typeStart": {
       "type": "number",

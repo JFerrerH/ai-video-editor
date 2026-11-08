@@ -8,7 +8,7 @@ component in tools/motion/src/), plus the props the overlay layer reads on every
     from overlay_schema import validate, time_fields, cue_finish, text_fields
     validate("StatScene", {"value": "400.000"})    # [("value", 'must be a number, got the string "400.000"')]
 
-JSON Schema subset: `type` (or a list of types), `enum`, `minimum`/`maximum`, `maxLength`, `items`,
+JSON Schema subset: `type` (or a list of types), `enum`, `minimum`/`maximum`, `maxLength`, `maxItems`, `items`,
 `properties`, `required`, `additionalProperties` (false unless given: true or a schema), `oneOf`,
 `default` (documents the component's own default; cue `when` reads it). Engine annotations:
 
@@ -164,6 +164,8 @@ def _check(s: dict, v: Any, path: str, anchors: bool, owner: str, out: list[tupl
             out.append((path, f"must be {rng}, got {v}"))
     if isinstance(v, str) and "maxLength" in s and len(v) > s["maxLength"]:
         out.append((path, f"must be at most {s['maxLength']} characters, got {len(v)}"))
+    if isinstance(v, list) and "maxItems" in s and len(v) > s["maxItems"]:
+        out.append((path, f"must have at most {s['maxItems']} items, got {len(v)}"))
     if isinstance(v, list) and "items" in s:
         for i, x in enumerate(v):
             _check(s["items"], x, _join(path, i), anchors, owner, out)

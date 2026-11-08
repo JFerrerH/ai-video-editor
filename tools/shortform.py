@@ -28,21 +28,13 @@ from pathlib import Path
 from audio_env import envelope
 from brand import load_brand
 from errors import ToolError, cause_line
+from plan_precheck import FUNCTION_WORDS, echo, echo_norm
 from person_matte import cutout, cutout_still, make_matte, matte_windows
 
 REPO = Path(__file__).resolve().parent.parent
 MOTION = REPO / "tools" / "motion"
 SFX_DIR = REPO / "assets" / "sfx" / "synth"
 
-FUNCTION_WORDS = {
-    # es
-    "de", "que", "por", "la", "el", "y", "en", "un", "una", "me", "se", "les", "a", "mi",
-    "los", "las", "con", "para", "nos", "si", "tú", "esa", "lo", "es", "del", "al",
-    "unos", "unas", "nuestra", "nuestro", "nuestras", "nuestros", "su", "sus", "tus", "mis",
-    "este", "esta", "primer",
-    # en
-    "the", "a", "an", "of", "to", "and", "in", "on", "for", "with", "my", "is", "that",
-}
 
 
 def stage(src: Path, dst: Path) -> None:
@@ -150,7 +142,6 @@ BUBBLE_TOP = 1920 - round(CAMERA_MOVES["corner"]["scale"] * 1920) - 10
 CAMERA_HOLDS = 0.8  # a move on screen for this share of an event: the event is seen with the head where the move puts it
 # word-synced devices: emphasis, not restatement (the echo rule exempts them; captions don't emphasise what they show)
 SYNCED = ("Stickers", "BehindWord")
-SYNCED_MAX_WORDS = 3
 SYNC_SLACK = 0.3
 
 HDR_TRANSFERS = {"arib-std-b67", "smpte2084"}  # HLG, PQ
@@ -1372,51 +1363,12 @@ class Project:
     def caption_warnings(self) -> list[str]:
         return self._caption_moves()[1]
 
-    # text keys whose content a viewer reads on screen (code lines / emails are decoration)
-    ECHO_KEYS = {"label", "stamp", "title", "chip", "note", "kicker", "year", "text", "docTitle",
-                 "emphasis", "success", "button", "handle", "items", "lines_", "photos", "screens"}
-
-    @staticmethod
-    def _echo_exempt(e: dict) -> bool:
-        """Emphasis, not restatement: stickers and behind-the-head words of at most SYNCED_MAX_WORDS words each
-        (kinetic type on its spoken beat), and a notice quoting what the speaker reports."""
-        p = e.get("props", {})
-        if e["type"] == "Notice":
-            return True
-        if e["type"] == "Stickers":
-            return all(len(str(i.get("text", "")).split()) <= SYNCED_MAX_WORDS for i in p.get("items", []))
-        if e["type"] == "BehindWord":
-            return len(str(p.get("word", "")).split()) <= SYNCED_MAX_WORDS
-        return False
-
     def echo_check(self, window: float = 1.0) -> list[str]:
-        """Graphics must COMPLEMENT the captions, never repeat them. Flags any content word
-        (or number) shown by an overlay that is also captioned within ±window s of it."""
-        words = self.output_words()
-
-        def texts(obj, key=""):
-            if isinstance(obj, str):
-                if key in self.ECHO_KEYS:
-                    yield obj
-            elif isinstance(obj, dict):
-                for k, v in obj.items():
-                    yield from texts(v, k if k in self.ECHO_KEYS else key)
-            elif isinstance(obj, list):
-                for v in obj:
-                    yield from texts(v, key)
-
-        out = []
-        for e in self.events:
-            if self._echo_exempt(e):
-                continue
-            a, b = e["start"] - window, e["start"] + e["duration"] + window
-            spoken = {_norm(self.clean(w["text"])) for w in words if a <= w["start"] <= b}
-            shown = {_norm(t) for s in texts(e.get("props", {})) for t in re.split(r"[\s·/\n]+", s)}
-            hits = sorted(t for t in shown & spoken
-                          if t and (t.isdigit() or t.endswith("%") or (len(t) > 3 and t not in FUNCTION_WORDS)))
-            if hits:
-                out.append(f"ECHO {e['type']} @ {e['start']:.2f}s shows {hits} while the captions say them")
-        return out
+        """Graphics must COMPLEMENT the captions, never repeat them (`plan_precheck.echo`, which the plan precheck
+        runs on word times): any content word (or number) shown by an overlay that is also captioned within
+        ±window s of it."""
+        words = [{"text": self.clean(w["text"]), "start": w["start"]} for w in self.output_words()]
+        return echo(self.events, words, window)
 
     def build_ass(self, out: Path) -> None:
         st = {"font": "Avenir Next Heavy", "size": 84, "outline": 6, "shadow": 2, "margin_v": 640,
@@ -1510,8 +1462,7 @@ def loudness(path: Path) -> tuple[float, float]:
     return i, tp
 
 
-def _norm(s: str) -> str:
-    return re.sub(r"[^\wáéíóúñü%]", "", s.lower())
+_norm = echo_norm
 
 
 def still_time(type_: str, props: dict, duration: float, fps: int = 30) -> float:

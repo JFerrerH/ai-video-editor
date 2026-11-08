@@ -96,15 +96,22 @@ class PlanError(Exception):
 def load_words(root: Path, order: list[str] | None = None) -> tuple[dict, dict, dict]:
     """({take: words}, {take: the transcript's `restarts`}, {take: its `breaks`}), takes in `order` (the rest after
     them), else in name order. The same order gives the same sentence IDs."""
+    return words_from({f.stem: json.loads(f.read_text()) for f in (root / "edit" / "transcripts").glob("*.json")},
+                      order, f"no transcripts in {root / 'edit' / 'transcripts'}; run transcribe first")
+
+
+def words_from(transcripts: dict[str, dict], order: list[str] | None = None,
+               empty: str = "no transcripts; run transcribe first") -> tuple[dict, dict, dict]:
+    """`load_words` from transcript JSON already read: {take: transcript}."""
     words, restarts, breaks = {}, {}, {}
     rank = {take: n for n, take in enumerate(order or [])}
-    for f in sorted((root / "edit" / "transcripts").glob("*.json"), key=lambda p: (rank.get(p.stem, len(rank)), p.stem)):
-        d = json.loads(f.read_text())
-        words[f.stem] = [w for w in d["words"] if w.get("type", "word") == "word" and w["text"].strip()]
-        restarts[f.stem] = d.get("restarts") or []
-        breaks[f.stem] = d.get("breaks") or []
+    for take in sorted(transcripts, key=lambda t: (rank.get(t, len(rank)), t)):
+        d = transcripts[take]
+        words[take] = [w for w in d["words"] if w.get("type", "word") == "word" and w["text"].strip()]
+        restarts[take] = d.get("restarts") or []
+        breaks[take] = d.get("breaks") or []
     if not words:
-        raise PlanError([f"no transcripts in {root / 'edit' / 'transcripts'}; run transcribe first"])
+        raise PlanError([empty])
     return words, restarts, breaks
 
 
@@ -242,8 +249,9 @@ def _names_seconds(where: str, obj: Any, errors: list[str], skip: tuple = ()) ->
                           f'(`"at": "F4", "word": "…"`)')
 
 
-def validate_plan(plan: Any, sents: list[dict], words: dict) -> list[str]:
-    """Every problem with a plan, each naming the field and the fix (empty = valid)."""
+def validate_plan(plan: Any, sents: list[dict], words: dict, brands: set[str] | None = None) -> list[str]:
+    """Every problem with a plan, each naming the field and the fix (empty = valid). `brands`: the slugs of the brand
+    kits that exist (default: the folders of brands/ that have a brand.json)."""
     errors: list[str] = []
     if not isinstance(plan, dict):
         return ["plan: must be a JSON object"]
@@ -260,7 +268,8 @@ def validate_plan(plan: Any, sents: list[dict], words: dict) -> list[str]:
                                or not all(isinstance(v, str) and v.strip() for v in fixes.values())):
         errors.append('plan.captions: must be {"fixes": {"heard": "said"}}, a misheard word and what was said')
     brand = plan.get("brand", "none")
-    if not isinstance(brand, str) or (brand != "none" and not (REPO / "brands" / brand / "brand.json").exists()):
+    known = (lambda b: b in brands) if brands is not None else (lambda b: (REPO / "brands" / b / "brand.json").exists())
+    if not isinstance(brand, str) or (brand != "none" and not known(brand)):
         errors.append(f"plan.brand: no brand kit brands/{brand}/; use \"none\" or a slug that exists")
 
     kept: list[str] = []
@@ -467,48 +476,18 @@ def build(root: Path, plan: Any, repo: Path = REPO, stills: bool = True, order: 
     if errs := validate_plan(plan, sents, words):
         raise PlanError(errs)
     by_id = {s["id"]: s for s in sents}
-    kept = [i for item in plan["keep"] for i in _ids(item, by_id, "keep", [])]
-    story = [by_id[i] for i in kept]
     errors: list[str] = []
 
-    # segments: kept runs, the low line split out of its run
+    # the precheck first, the part that doesn't depend on when anything plays: refused here with the words the
+    # precheck gives. What does depend on it (entrances, echo, shared screen, pacing) is computed below from the
+    # audio with the same code: the precheck's clock is made of word times, which Whisper's stamps can move by seconds
+    import plan_precheck as PC
+
+    if early := PC.check_words(plan, words, by_id, timing=False)["errors"]:
+        raise PlanError(early)
+    cut = PC.cut_plan(plan, words, by_id)
+    segs, low_ids, breaks = cut["segs"], cut["low_ids"], cut["breaks"]
     low = plan.get("low")
-    low_ids = None
-    if low:
-        ls = by_id[low["at"]]
-        low_ids = _span(words, ls, low["words"])
-    # a zoom belongs to a cut, so a punch-in's sentence is a cut of its own (the audio runs on through the join)
-    breaks: dict[str, set[int]] = {}
-    for b in plan.get("beats") or []:
-        if b.get("punch"):
-            s = by_id[b["at"]]
-            breaks.setdefault(s["take"], set()).update({s["a"], s["b"] + 1})
-    if low_ids:
-        breaks.setdefault(by_id[low["at"]]["take"], set()).update({low_ids[0], low_ids[1] + 1})
-    for take, xs in breaks.items():  # a cut made for the plan must fall in a pause
-        ws = words[take]
-        for x in sorted(xs):
-            inside = any(r["take"] == take and r["a"] < x <= r["b"] for r in _runs(story))
-            if inside and 0 < x < len(ws) and ws[x]["start"] - ws[x - 1]["end"] < BREAK_GAP:
-                what = "the low line" if low_ids and x in (low_ids[0], low_ids[1] + 1) else "a punch-in"
-                errors.append(f"{what} would cut between \"{ws[x - 1]['text'].strip()}\" and \"{ws[x]['text'].strip()}\", which run "
-                              f"together ({ws[x]['start'] - ws[x - 1]['end']:.2f} s); a cut needs a pause of {BREAK_GAP:g} s: "
-                              f"{'pick other words' if what == 'the low line' else 'punch in on a sentence that follows a pause'}")
-    if errors:
-        raise PlanError(errors)
-    segs: list[dict] = []   # {take, a, b, low}
-    for r in _runs(story):
-        ws = words[r["take"]]
-        cuts = sorted({r["a"], r["b"] + 1} | {x for x in breaks.get(r["take"], ()) if r["a"] < x <= r["b"]})
-        for x in range(r["a"] + 1, r["b"] + 1):  # long pauses inside the run, when both sides stay long enough
-            if ws[x]["start"] - ws[x - 1]["end"] >= SPLIT_GAP and x not in cuts:
-                before = max((c for c in cuts if c < x), default=r["a"])
-                after = min((c for c in cuts if c > x), default=r["b"] + 1)
-                if ws[x - 1]["end"] - ws[before]["start"] >= MIN_PIECE and ws[after - 1]["end"] - ws[x]["start"] >= MIN_PIECE:
-                    cuts = sorted(cuts + [x])
-        for a, nxt in zip(cuts, cuts[1:]):
-            is_low = bool(low_ids) and r["take"] == by_id[low["at"]]["take"] and (a, nxt - 1) == low_ids
-            segs.append({"take": r["take"], "a": a, "b": nxt - 1, "low": is_low})
     spec_segs = []
     for g in segs:
         ws = words[g["take"]]
@@ -535,51 +514,17 @@ def build(root: Path, plan: Any, repo: Path = REPO, stills: bool = True, order: 
         g["_dur"] = 0.0
     base = {"version": 1, "brand": plan.get("brand", "none"), "sources": sources, "segments": spec_segs}
     p, _ = load(base, ".plan-cut.json")
-    offs = p.offsets()
-    total = offs[-1]
-
-    def out_t(take: str, t: float) -> float:
-        return p.at(take, t)
-
     # where each spec segment plays in the output (the engine may split one at its dead air into several pieces)
-    pieces = list(p.pieces)
-    bounds = [(offs[pieces.index(k)], offs[len(pieces) - pieces[::-1].index(k)]) for k in range(len(segs))]
-    for g, (a, b) in zip(segs, bounds):
-        g["_dur"] = b - a
+    clock = PC.Clock(segs, [(p.pieces[i], g.take, g.t_in, g.t_out) for i, g in enumerate(p.segments)],
+                     [g.out_dur for g in p.segments])
+    total, bounds, out_t = clock.total, clock.bounds, clock.out_t
 
-    def first_in_seg(take: str, i: int) -> int | None:
-        k = seg_of(take, i)
-        return k if segs[k]["a"] == i else None
+    first_in_seg = lambda take, i: PC.first_in_seg(segs, take, i)  # noqa: E731
 
     # beats in the order they play
-    beats = []
-    for n, b in enumerate(plan.get("beats") or []):
-        s = by_id[b["at"]]
-        i = _find(words, s, b["word"]) if b.get("word") else s["a"]
-        w = words[s["take"]][i]
-        k0 = first_in_seg(s["take"], i)
-        try:  # the first word of a cut is stamped early, in the silence before it: it plays where its segment starts
-            st = bounds[k0][0] if k0 is not None else out_t(s["take"], w["start"])
-        except ValueError:
-            errors.append(f"plan.beats[{n}]: {b['at']} \"{w['text'].strip()}\" is cut out of the video")
-            continue
-        until = by_id[b.get("until", b["at"])]
-        last = until["b"]
-        if b.get("through"):  # the word the hold ends on, after the beat's own word when they share a sentence
-            j = _find(words, until, b["through"], i if until is s else None)
-            last = j if j is not None else last
-        try:
-            hold = out_t(until["take"], words[until["take"]][last]["end"])
-        except ValueError:
-            hold = st + HOLD_MIN
-        beats.append({"n": n, "b": b, "s": s, "i": i, "w": w, "st": st, "hold": hold, "seg0": k0,
-                      "label": f"beat {n} ({b['at']} \"{w['text'].strip()}\"" + (f", {b['device']}" if b.get("device") else "") + ")"})
-    timed = sorted((x for x in beats if x["b"].get("device") or x["b"].get("camera") not in (None, "none")),
-                   key=lambda x: x["st"])
-    for x, y in zip(timed, timed[1:]):
-        if y["st"] - x["st"] < 0.3:
-            errors.append(f"{x['label']} and {y['label']} start within 0.3 s of each other; a beat needs its own moment: "
-                          f"put them on different words")
+    times = PC.compile_times(words, by_id, plan, segs, clock)
+    beats, timed, cta_st = times["beats"], times["timed"], times["cta_st"]
+    errors += times["errors"]
     if errors:
         raise PlanError(errors)
 
@@ -598,73 +543,22 @@ def build(root: Path, plan: Any, repo: Path = REPO, stills: bool = True, order: 
     event_beat: dict[int, int] = {}
     cue_words: dict[int, dict] = {}
 
-    cta_st = None  # the CTA's card takes over the space: a graphic before it ends in time
-    if plan.get("cta"):
-        cs = by_id[plan["cta"]["at"]]
-        ci = _find(words, cs, plan["cta"]["word"]) if plan["cta"].get("word") else cs["a"]
-        ck = first_in_seg(cs["take"], ci)
-        cta_st = bounds[ck][0] if ck is not None else out_t(cs["take"], words[cs["take"]][ci]["start"])
-
     for j, x in enumerate(timed):
         b, s, w, st = x["b"], x["s"], x["w"], x["st"]
         take = s["take"]
         dev = b.get("device")
-        nxt = timed[j + 1]["st"] - NEXT_GAP if j + 1 < len(timed) else total
-        if cta_st is not None and cta_st > st:
-            nxt = min(nxt, cta_st - NEXT_GAP)
-        limit = min(nxt, total, st + HOLD_MAX)
-        dur = HOLD_FIXED[dev] if dev in HOLD_FIXED else min(max(x["hold"] - st, HOLD_MIN), HOLD_MAX)
-        dur = min(dur, nxt - st)
-        layer = b.get("layer")
-        cam = b.get("camera")
-        props: dict = {}
-        if dev:
-            props = json.loads(json.dumps(b.get("props", {})))
-            mode = props.get("mode")
-            if dev == "PhonePanel" and mode in PHONE_PANEL:
-                layer = layer or PHONE_PANEL[mode][0]
-                cam = PHONE_PANEL[mode][1] if cam is None else cam
-            layer = layer or DEFAULT_LAYER.get(dev, "front")
-            if cam is None:
-                cam = DEFAULT_CAMERA.get(dev)
-            # time props: the word each lands on, in the beat's own words, from its word on
-            until_s = by_id[b.get("until", b["at"])]
-            stop = until_s["b"] if until_s["take"] == take else s["b"]
-            for path, v, parent, key in overlay_schema.time_fields(dev, props):
-                i = _find(words, s, v["word"], x["i"], stop)
-                if i is None:
-                    errors.append(f"{x['label']}.props.{path}: the word {v['word']!r} isn't between "
-                                  f"\"{w['text'].strip()}\" and the end of the hold")
-                    continue
-                parent[key] = _anchor(take, words[take][i])
+        props: dict = json.loads(json.dumps(b.get("props", {}))) if dev else {}
+        layer, cam = PC.layer_camera(b, dev, props)
+        if dev:  # time props: the word each lands on, in the beat's own words, from its word on
+            PC.resolve_cues(x, dev, props, words, by_id, errors)
         kind = cam if isinstance(cam, str) else (cam or {}).get("kind")
         if dev:
             events.append({"type": dev, "start": _anchor(take, w) if x["seg0"] is None else {"seg": x["seg0"], "edge": "start"},
                            "duration": 0.0, "props": props, "layer": layer, "name": f"beat {x['n']}",
                            **({"object": b["object"]} if b.get("object") else {})})
             event_beat[len(events) - 1] = x["n"]
-        if dev:
-            _fill_array_cues(dev, props, max(dur, HOLD_MIN))
-        # entrances must have finished before the beat ends: make the hold long enough, or say what doesn't fit
-        need = 0.0
-        if dev:
-            numeric = json.loads(json.dumps(props))
-            for path, v, parent, key in overlay_schema.time_fields(dev, numeric):
-                try:
-                    parent[key] = max(0.0, out_t(take, _word_at(words[take], v["after"], v["word"]) ) - st)
-                except (ValueError, TypeError, StopIteration):
-                    parent[key] = 0.0
-            ends = [e for _, _, e in overlay_schema.cue_finish(dev, numeric, FPS, max(dur, HOLD_MAX))]
-            need = max(ends, default=0.0) + CUE_MARGIN
-        if need > dur:
-            dur = min(need, limit - st)
-        if dev and need - CUE_MARGIN + CUE_MIN > dur + 0.03:  # the margin yields to the room there is; the entrances don't
-            errors.append(f"{x['label']}: its entrances need {need - CUE_MARGIN:.2f} s, but only {dur:.2f} s fit before "
-                          f"{'the next beat' if limit == nxt else 'the end of the video'}; start this beat on an earlier "
-                          f"word, use fewer items, or move the next beat")
-        if dur < min(0.5, HOLD_FIXED.get(dev, 0.5)):
-            errors.append(f"{x['label']}: only {dur:.1f} s fit before the next beat or the end of the video")
-        dur = round(dur, 2)
+        # the hold: long enough for the entrances, or say what doesn't fit
+        dur = PC.fit_beat(x, dev, props, words, PC.later_start(timed, j), cta_st, clock, errors)
         if dev:
             events[-1]["duration"] = dur
             if "Waitlist" == dev or dev in SFX_PROP:
@@ -700,11 +594,8 @@ def build(root: Path, plan: Any, repo: Path = REPO, stills: bool = True, order: 
             punch_at[0] = _src_anchor(words[segs[0]["take"]][mid])
         lines = [{"text": t, **({"emphasis": hook["emphasis"]} if hook.get("emphasis") and hook["emphasis"] in t else {})}
                  for t in hook["title"]]
-        # the hook gives way to the first graphic: two cards never share the space above the head
-        first = min((x["st"] for x in beats if x["b"].get("device") and x["b"]["device"] not in HOLD_FIXED
-                     and not x["b"].get("props", {}).get("full")), default=HOOK_MAX)
         events.insert(0, {"type": "HookTitle", "start": 0, "layer": "front", "name": "hook",
-                          "duration": round(max(HOLD_MIN, min(HOOK_MAX, max(HOOK_MIN, segs[0]["_dur"]), first - NEXT_GAP)), 2),
+                          "duration": PC.hook_duration(segs[0]["_dur"], beats),
                           "props": {"lines": lines}})
         event_beat = {i + 1: n for i, n in event_beat.items()}
         add_sfx("hook", 0.06)
@@ -723,8 +614,8 @@ def build(root: Path, plan: Any, repo: Path = REPO, stills: bool = True, order: 
         i = _find(words, s, cta["word"]) if cta.get("word") else s["a"]
         k0 = first_in_seg(s["take"], i)
         start = _anchor(s["take"], words[s["take"]][i]) if k0 is None else {"seg": k0, "edge": "start"}
-        later = [x["st"] for x in timed if x["b"].get("device") and x["b"]["device"] not in HOLD_FIXED and x["st"] > cta_st]
-        until = {"duration": round(max(HOLD_MIN, min(later) - NEXT_GAP - cta_st), 2)} if later \
+        held = PC.cta_duration(cta_st, timed)
+        until = {"duration": held} if held is not None \
             else {"end": {"seg": len(spec_segs) - 1, "edge": "end"}}  # the next graphic takes over, or it holds to the end
         events.append({"type": "HandleCard", "start": start, **until,
                        "layer": "front", "name": "cta",
@@ -842,42 +733,16 @@ def _cut_hint(msg: str) -> str:
 
 
 def _shared_screen(p: Any) -> list[str]:
-    """Two graphics on screen at once, one over the other. A Flash is over at once; a full-screen scene covers the rest."""
-    shown = sorted((e for e in p.events if e["type"] not in ("Captions", *HOLD_FIXED) and not e.get("props", {}).get("full")),
-                   key=lambda e: e["start"])
-    out = []
-    for a, b in zip(shown, shown[1:]):
-        over = a["start"] + a["duration"] - b["start"]
-        if over > NEXT_GAP:
-            out.append(f"{a['type']} and {b['type']} are both on screen for {over:.2f} s from {b['start']:.2f} s, one over the "
-                       f"other; start the second on a later word, or end the first sooner with `through`")
-    return out
+    import plan_precheck as PC
+
+    return PC.shared_screen(p.events)
 
 
 def _pacing(p: Any, total: float) -> dict:
-    """Visual aids on screen (an event or a camera move), not cuts: the longest stretch with none. Over `PACING_WARN`
-    it is a warning, over `PACING_MAX` an error. Nothing is ever added to fill it: the author decides what the line
-    needs."""
-    spans = sorted([(e["start"], min(total, e["start"] + e["duration"])) for e in p.events if e["type"] != "Captions"]
-                   + [(m["start"], m["end"]) for m in p.camera])
-    gaps, t = [], 0.0
-    for a, b in spans:
-        if a > t:
-            gaps.append((a - t, t))
-        t = max(t, b)
-    if total > t:
-        gaps.append((total - t, t))
-    gap, at = max(gaps, default=(0.0, 0.0))
-    covered = total - sum(g for g, _ in gaps)
-    out = {"longest_s": round(gap, 1), "from_s": round(at, 1), "covered": round(covered / total, 2) if total else 0.0,
-           "warn_over_s": PACING_WARN, "max_s": PACING_MAX}
-    msg = (f"pacing: no graphic or camera move on screen for {gap:.1f} s from {at:.1f} s; show what the line says there "
-           f"(a device on one of its words), or cut tighter. Nothing was added")
-    if gap > PACING_MAX:
-        out["error"] = msg
-    elif gap > PACING_WARN:
-        out["warning"] = msg
-    return out
+    import plan_precheck as PC
+
+    return PC.pacing([(e["start"], min(total, e["start"] + e["duration"])) for e in p.events if e["type"] != "Captions"]
+                     + [(m["start"], m["end"]) for m in p.camera], total)
 
 
 # ── command line ────────────────────────────────────────────────────────────

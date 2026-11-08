@@ -111,7 +111,9 @@ uv run tools/edit_plan.py build footage/<p>          # → edit/short.json: chec
 uv run tools/shortform.py stills footage/<p>/edit/short.json --strict   # then render --preview, then:
 uv run tools/preview_qa.py footage/<p>               # listens to the preview: words, repeats, restarts, cuts
 ```
-(The same three steps are the headless ops `plan_ids`, `plan_build`, `preview_qa`; `uv run tools/edit_plan.py schema`
+(The same three steps are the headless ops `plan_ids`, `plan_build`, `preview_qa`; `plan_precheck` answers in a second,
+with no audio, what `plan_build` would refuse from the plan and transcript alone (echo, entrances that don't fit, a false
+start kept, a cut with no pause, pacing), and `plan_build` runs its timing-independent part first (its times come from word times, so `timed_errors` are approximate); `uv run tools/edit_plan.py schema`
 prints the plan's JSON Schema.) Run `conform`, `transcribe` and `face` first, as in Workflow 1 and 4.
 
 Sentences also end at the transcript's `breaks`: a false start is its own flagged sentence even after a line with no

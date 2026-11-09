@@ -29,7 +29,7 @@
     },
     "bars": {
       "type": "array",
-      "maxItems": 6,
+      "maxItems": 3,
       "items": {
         "type": "object",
         "required": [
@@ -54,7 +54,7 @@
     "unit": {
       "type": "string",
       "x-text": true,
-      "maxLength": 8
+      "maxLength": 5
     },
     "prefix": {
       "type": "string",

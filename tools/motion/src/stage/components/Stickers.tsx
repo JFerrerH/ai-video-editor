@@ -20,7 +20,9 @@ export const Stickers: React.FC<{ durationInFrames: number; items: Item[] }> = (
             style={{
               position: "absolute", left: s.x, top: s.y, transform: `rotate(${s.rot ?? 0}deg) scale(${0.6 + 0.4 * k})`,
               opacity: Math.min(1, k * 2) * o, background: colors.ink, color: colors.bg, padding: "14px 34px 20px", borderRadius: 26,
-              fontFamily: fonts.serif, fontStyle: "italic", fontSize: s.size ?? 84, boxShadow: "0 18px 40px rgba(0,0,0,.35)", whiteSpace: "nowrap",
+              fontFamily: fonts.serif, fontStyle: "italic", fontSize: s.size ?? 84, boxShadow: "0 18px 40px rgba(0,0,0,.35)",
+              // short text stays on one line; long text wraps before the frame's right edge (a sticker placed at x)
+              width: "max-content", maxWidth: Math.max(240, 1080 - 40 - s.x), boxSizing: "border-box", overflowWrap: "anywhere",
             }}
           >
             {s.text}

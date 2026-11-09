@@ -12,36 +12,36 @@
     "kicker": {
       "type": "string",
       "x-text": true,
-      "maxLength": 24
+      "maxLength": 15
     },
     "carrier": {
       "type": "string",
       "x-text": true,
-      "maxLength": 20
+      "maxLength": 16
     },
     "from": {
       "type": "string",
       "x-text": true,
-      "maxLength": 6
+      "maxLength": 4
     },
     "to": {
       "type": "string",
       "x-text": true,
-      "maxLength": 6
+      "maxLength": 4
     },
     "fromCity": {
       "type": "string",
       "x-text": true,
-      "maxLength": 20
+      "maxLength": 16
     },
     "toCity": {
       "type": "string",
       "x-text": true,
-      "maxLength": 20
+      "maxLength": 16
     },
     "details": {
       "type": "array",
-      "maxItems": 6,
+      "maxItems": 3,
       "items": {
         "type": "object",
         "required": [
@@ -52,12 +52,12 @@
           "k": {
             "type": "string",
             "x-text": true,
-            "maxLength": 16
+            "maxLength": 4
           },
           "v": {
             "type": "string",
             "x-text": true,
-            "maxLength": 30
+            "maxLength": 12
           }
         }
       }

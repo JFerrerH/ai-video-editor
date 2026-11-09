@@ -35,7 +35,7 @@ export const Gauge: React.FC<{ durationInFrames: number; label: string; stamp: s
         <circle cx={310} cy={250} r={22} fill={colors.ink} />
       </svg>
       {st > 0 ? (
-        <div style={{ position: "absolute", left: 90, top: -34, width: 440, textAlign: "center", transform: `rotate(-4deg) scale(${1.6 - 0.6 * st})`, opacity: Math.min(1, st * 1.5), border: `5px solid ${stampColor}`, color: stampColor, fontFamily: fonts.mono, fontWeight: 700, fontSize: 30, letterSpacing: 2, whiteSpace: "nowrap", padding: "8px 0", borderRadius: 10, background: colors.bg }}>
+        <div data-overhang style={{ position: "absolute", left: 90, top: -34, width: 440, textAlign: "center", transform: `rotate(-4deg) scale(${1.6 - 0.6 * st})`, opacity: Math.min(1, st * 1.5), border: `5px solid ${stampColor}`, color: stampColor, fontFamily: fonts.mono, fontWeight: 700, fontSize: 30, letterSpacing: 2, whiteSpace: "nowrap", padding: "8px 0", borderRadius: 10, background: colors.bg }}>
           {stamp}
         </div>
       ) : null}

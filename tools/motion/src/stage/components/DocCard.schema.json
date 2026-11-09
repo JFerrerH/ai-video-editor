@@ -25,17 +25,17 @@
     "kicker": {
       "type": "string",
       "x-text": true,
-      "maxLength": 60
+      "maxLength": 12
     },
     "title": {
       "type": "string",
       "x-text": true,
-      "maxLength": 80
+      "maxLength": 24
     },
     "italic": {
       "type": "string",
       "x-text": true,
-      "maxLength": 60
+      "maxLength": 15
     },
     "fillAt": {
       "type": "number",
@@ -68,7 +68,7 @@
     "tag": {
       "type": "string",
       "x-text": true,
-      "maxLength": 30
+      "maxLength": 11
     },
     "tagAt": {
       "type": "number",

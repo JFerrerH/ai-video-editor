@@ -13,11 +13,11 @@
     "title": {
       "type": "string",
       "x-text": true,
-      "maxLength": 40
+      "maxLength": 11
     },
     "items": {
       "type": "array",
-      "maxItems": 12,
+      "maxItems": 3,
       "items": {
         "type": "object",
         "required": [
@@ -28,7 +28,7 @@
           "text": {
             "type": "string",
             "x-text": true,
-            "maxLength": 60
+            "maxLength": 13
           },
           "at": {
             "type": "number",
@@ -37,7 +37,7 @@
           "amount": {
             "type": "string",
             "x-text": true,
-            "maxLength": 12
+            "maxLength": 11
           }
         }
       }
@@ -45,12 +45,12 @@
     "total": {
       "type": "string",
       "x-text": true,
-      "maxLength": 12
+      "maxLength": 10
     },
     "stamp": {
       "type": "string",
       "x-text": true,
-      "maxLength": 14
+      "maxLength": 10
     },
     "stampAt": {
       "type": "number",

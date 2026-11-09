@@ -11,7 +11,7 @@
     "query": {
       "type": "string",
       "x-text": true,
-      "maxLength": 40
+      "maxLength": 23
     },
     "typeEnd": {
       "type": "number",

@@ -15,7 +15,7 @@
     },
     "stops": {
       "type": "array",
-      "maxItems": 8,
+      "maxItems": 4,
       "items": {
         "type": "number",
         "x-time": "event"

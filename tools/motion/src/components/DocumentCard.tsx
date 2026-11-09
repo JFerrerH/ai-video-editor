@@ -54,7 +54,7 @@ export const DocumentCard: React.FC<{
           translate: `0px ${interpolate(cIn, [0, 1], [enterFrom === "above" ? -700 : 700, 0])}px`,
         }}
       >
-        <div style={{ fontFamily: fonts.mono, fontSize: 26, letterSpacing: 5, color: colors.muted }}>{kicker}</div>
+        <div style={{ fontFamily: fonts.mono, fontSize: 28, letterSpacing: 5, color: colors.muted }}>{kicker}</div>
         <div style={{ height: 3, width: 90, background: colors.ink, margin: "22px 0 26px" }} />
         <div style={{ fontFamily: fonts.serif, fontSize: 64, lineHeight: 1.08, color: colors.ink, letterSpacing: -1 }}>
           {parts[0]}

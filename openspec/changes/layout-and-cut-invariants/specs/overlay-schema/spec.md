@@ -16,7 +16,9 @@ Every component schema field whose text is rendered SHALL declare `maxLength`, a
 
 ### Requirement: Layout matrix
 
-`tools/layout_matrix.py` SHALL render every component in measure mode with generated props: every text field at its `maxLength` with the widest letters of the brand's font, every list at `maxItems`, on three brand fixtures (neutral, dark, pale accent) and two head boxes (close-up, medium shot). It SHALL report each geometry, size, contrast and face finding with the component, the props and the fixture, and exit 1 when there is any.
+`tools/layout_matrix.py` SHALL render every component in measure mode with generated props: every text field at its `maxLength` in wide capitals (M W O Q D H N U cycled, about 1.5 times the width of ordinary text; digits for a field whose example has no letters), every list at `maxItems`, on three brand fixtures (neutral, dark, pale accent) and two head boxes (close-up, medium shot). It SHALL report each geometry, size, contrast and face finding with the component, the props and the fixture, and exit 1 when there is any. A `face` finding for a floating card whose own example, with its lists at `maxItems`, does not fit above that head either SHALL be listed as "no room" without failing: no limit can fix the framing, and a plan answers it as the finding says.
+
+A limit SHALL NOT be lower than the longest text or list a skill example, test fixture or project plan already uses; a component that can't fit that SHALL be changed to fit it.
 
 #### Scenario: A component that overflows at its own limit
 

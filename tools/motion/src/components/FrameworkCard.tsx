@@ -122,6 +122,7 @@ export const FrameworkCard: React.FC<{
               fontWeight: 600,
               letterSpacing: 7,
               color: readable(colors.muted, backdrop.full && backdrop.dark ? DARK_GLOW : colors.bg, colors.ink),
+              ...(backdrop.full ? {} : { background: colors.bg, padding: "8px 20px", borderRadius: 999 }),
               marginBottom: 6,
               opacity: kin,
             }}

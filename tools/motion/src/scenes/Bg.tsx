@@ -1,18 +1,18 @@
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
-import { Brand, DARK_GLOW, accentOn, useBrand } from "../theme";
+import { Brand, DARK_GLOW, accentOn, luminance, useBrand } from "../theme";
 
 /** Scene background tones. `none` = transparent (the scene sits on whatever is under it). */
 export type BgKind = "light" | "dark" | "accent" | "none";
 
 /** Text colours that read on a given background tone. Scenes take every colour from here,
  *  so one storyboard switches tone without touching the scene props. `accent` is for fills and lines;
- *  accent TEXT takes `accentText` (≥ 3:1 on the tone) or, under 48 px, `accentSmall` (≥ 4.5:1). */
+ *  accent TEXT takes `accentText` (≥ 3:1 on the tone) or, under 48 px, `accentSmall` (≥ 5:1, so it measures 4.5:1). */
 export const paletteFor = (kind: BgKind | undefined, colors: Brand["colors"]) => {
   const on = (fill: string, accent = colors.accent) => ({
     accent,
     accentText: accentOn({ ...colors, accent }, fill),
-    accentSmall: accentOn({ ...colors, accent }, fill, 4.5),
+    accentSmall: accentOn({ ...colors, accent }, fill, 5), // 4.5:1 with room: small type loses some to anti-aliasing
   });
   switch (kind) {
     case "dark":
@@ -22,8 +22,11 @@ export const paletteFor = (kind: BgKind | undefined, colors: Brand["colors"]) =>
     case "none": // over footage: nothing to measure against here (the legibility probe measures the real frame)
       return { fg: "#FFFFFF", muted: "rgba(255,255,255,0.8)", accent: colors.accent, accentText: colors.accent,
                accentSmall: colors.accent, track: "rgba(255,255,255,0.25)" };
-    default:
-      return { fg: colors.ink, muted: colors.muted, ...on(colors.bg), track: "rgba(26,26,26,0.10)" };
+    default: {
+      // the light backdrop glows with tint1 and tint2 over bg: small accent text must read on the darkest of them
+      const fill = [colors.bg, colors.tint1, colors.tint2].reduce((a, b) => (luminance(b) < luminance(a) ? b : a));
+      return { fg: colors.ink, muted: colors.muted, ...on(fill), track: "rgba(26,26,26,0.10)" };
+    }
   }
 };
 

@@ -23,7 +23,7 @@
     },
     "screens": {
       "type": "array",
-      "maxItems": 6,
+      "maxItems": 3,
       "items": {
         "type": "object",
         "required": [

@@ -10,7 +10,7 @@
   "properties": {
     "cards": {
       "type": "array",
-      "maxItems": 6,
+      "maxItems": 3,
       "items": {
         "type": "object",
         "required": [
@@ -45,12 +45,12 @@
           "kicker": {
             "type": "string",
             "x-text": true,
-            "maxLength": 24
+            "maxLength": 16
           },
           "title": {
             "type": "string",
             "x-text": true,
-            "maxLength": 40
+            "maxLength": 24
           },
           "at": {
             "type": "number",

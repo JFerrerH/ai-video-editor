@@ -24,12 +24,12 @@
     "label": {
       "type": "string",
       "x-text": true,
-      "maxLength": 30
+      "maxLength": 20
     },
     "stamp": {
       "type": "string",
       "x-text": true,
-      "maxLength": 30
+      "maxLength": 20
     },
     "slamAt": {
       "type": "number",

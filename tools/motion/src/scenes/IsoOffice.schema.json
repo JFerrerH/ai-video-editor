@@ -38,7 +38,7 @@
     },
     "desks": {
       "type": "array",
-      "maxItems": 12,
+      "maxItems": 4,
       "items": {
         "type": "object",
         "required": [
@@ -61,7 +61,7 @@
     },
     "agents": {
       "type": "array",
-      "maxItems": 8,
+      "maxItems": 4,
       "items": {
         "type": "object",
         "required": [
@@ -96,7 +96,7 @@
     },
     "walks": {
       "type": "array",
-      "maxItems": 12,
+      "maxItems": 3,
       "items": {
         "type": "object",
         "required": [
@@ -131,7 +131,7 @@
     },
     "bubbles": {
       "type": "array",
-      "maxItems": 8,
+      "maxItems": 3,
       "items": {
         "type": "object",
         "required": [

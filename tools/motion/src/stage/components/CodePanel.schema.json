@@ -26,16 +26,16 @@
     "file": {
       "type": "string",
       "x-text": true,
-      "maxLength": 40
+      "maxLength": 20
     },
     "lines": {
       "type": "array",
       "items": {
         "type": "string",
         "x-text": true,
-        "maxLength": 60
+        "maxLength": 34
       },
-      "maxItems": 14
+      "maxItems": 4
     },
     "typeFrom": {
       "type": "number",
@@ -50,7 +50,7 @@
     "badge": {
       "type": "string",
       "x-text": true,
-      "maxLength": 30,
+      "maxLength": 15,
       "description": "{n} counts up over the event"
     },
     "badgeRange": {

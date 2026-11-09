@@ -9,7 +9,7 @@ import {
   staticFile,
   useVideoConfig,
 } from "remotion";
-import { BackdropContext, Brand, BrandContext } from "./theme";
+import { BackdropContext, Brand, BrandContext, readableKit } from "./theme";
 import { Backdrop } from "./components/Backdrop";
 import { Captions } from "./components/Captions";
 import { CodeEditor } from "./components/CodeEditor";
@@ -132,9 +132,25 @@ const draws = (cs: CSSStyleDeclaration): boolean => {
   return solid || cs.backgroundImage !== "none" || border;
 };
 
-/** The box of the nearest ancestor of `el` (below `root`) that draws a background, border or image. */
-const cardOf = (el: HTMLElement, root: HTMLElement): Box | undefined => {
+/** `r` cut to what its ancestors below `root` let show: an `overflow: hidden` (or clip) parent hides the rest, so a
+ *  thumbnail scaled up inside its frame is not drawn past it. Null when nothing of it shows. */
+const visibleBox = (r: DOMRect, el: Element, root: HTMLElement): Box | null => {
+  let [x0, y0, x1, y1] = [r.left, r.top, r.right, r.bottom];
   for (let a = el.parentElement; a && a !== root; a = a.parentElement) {
+    const cs = getComputedStyle(a);
+    if (cs.overflowX === "visible" && cs.overflowY === "visible") continue;
+    const c = a.getBoundingClientRect();
+    if (cs.overflowX !== "visible") [x0, x1] = [Math.max(x0, c.left), Math.min(x1, c.right)];
+    if (cs.overflowY !== "visible") [y0, y1] = [Math.max(y0, c.top), Math.min(y1, c.bottom)];
+  }
+  return x1 - x0 < 1 || y1 - y0 < 1 ? null : ([x0, y0, x1, y1].map((v) => Math.round(v)) as Box);
+};
+
+/** The box of the card `el` sits on: the nearest element from `from` up (below `root`) that draws a background, border
+ *  or image. Text starts at its own element (a pill is its text's card), a shape at its parent. An element marked
+ *  `data-overhang` (a stamp across a card's edge, by design) is a card of its own: it is held to the frame only. */
+const cardOf = (from: HTMLElement | null, root: HTMLElement): Box | undefined => {
+  for (let a = from; a && a !== root; a = a.parentElement) {
     if (draws(getComputedStyle(a))) return round(a.getBoundingClientRect());
   }
   return undefined;
@@ -171,10 +187,11 @@ const measureText = (root: HTMLElement): MeasuredText[] => {
     const r = range.getBoundingClientRect();
     if (r.width < 1 || r.height < 1) continue;
     const { scale, opacity } = visibility(el, root);
-    if (opacity < 0.05) continue;
+    const box = visibleBox(r, el, root);
+    if (opacity < 0.05 || !box) continue;
     out.push({
       text,
-      box: round(r),
+      box,
       size: Math.round(parseFloat(getComputedStyle(el).fontSize) * scale * 10) / 10,
       card: cardOf(el, root),
     });
@@ -187,10 +204,11 @@ const measureShapes = (root: HTMLElement): MeasuredShape[] => {
   const out: MeasuredShape[] = [];
   root.querySelectorAll<HTMLElement>("*").forEach((el) => {
     if (!draws(getComputedStyle(el))) return;
-    const r = el.getBoundingClientRect();
-    if (r.width < 1 || r.height < 1 || visibility(el, root).opacity < 0.05) return;
+    const box = visibleBox(el.getBoundingClientRect(), el, root);
+    if (!box || visibility(el, root).opacity < 0.05) return;
     const cls = typeof el.className === "string" ? el.className.trim().split(/\s+/)[0] : "";
-    out.push({ tag: el.tagName.toLowerCase() + (cls ? "." + cls : ""), box: round(r), card: cardOf(el, root) });
+    const card = el.closest("[data-overhang]") === el ? undefined : cardOf(el.parentElement, root);
+    out.push({ tag: el.tagName.toLowerCase() + (cls ? "." + cls : ""), box, card });
   });
   return out;
 };
@@ -300,7 +318,7 @@ export const OverlayLayer: React.FC<{ events: OverlayEvent[]; measure?: boolean 
 export const Overlay: React.FC<OverlayProps> = ({ brand, events, measure, hideText }) => {
   const ready = useBrandFonts(brand);
   return (
-    <BrandContext.Provider value={brand}>
+    <BrandContext.Provider value={readableKit(brand)}>
       <AbsoluteFill style={{ fontFamily: brand.fonts.sans }}>
         {hideText ? <style>{HIDE_TEXT}</style> : null}
         {ready ? <OverlayLayer events={events} measure={measure} /> : null}

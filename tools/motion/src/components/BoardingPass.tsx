@@ -87,9 +87,9 @@ export const BoardingPass: React.FC<{
         </div>
         {/* perforation */}
         <div style={{ position: "relative", height: 2, margin: "0 30px", borderTop: `3px dashed #DAD8D3` }} />
-        <div style={{ display: "flex", justifyContent: "space-between", padding: "22px 46px 30px", background: colors.bg }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 24, padding: "22px 46px 30px", background: colors.bg }}>
           {details.map((d, i) => (
-            <div key={i}>
+            <div key={i} style={{ minWidth: 0, overflowWrap: "anywhere" }}>
               <div style={{ fontFamily: fonts.mono, fontSize: 28, letterSpacing: 4, color: readable(colors.muted, colors.bg, colors.ink) }}>{d.k}</div>
               <div style={{ fontFamily: fonts.sans, fontWeight: 600, fontSize: 38, color: colors.ink, marginTop: 4 }}>{d.v}</div>
             </div>

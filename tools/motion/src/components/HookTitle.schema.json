@@ -10,7 +10,7 @@
   "properties": {
     "lines": {
       "type": "array",
-      "maxItems": 6,
+      "maxItems": 3,
       "items": {
         "type": "object",
         "required": [
@@ -20,7 +20,7 @@
           "text": {
             "type": "string",
             "x-text": true,
-            "maxLength": 60
+            "maxLength": 20
           },
           "emphasis": {
             "type": "string",

@@ -13,7 +13,7 @@
     "title": {
       "type": "string",
       "x-text": true,
-      "maxLength": 11
+      "maxLength": 17
     },
     "items": {
       "type": "array",
@@ -45,12 +45,12 @@
     "total": {
       "type": "string",
       "x-text": "number",
-      "maxLength": 10
+      "maxLength": 15
     },
     "stamp": {
       "type": "string",
       "x-text": true,
-      "maxLength": 10
+      "maxLength": 11
     },
     "stampAt": {
       "type": "number",

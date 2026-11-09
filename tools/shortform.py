@@ -920,7 +920,7 @@ class Project:
             return [round(xs.min() * f), round(ys.min() * f), round((xs.max() + 1) * f), round((ys.max() + 1) * f)] \
                 if len(ys) else None
 
-        hits = lambda a, b: a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]  # noqa: E731
+        hits = overlaps
         placed = []
         for k, e in todo:  # placement: floating text over the head moves into the band above it
             texts, head = res[(k, "alone")][1] or [], self.head_box(e)
@@ -1028,7 +1028,7 @@ class Project:
                                         f"give it a card or a colour that reads on what is behind it", "contrast"))
             head = self.head_box(e)
             if head and not props.get("full") and self.layer_of(e) == "front" \
-                    and (over_face := [g["field"] for g in groups if hits(g["box"], head)]):
+                    and (over_face := [g["field"] for g in groups if hits(g["box"], head, INSIDE_TOL)]):
                 fix = "move it off the face" if "frame" in props else \
                     (f'set "full": true, or use a `corner` or `side` move that makes room ({OWN_PLACE})'
                      if known and O.schemas()[e["type"]].get("x-place") == "own" else
@@ -1449,25 +1449,26 @@ class Project:
                 continue  # clear of the caption band
             below, above = y1 + CAP_GAP, y0 - CAP_GAP - cap_h
             span = [round(e["start"], 3), round(e["start"] + e["duration"], 3)]
-            head = self.head_box(e)  # a band that clears the graphic must clear the speaker's head too
+            head = self.head_box(e)
             clear = lambda y: head is None or y + cap_h <= head[1] or y >= head[3]  # noqa: E731
-            if below + cap_h <= SAFE_BOTTOM and clear(below):
-                avoid.append(span + [below])
-            elif above >= SAFE_TOP and clear(above):
-                avoid.append(span + [above])
+            # the bands that clear the graphic, below it first; one that clears the speaker's head too is preferred,
+            # and when only a head-crossing one clears the graphic captions take it, with a warning
+            fits = [y for y, ok in ((below, below + cap_h <= SAFE_BOTTOM), (above, above >= SAFE_TOP)) if ok]
+            good = [y for y in fits if clear(y)]
+            what = "content" if "box" in b else "text"
+            if good or fits:
+                avoid.append(span + [(good or fits)[0]])
+                if not good:
+                    warns.append(Finding(
+                        f"captions cross the speaker's head ({head[1]}–{head[3]} px) at {b.get('t', e['start']):.2f} s to clear "
+                        f"{self._ev_label(e, k)} ({what} {y0}–{y1} px); give it fewer words, set \"full\": true, or use a "
+                        f"`corner` or `side` move if that is not wanted", "caption_head"))
             else:
-                what = "content" if "box" in b else "text"
-                head_blocks = (below + cap_h <= SAFE_BOTTOM) or (above >= SAFE_TOP)  # a band fits the page, but not the head
-                if head_blocks:
-                    kind, why, fix = "face", (f"no band below or above it clears the speaker's head ({head[1]}–{head[3]} px) "
-                                              f"as well"), 'give it fewer words, set "full": true, or use a `corner` or `side` move'
-                else:
-                    kind, why, fix = "captions_on_text", (f"they fit neither below it (would end at {below + cap_h} px, past "
-                                                          f"{SAFE_BOTTOM}) nor above it (would start at {above} px, above {SAFE_TOP})"), \
-                        'give it fewer words, or set "full": true'
                 warns.append(Finding(
                     f"captions cover {self._ev_label(e, k)} text at {b.get('t', e['start']):.2f} s: its {what} ({y0}–{y1} px) "
-                    f"reaches the captions at {top} px, and {why}; {fix}", kind))
+                    f"reaches the captions at {top} px, and they fit neither below it (would end at {below + cap_h} px, past "
+                    f"{SAFE_BOTTOM}) nor above it (would start at {above} px, above {SAFE_TOP}); give it fewer words, or set "
+                    f'"full": true', "captions_on_text"))
         return avoid, warns
 
     def caption_warnings(self) -> list[str]:
@@ -1573,6 +1574,12 @@ def loudness(path: Path) -> tuple[float, float]:
 
 
 _norm = echo_norm
+
+
+def overlaps(a: list[float], b: list[float], tol: float = 0) -> bool:
+    """Boxes [x0, y0, x1, y1] overlap by more than `tol` px in both directions. A placed card rests on the head's
+    edge, and rounding of its scale and translate can take it a pixel or two over: that isn't covering the face."""
+    return min(a[2], b[2]) - max(a[0], b[0]) > tol and min(a[3], b[3]) - max(a[1], b[1]) > tol
 
 
 def still_time(type_: str, props: dict, duration: float, fps: int = 30) -> float:

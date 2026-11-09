@@ -264,6 +264,28 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class RealUseFloorsTest(unittest.TestCase):
+    """overlay-schema "Limits are never under real use": numbers measured on real plans, no text from any of them."""
+
+    def node(self, type_, path):
+        s = O.schema(type_)
+        for part in path.split("."):
+            while s.get("type") == "array" and "properties" not in s and "items" in s:
+                s = s["items"]  # a field named after a list of objects is inside its items
+            s = s["properties"][part.replace("[]", "")]
+        return s
+
+    def test_no_limit_is_under_what_real_plans_used(self):
+        floors = json.loads((Path(__file__).resolve().parent / "real_use_floors.json").read_text())
+        low = []
+        for f in floors:
+            n = self.node(f["type"], f["path"])
+            limit = n.get("maxItems") if n.get("type") == "array" else n.get("maxLength")
+            if not isinstance(limit, int) or limit < f["floor"]:
+                low.append(f"{f['type']}.{f['path']}: limit {limit}, real plans used {f['floor']}")
+        self.assertEqual(low, [])
+
+
 class MatrixInputsTest(unittest.TestCase):
     """The layout matrix tests the characters a field's schema allows, not the ones its example shows."""
 

@@ -173,3 +173,26 @@ export const fitSize = (
 
 /** Wrap by words, and break a word only when it alone is wider than its box: text stays inside it either way. */
 export const FIT_WRAP = { overflowWrap: "anywhere", wordBreak: "normal" } as const;
+
+/** How many lines `text` takes in a box `width` px wide: words wrapped greedily with the real font's measure.
+ *  A word wider than the box takes the lines its width needs. For components that size a block to the safe height. */
+export const lineCount = (
+  text: string,
+  o: { fontFamily: string; fontSize: number; width: number; fontWeight?: number | string; letterSpacing?: string },
+) => {
+  const w = (s: string) => measureText({ text: s, fontFamily: o.fontFamily, fontSize: o.fontSize, fontWeight: String(o.fontWeight ?? 400), letterSpacing: o.letterSpacing }).width;
+  let lines = 1;
+  let cur = 0;
+  const space = w(" ");
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const ww = w(word);
+    const need = Math.max(1, Math.ceil(ww / o.width));
+    if (cur > 0 && cur + space + ww > o.width) {
+      lines += 1;
+      cur = 0;
+    }
+    lines += need - 1;
+    cur = cur + (cur > 0 ? space : 0) + (need > 1 ? ww - (need - 1) * o.width : ww);
+  }
+  return lines;
+};

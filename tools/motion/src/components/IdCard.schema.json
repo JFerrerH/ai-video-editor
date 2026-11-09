@@ -11,7 +11,7 @@
     "kicker": {
       "type": "string",
       "x-text": true,
-      "maxLength": 7
+      "maxLength": 11
     },
     "title": {
       "type": "string",
@@ -30,7 +30,7 @@
     },
     "rows": {
       "type": "array",
-      "maxItems": 2,
+      "maxItems": 3,
       "items": {
         "type": "object",
         "required": [

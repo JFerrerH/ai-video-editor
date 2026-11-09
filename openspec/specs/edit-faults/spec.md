@@ -213,12 +213,17 @@ Each event SHALL be measured at the finish of every reveal cue it has (`cue_fini
 
 ### Requirement: Captions keep clear of the head when they move
 
-When captions move above or below a graphic to clear it, the new caption band SHALL also clear the speaker's head box at that moment. If no position clears both, the finding SHALL be of kind `face`, naming the event and the time, with the fix (fewer words, `"full": true`, or a `corner` or `side` move), and the captions SHALL NOT be placed over the head.
+When captions move above or below a graphic to clear it, a band that clears both the graphic and the speaker's head box at that moment SHALL be preferred. If the only band that clears the graphic also crosses the head, the captions SHALL take it and a finding of kind `caption_head` (a warning, never an error in strict mode) SHALL name the event, the time and the head's span. If no band clears the graphic, the finding SHALL remain `captions_on_text`.
 
 #### Scenario: Drawer at the bottom of a medium shot
 
 - **WHEN** a drawer's card reaches the caption band and the only band above it crosses the speaker's eyes
-- **THEN** `check --strict` with stills fails with a `face` error for captions at that event, and no caption position over the head is written
+- **THEN** the captions go to that band, `check --strict` reports a `caption_head` warning and no error for them, and the plan renders
+
+#### Scenario: A band clears both
+
+- **WHEN** a graphic reaches the caption band and a band below it clears the graphic and the head
+- **THEN** the captions go there and no finding is reported
 
 ### Requirement: Cuts have air
 

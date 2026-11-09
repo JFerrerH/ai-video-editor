@@ -87,6 +87,23 @@ class Geometry(Fixture):
         self.assertEqual(p._measure_times(p.events[0]), [0.7, 1.0])  # the first two bars' finishes; the still time is the third's
 
 
+class FaceTolerance(unittest.TestCase):
+    """A card resting on the head's edge may round a pixel or two over it: that isn't covering the face."""
+
+    HEAD = [235, 480, 845, 1245]
+
+    def test_rounding_is_not_the_face(self):
+        self.assertFalse(SF.overlaps([129, 365, 951, 481], self.HEAD, SF.INSIDE_TOL))  # 1 px over, as measured
+        self.assertTrue(SF.overlaps([129, 365, 951, 481], self.HEAD))  # strict still sees it, for placement
+
+    def test_real_overlap_is_the_face(self):
+        self.assertTrue(SF.overlaps([129, 365, 951, 520], self.HEAD, SF.INSIDE_TOL))
+
+    def test_boxes_apart_never_overlap(self):
+        self.assertFalse(SF.overlaps([0, 0, 100, 100], [200, 200, 300, 300]))
+        self.assertFalse(SF.overlaps([0, 0, 100, 100], [100, 0, 200, 100]))
+
+
 class CaptionsAndHead(Fixture):
     """`_caption_moves` on measured boxes written by hand: no render needed."""
 
@@ -117,14 +134,22 @@ class CaptionsAndHead(Fixture):
             self.assertLessEqual(bottom, head[1] + SF.INSIDE_TOL, (content, head, frame))  # rounding of scale and translate
 
     def test_only_band_crosses_the_eyes(self):
+        """A band that clears the graphic but crosses the head is taken, with a warning that is no strict error."""
         p = self.project([255, 1250, 358, 1480])  # below it ends past 1536; above it starts at 1010, inside the head
         avoid, warns = p._caption_moves()
-        self.assertEqual(avoid, [])
+        self.assertEqual(avoid, [[0.0, 2.4, 1010]])
         (w,) = warns
-        self.assertEqual(w.kind, "face")
+        self.assertEqual(w.kind, "caption_head")
         self.assertIn("head (590–1065 px)", w)
-        errors, _ = S.strict_split(warns)
-        self.assertEqual(errors, [w])
+        errors, warnings = S.strict_split(warns)
+        self.assertEqual((errors, warnings), ([], [w]))
+
+    def test_no_band_clears_the_graphic(self):
+        """Neither band fits the page: the strict finding stays."""
+        p = self.project([255, 300, 358, 1500], head=False)
+        avoid, warns = p._caption_moves()
+        (w,) = warns
+        self.assertEqual((avoid, w.kind), ([], "captions_on_text"))
 
     def test_band_that_clears_both_is_used(self):
         p = self.project([255, 1100, 358, 1250])  # below it: 1310-1490, clear of the head

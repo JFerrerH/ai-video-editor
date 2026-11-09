@@ -1,0 +1,77 @@
+[
+ {
+  "type": "BarChart",
+  "path": "bars",
+  "floor": 4
+ },
+ {
+  "type": "DocCard",
+  "path": "italic",
+  "floor": 20
+ },
+ {
+  "type": "DocCard",
+  "path": "kicker",
+  "floor": 22
+ },
+ {
+  "type": "DocCard",
+  "path": "tag",
+  "floor": 15
+ },
+ {
+  "type": "HandleCard",
+  "path": "kicker",
+  "floor": 31
+ },
+ {
+  "type": "IdCard",
+  "path": "kicker",
+  "floor": 11
+ },
+ {
+  "type": "IdCard",
+  "path": "rows",
+  "floor": 3
+ },
+ {
+  "type": "ListScene",
+  "path": "kicker",
+  "floor": 18
+ },
+ {
+  "type": "Receipt",
+  "path": "stamp",
+  "floor": 11
+ },
+ {
+  "type": "Receipt",
+  "path": "title",
+  "floor": 17
+ },
+ {
+  "type": "Receipt",
+  "path": "total",
+  "floor": 15
+ },
+ {
+  "type": "StatScene",
+  "path": "kicker",
+  "floor": 25
+ },
+ {
+  "type": "Stickers",
+  "path": "items",
+  "floor": 6
+ },
+ {
+  "type": "HookTitle",
+  "path": "lines[].text",
+  "floor": 26
+ },
+ {
+  "type": "ListScene",
+  "path": "items[].text",
+  "floor": 24
+ }
+]

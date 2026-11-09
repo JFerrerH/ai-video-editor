@@ -29,7 +29,7 @@
     },
     "bars": {
       "type": "array",
-      "maxItems": 3,
+      "maxItems": 4,
       "items": {
         "type": "object",
         "required": [

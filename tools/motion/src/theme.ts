@@ -64,6 +64,12 @@ export const contrast = (a: string, b: string) => {
 /** Text colour that reads on a solid `hex` fill: `ink` or white, whichever contrasts more with it (white on a
  *  dark/saturated fill, `ink` on a light one such as a lime or pale-yellow accent). */
 export const textOn = (hex: string, ink: string) => (contrast(ink, hex) >= contrast("#FFFFFF", hex) ? ink : "#FFFFFF");
+/** Text on a coloured fill (a pill, a button): ink or white, whichever reads better, and the fill moved in lightness,
+ *  keeping its hue, until that text reaches `min` on it. A mid-tone accent reads with neither as it is. */
+export const textPair = (fill: string, ink: string, min = 5) => {
+  const fg = textOn(fill, ink);
+  return { bg: readable(fill, fg, ink, min), fg };
+};
 
 const toHsl = (hex: string): [number, number, number] => {
   const [r, g, b] = rgbOf(hex);
@@ -92,7 +98,9 @@ const fromHsl = (h: number, s: number, l: number) => {
  *  reaches `min` WCAG contrast there (3:1; pass 4.5 for text under 48 px), else the same hue stepped 5 % in
  *  lightness away from the fill (darker on a light fill, lighter on a dark one) until it does, else `ink`
  *  (white where ink doesn't read). Accent used as a fill behind text keeps `textOn` for the text. */
-export const accentOn = (colors: Brand["colors"], fill: string, min = 3) => readable(colors.accent, fill, colors.ink, min);
+// 4.5:1 by default for any size: the engine scales a floating card down to fit above the head, so text drawn large
+// can end up small (a 64 px stamp at 0.7x is 45 px) and need what small text needs
+export const accentOn = (colors: Brand["colors"], fill: string, min = 4.5) => readable(colors.accent, fill, colors.ink, min);
 
 /** Any brand colour (muted, a label grey) drawn as text on a solid `fill`: itself when it reaches `min` WCAG
  *  contrast, else the nearest shade of the same hue that does (`accentOn`'s steps), else `ink` or white. */

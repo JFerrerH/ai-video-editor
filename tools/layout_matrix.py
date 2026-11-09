@@ -37,10 +37,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import overlay_schema as O  # noqa: E402
 from brand import ink_on_light  # noqa: E402
 import short_spec as S  # noqa: E402
+from shortform import OWN_PLACE  # noqa: E402
 
 FIXTURES = Path(__file__).resolve().parent / "tests" / "fixtures"
 KINDS = {"outside", "small_text", "contrast", "face", "no_text", "hidden"}
-REFUSAL = "fits above the speaker's head only at"  # shortform.measure_events' refusal with its fix
+# shortform.measure_events' refusals with a plan fix: no room above this head for a floating card, or a device that
+# keeps its own place reaching the face in this framing
+REFUSALS = ("fits above the speaker's head only at", OWN_PLACE)
 DURATION = 4.0
 # wide capitals, cycled: about 0.75 em a letter against ~0.5 em for ordinary text, so a component that fits them fits
 # any real text of that length with room to spare (all "W", ~0.95 em, would refuse what renders fine today)
@@ -271,7 +274,7 @@ def run(types: list[str], brands: list[str], framings: list[str], jobs: int = 1,
                     if f["kind"] == "face"}
             # the engine refusing a floating card with its fix (no room above this head at a readable size) is the rule
             # working, whatever the text: that refusal and the face finding that goes with it are listed apart
-            refused = {f["component"] for f in here if f["kind"] == "face" and REFUSAL in f["message"]} | base
+            refused = {f["component"] for f in here if f["kind"] == "face" and any(r in f["message"] for r in REFUSALS)} | base
             return ([f for f in here if not (f["kind"] == "face" and f["component"] in refused)],
                     [f for f in here if f["kind"] == "face" and f["component"] in refused])
         finally:
@@ -314,7 +317,7 @@ def main(argv: list[str] | None = None) -> int:
     if a.json:
         Path(a.json).write_text(json.dumps(found, indent=1, ensure_ascii=False))
     for c, b, fr in sorted({(f["component"], f["brand"], f["framing"]) for f in no_room}):
-        print(f"{c:<14} {b:<8} {fr:<9} no room   refused with its fix: no room above this head at a readable size")
+        print(f"{c:<14} {b:<8} {fr:<9} refused   with a plan fix in this framing (full, or a corner or side move)")
     for f in found:
         print(f"{f['component']:<14} {f['brand']:<8} {f['framing']:<9} {f['kind']:<10} {f['message']}")
     n = len(types) * (len(brands) * len(framings) + a.random)

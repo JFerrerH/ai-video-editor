@@ -67,6 +67,10 @@ class Finding(str):
 # legibility probe: an event whose text adds fewer changed pixels than this share of the frame "shows
 # almost no text" (≈ 1,000 px at 1080x1920; a channel must change by more than PROBE_DELTA to count)
 PROBE_SHARE, PROBE_DELTA = 0.0005, 16
+# the share of its measured boxes' area that text which shows lights up. Measured 2026-11-08 on 137 visible texts of
+# every component in the layout matrix: 0.063 (rotated, outlined stickers) to 0.378, median 0.25; text off screen or
+# masked lights none. Half the smallest measured share
+NO_TEXT_SHARE = 0.03
 # text behind the speaker: at least this share of its pixels must stay visible around the cut-out
 HIDDEN_VISIBLE = 0.85
 # text over footage (1080-wide px): WCAG contrast 4.5:1 under LARGE_TEXT px tall, 3:1 from it; nothing under
@@ -81,6 +85,7 @@ SAFE_SIDE = 130  # px from each side edge (tools/motion/src/theme.ts SAFE.side)
 # every drawn box stays inside its card and between PLACE_TOP and SAFE_BOTTOM, with INSIDE_TOL px to spare for
 # rounding and a card's slight rotation
 INSIDE_TOL = 2
+OWN_PLACE = "the device keeps its own place"  # a face finding's fix for a component the engine doesn't move
 # the video ends on a held last frame this many seconds after its cut, and the audio fades out in the silence there.
 # Measured 2026-11-08 on the audio of the twelve approved exports (time from the last speech energy, the 90th
 # percentile of the file's level minus 30 dB, to the end of the file): 0.04 to 0.30 s, the talking-head shorts
@@ -969,10 +974,12 @@ class Project:
             entry = {"t": self._still_time(e), "event": e.get("index", k), "type": e["type"]}
             if known and O.layout(e["type"]) == "full" and (box := alpha_box(png)):
                 entry["box"] = box
+            elif content := alpha_box(png, solid=200):  # the card itself, not its soft shadow: captions clear all of it
+                entry["content"] = content
             if texts:
                 tb = [t["box"] for t in texts]
                 entry["text"] = [min(b[0] for b in tb), min(b[1] for b in tb), max(b[2] for b in tb), max(b[3] for b in tb)]
-            if "box" in entry or "text" in entry:
+            if "box" in entry or "text" in entry or "content" in entry:
                 boxes[key] = entry
             else:
                 boxes.pop(key, None)
@@ -982,7 +989,13 @@ class Project:
             comp = self._rgba(stage_res[f"{k}_text"][0])[:, :, :3].astype(float)
             comp0 = self._rgba(stage_res[f"{k}_blank"][0])[:, :, :3].astype(float)
             diff = (abs(comp - comp0) > PROBE_DELTA).any(axis=2)
-            if known and O.text_fields(e["type"], props) and diff.sum() < PROBE_SHARE * diff.size:
+            # text off screen or masked lights almost nothing: it must stay under both a share of the frame and a share
+            # of its own boxes. A 2-letter label lights a few hundred pixels but much of its box, and shows; a big word
+            # in nearly the wall's colour lights little of its box but more than the frame share, and goes on to the
+            # contrast probe, which gives it a colour that reads
+            boxed = sum((b[2] - b[0]) * (b[3] - b[1]) for b in (x["box"] for x in texts)) * scale ** 2
+            least = min(PROBE_SHARE * diff.size, NO_TEXT_SHARE * boxed) if boxed else PROBE_SHARE * diff.size
+            if known and O.text_fields(e["type"], props) and diff.sum() < least:
                 warnings.append(Finding(f"{label} shows almost no text at {t:.2f} s ({int(diff.sum())} px of text; "
                                         f"is it off screen, masked, or not in yet?)", "no_text"))
                 continue
@@ -1015,7 +1028,9 @@ class Project:
             if head and not props.get("full") and self.layer_of(e) == "front" \
                     and (over_face := [g["field"] for g in groups if hits(g["box"], head)]):
                 fix = "move it off the face" if "frame" in props else \
-                    'set "full": true, or let the engine place it (it does for floating overlays)'
+                    (f'set "full": true, or use a `corner` or `side` move that makes room ({OWN_PLACE})'
+                     if known and O.schemas()[e["type"]].get("x-place") == "own" else
+                     'set "full": true, or let the engine place it (it does for floating overlays)')
                 warnings.append(Finding(f"{label} text covers the speaker's face at {t:.2f} s ({', '.join(over_face)}); "
                                         f"{fix}", "face"))
         if patches:  # kept for the render: it measures only what it hasn't seen, so it wouldn't place these again
@@ -1411,7 +1426,7 @@ class Project:
 
     def _caption_moves(self) -> tuple[list[list[float]], list[str]]:
         """Where captions go while an overlay reaches their band (measure_events): a full-layout scene's
-        content, or any other event's text. Below it if two lines still end above the bottom safe zone, else
+        content, or any other event's card and text (its drawn content box with its text box). Below it if two lines still end above the bottom safe zone, else
         above it if they start below the top one. Returns ([[start, end, top px]], findings for events they fit
         around neither way)."""
         top = self.caption_props.get("top", 1300)
@@ -1420,7 +1435,9 @@ class Project:
         avoid, warns = [], []
         for k, e in enumerate(self.events):
             b = boxes.get(self._box_key(e))
-            box = b and (b.get("box") or b.get("text"))
+            parts = [x for x in ((b or {}).get("content"), (b or {}).get("text")) if x]  # the card and its text
+            box = b and (b.get("box") or (parts and [min(x[0] for x in parts), min(x[1] for x in parts),
+                                                     max(x[2] for x in parts), max(x[3] for x in parts)]))
             if not box or self.layer_of(e) != "front":
                 continue  # nothing measured, or under the speaker (captions sit over the speaker anyway)
             y0, y1 = box[1], box[3]
@@ -1435,7 +1452,7 @@ class Project:
             elif above >= SAFE_TOP and clear(above):
                 avoid.append(span + [above])
             else:
-                what = "content" if "box" in b else "text"
+                what = "content" if "box" in b or "content" in b else "text"
                 head_blocks = (below + cap_h <= SAFE_BOTTOM) or (above >= SAFE_TOP)  # a band fits the page, but not the head
                 if head_blocks:
                     kind, why, fix = "face", (f"no band below or above it clears the speaker's head ({head[1]}–{head[3]} px) "

@@ -1,9 +1,10 @@
+import { measureText } from "@remotion/layout-utils";
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { clamp, easeInOut, easeOut, enter } from "../anim";
 import { IconKind, LineIcon } from "../components/icons";
 import { useFrameLayout } from "../layout";
-import { textOn, useBrand } from "../theme";
+import { FIT_WRAP, MIN_TEXT, textOn, textPair, useBrand } from "../theme";
 import { BgKind, usePalette } from "./Bg";
 import { SceneHeader, useHeaderSize } from "./header";
 
@@ -313,24 +314,30 @@ export const NetworkScene: React.FC<{
         const s = enter(frame, fps, Math.round((c.at ?? tc + 1) * fps), 12);
         if (frame < Math.round((c.at ?? tc + 1) * fps)) return null;
         const [x, y] = pos[i];
+        // the chip grows away from its node on the side it fits, else on the roomier side, wrapping inside the safe sides
+        const need = measureText({ text: c.text, fontFamily: fonts.mono, fontSize: 30, fontWeight: "700" }).width + 28;
+        const right = width - safe.right - (x + nodeR * 0.55);
+        const left = x - nodeR * 0.55 - safe.left;
+        const toRight = need <= right || (need > left && right >= left);
         return (
           <div
             key={`chip${k}`}
             style={{
               position: "absolute",
-              left: x + nodeR * 0.55,
+              ...(toRight ? { left: x + nodeR * 0.55 } : { right: width - (x - nodeR * 0.55) }),
               top: y - nodeR * 1.15,
+              maxWidth: Math.max(MIN_TEXT * 4, toRight ? right : left),
               scale: String(s),
-              transformOrigin: "0% 100%",
+              transformOrigin: toRight ? "0% 100%" : "100% 100%",
               fontFamily: fonts.mono,
               fontSize: 30,
               fontWeight: 700,
               lineHeight: 1.2,
               padding: "4px 14px",
               borderRadius: 999,
-              background: pal.fg,
-              color: textOn(pal.fg, colors.ink),
-              whiteSpace: "nowrap",
+              background: textPair(pal.fg, colors.ink).bg,
+              color: textPair(pal.fg, colors.ink).fg,
+              ...FIT_WRAP,
               boxShadow: "0 6px 16px rgba(0,0,0,0.18)",
             }}
           >

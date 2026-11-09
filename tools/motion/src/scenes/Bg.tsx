@@ -1,6 +1,6 @@
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
-import { Brand, DARK_GLOW, accentOn, luminance, useBrand } from "../theme";
+import { Brand, DARK_GLOW, accentOn, luminance, readable, useBrand } from "../theme";
 
 /** Scene background tones. `none` = transparent (the scene sits on whatever is under it). */
 export type BgKind = "light" | "dark" | "accent" | "none";
@@ -17,15 +17,20 @@ export const paletteFor = (kind: BgKind | undefined, colors: Brand["colors"]) =>
   switch (kind) {
     case "dark":
       return { fg: "#F5F4F0", muted: "rgba(245,244,240,0.62)", ...on(DARK_GLOW), track: "rgba(245,244,240,0.14)" };
-    case "accent":
-      return { fg: "#FFFFFF", muted: "rgba(255,255,255,0.75)", ...on(colors.accent, colors.ink), track: "rgba(255,255,255,0.22)" };
+    case "accent": {
+      // white reads on a deep accent, not on a pale one: the text colour is taken for this kit's accent
+      const fg = readable("#FFFFFF", colors.accent, colors.ink, 5);
+      return { fg, muted: fg, ...on(colors.accent, colors.ink), track: "rgba(255,255,255,0.22)" };
+    }
     case "none": // over footage: nothing to measure against here (the legibility probe measures the real frame)
       return { fg: "#FFFFFF", muted: "rgba(255,255,255,0.8)", accent: colors.accent, accentText: colors.accent,
                accentSmall: colors.accent, track: "rgba(255,255,255,0.25)" };
     default: {
       // the light backdrop glows with tint1 and tint2 over bg: small accent text must read on the darkest of them
       const fill = [colors.bg, colors.tint1, colors.tint2].reduce((a, b) => (luminance(b) < luminance(a) ? b : a));
-      return { fg: colors.ink, muted: colors.muted, ...on(fill), track: "rgba(26,26,26,0.10)" };
+      // text, like accent text, must read on the darkest glow, whatever the kit's tints are (5:1: room for anti-aliasing)
+      return { fg: readable(colors.ink, fill, "#000000", 5), muted: readable(colors.muted, fill, colors.ink, 5), ...on(fill),
+               track: "rgba(26,26,26,0.10)" };
     }
   }
 };

@@ -4,7 +4,7 @@ import { clamp, easeOut } from "../anim";
 import { Figure } from "../explainer/Figure";
 import { HeadWord, Headline } from "../explainer/Headline";
 import { useFrameLayout } from "../layout";
-import { useBrand } from "../theme";
+import { accentOn, useBrand } from "../theme";
 import { Grain } from "./Bg";
 import {
   Action,
@@ -58,6 +58,7 @@ export const WorldScene: React.FC<{
   const ink = colors.ink;
   const snow = colors.bg;
   const lime = colors.accent;
+  const limeOnInk = accentOn(colors, ink); // accent text on an ink pill or sign: brought to a readable contrast for any kit
 
   const cam = cameraAt(w, t);
   const zoom = (cam.zoom * W) / 1080;
@@ -295,7 +296,7 @@ export const WorldScene: React.FC<{
       o.id,
       <div style={{ position: "absolute", left: 0, top: 0, transform: `translate(-50%,-100%) scaleY(${p})`, transformOrigin: "50% 100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
         <div style={{ background: ink, border: `6px solid ${lime}`, borderRadius: 28, padding: "26px 40px", textAlign: "center", boxShadow: "0 18px 40px rgba(0,0,0,0.35)" }}>
-          <div style={{ fontFamily: fonts.sans, fontWeight: 700, fontSize: 64, color: lime, whiteSpace: "nowrap", letterSpacing: "-0.01em" }}>{o.text}</div>
+          <div style={{ fontFamily: fonts.sans, fontWeight: 700, fontSize: 64, color: limeOnInk, whiteSpace: "nowrap", letterSpacing: "-0.01em" }}>{o.text}</div>
           {o.sub ? <div style={{ fontFamily: fonts.sans, fontWeight: 600, fontSize: 34, color: snow, marginTop: 8, whiteSpace: "nowrap" }}>{o.sub}</div> : null}
         </div>
         <div style={{ width: 22, height: 170, background: "#8E8A7C", borderRadius: 6 }} />
@@ -358,7 +359,7 @@ export const WorldScene: React.FC<{
       });
     return (
       <React.Fragment key={`val-${o.id}`}>
-        {pill(`val-${o.id}`, q.x, q.y, enter(shownAt(w, o.id), 14) * b.pop, fmt(b.value), { background: ink, color: lime, border: `4px solid ${lime}`, fontSize: 54 })}
+        {pill(`val-${o.id}`, q.x, q.y, enter(shownAt(w, o.id), 14) * b.pop, fmt(b.value), { background: ink, color: limeOnInk, border: `4px solid ${lime}`, fontSize: 54 })}
         {chips}
       </React.Fragment>
     );

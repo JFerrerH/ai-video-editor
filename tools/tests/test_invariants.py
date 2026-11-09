@@ -90,16 +90,37 @@ class Geometry(Fixture):
 class CaptionsAndHead(Fixture):
     """`_caption_moves` on measured boxes written by hand: no render needed."""
 
-    def project(self, text_box, head=True):
+    def project(self, text_box, head=True, content=None):
         spec = self.on("bright", {"in": 0.45, "out": 3.05})
         spec["events"] = [{"type": "StageDrawer", "start": 0, "duration": 2.4,
                            "props": {"card": {"kicker": "OLD", "title": "Plan"}, "dropAt": 1.0, "shutAt": 1.6}}]
         if head:
             spec["sources"]["bright"]["head"] = [38, 63, 70, 100]  # 108x192 take: the head is y 590-1065 in the output
         p, _ = S.load(self.write(spec), self.root)
-        (self.root / "edit" / "overlay_boxes.json").write_text(json.dumps(
-            {p._box_key(p.events[0]): {"t": 0.9, "event": 0, "type": "StageDrawer", "text": text_box}}))
+        entry = {"t": 0.9, "event": 0, "type": "StageDrawer", "text": text_box, **({"content": content} if content else {})}
+        (self.root / "edit" / "overlay_boxes.json").write_text(json.dumps({p._box_key(p.events[0]): entry}))
         return p
+
+    def test_band_clears_the_card_not_only_its_text(self):
+        """The card's text ends above the caption band but the card itself reaches into it: captions move below it."""
+        p = self.project([255, 1000, 358, 1100], head=False, content=[220, 1000, 860, 1250])
+        avoid, warns = p._caption_moves()
+        self.assertEqual((avoid, warns), ([[0.0, 2.4, 1310]], []))
+
+    def test_placement_never_goes_below_the_head(self):
+        """However big the card and wherever the head, a placed card ends above the head or isn't placed."""
+        import random
+        rng = random.Random(7)
+        for _ in range(500):
+            top = rng.uniform(150, 1300)
+            head = [rng.uniform(150, 450), top, rng.uniform(630, 930), top + rng.uniform(250, 700)]
+            y0 = rng.uniform(0, 1700)
+            content = [rng.uniform(0, 500), y0, rng.uniform(580, 1080), y0 + rng.uniform(40, 900)]
+            frame, s = SF.Project._place(content, head, [rng.uniform(28, 90)])
+            if frame is None:
+                continue
+            bottom = frame["y"] + frame["scale"] * content[3]  # Overlay.tsx: origin at the top, then translate
+            self.assertLessEqual(bottom, head[1] + SF.INSIDE_TOL, (content, head, frame))  # rounding of scale and translate
 
     def test_only_band_crosses_the_eyes(self):
         p = self.project([255, 1250, 358, 1480])  # below it ends past 1536; above it starts at 1010, inside the head

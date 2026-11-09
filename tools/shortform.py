@@ -91,6 +91,8 @@ OWN_PLACE = "the device keeps its own place"  # a face finding's fix for a compo
 # percentile of the file's level minus 30 dB, to the end of the file): 0.04 to 0.30 s, the talking-head shorts
 # 0.04, 0.11 and 0.30 s, and the longest of them is the one that reads as a finished ending, not a cut
 END_TAIL = 0.30
+# the air an edge keeps: before an in-point's first word and after an out-point's last (refine_edges, no_air, captions)
+EDGE_PRE, EDGE_POST = 0.10, 0.12
 END_FADE = 0.10  # the longest fade-out at the end; it never reaches into sound: the silence the cut has, 30 ms at least
 # silence is measured against the take's speech (Project._quiet): SPEECH_DROP dB under its 90th percentile,
 # quiet runs QUIET_MERGE s apart or closer merged
@@ -346,7 +348,7 @@ class Project:
             cache[(take, above_floor)] = quiet
         return cache[(take, above_floor)]
 
-    def refine_edges(self, pre: float = 0.10, post: float = 0.12, min_sil: float = 0.06,
+    def refine_edges(self, pre: float | None = None, post: float | None = None, min_sil: float = 0.06,
                      above_floor: float = 9.0, apply: bool = True, joins: list[tuple[int, int]] = (),
                      detail: bool = False):
         """Snap every in/out point to measured silence so no word is clipped.
@@ -364,6 +366,8 @@ class Project:
         the other one stops at it.
         `detail=True` also returns [{"seg", "edge": "in"|"out", "tag", "t", "locked"}] per edge.
         """
+        pre = EDGE_PRE if pre is None else pre
+        post = EDGE_POST if post is None else post
         hop = 0.005
         report, details = [], []
         new: dict[tuple[int, str], tuple[float, str]] = {}
@@ -1267,6 +1271,10 @@ class Project:
                 if any(t == s.take and abs(w["start"] - x) <= 0.02 for t, x in self.caption_skip):
                     continue
                 ov = min(w["end"], s.t_out) - max(w["start"], s.t_in)
+                # a word the cut only grazes, its onset at an out-point or its tail at an in-point (no pause there to cut
+                # in), plays a sound, not the word: no caption for it. The edge refinement's own air sets "grazes"
+                if (w["end"] > s.t_out and s.t_out - w["start"] < EDGE_POST) or (w["start"] < s.t_in and w["end"] - s.t_in < EDGE_PRE):
+                    continue
                 if ov > min(0.06, 0.5 * (w["end"] - w["start"])) and ov > best.get((s.take, j), (0, -1))[0]:
                     best[(s.take, j)] = (ov, i)
         out = []

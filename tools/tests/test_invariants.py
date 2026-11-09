@@ -210,6 +210,16 @@ class Tail(Gaps):
         # B would sound at 0.8 s into the clip: nothing from there to the end
         self.assertLess(self.probe(clip, "-ss", f"{1.1 - seg.t_in - 0.02:.2f}"), -60)
 
+    def test_a_word_whose_onset_only_plays_has_no_caption(self):
+        """An out-point a few hundredths into the next word (no pause to cut in) plays its onset, not the word."""
+        spec = self.on("gaps", {"in": 0.3, "out": 1.05})
+        spec["sources"]["gaps"] = {"file": "gaps.mov", "face": [54, 96]}
+        p, _ = S.load(self.write(spec), self.root)
+        p.segments[-1].t_out = 1.18  # 0.08 s into B
+        self.assertEqual([w["text"] for w in p.output_words()], ["A"])
+        p.segments[-1].t_out = 1.4  # most of B
+        self.assertEqual([w["text"] for w in p.output_words()], ["A", "B"])
+
     def test_a_longer_hold_is_kept(self):
         spec = self.on("gaps", {"in": 2.9, "out": 3.6, "freeze_after": 0.8})
         spec["sources"]["gaps"] = {"file": "gaps.mov", "face": [54, 96]}

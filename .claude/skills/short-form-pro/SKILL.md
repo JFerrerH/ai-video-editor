@@ -154,7 +154,7 @@ small kicker of a card fails, so give a `BehindWord` a dark `color` and no `came
 with `full`) or `Stickers` where a card won't fit. The build counts the time with no graphic or camera move on screen: a warning past 5 s, a refusal past 8 s (it never adds anything, so put a device on a word of the line that has something to show).
 
 Errors name the plan field (`plan.beats[3].word`) or the beat (`beat 3 (F7 "la", Stuck)`) and the fix. Then check the
-`stills` and the finished preview as in Verify; `preview_qa` fails on a word heard that the edit doesn't contain, a
+`stills` and the finished preview as in Verify; `preview_qa` fails on a word heard inside the edit that the edit doesn't contain (not after its last word: the end tail leaves nothing there but Whisper's own additions), a
 clipped word, a line playing twice, a false start heard, or a cut louder than −12 dB against the speech.
 
 Two worked plans (neutral content; the shapes are what matters):

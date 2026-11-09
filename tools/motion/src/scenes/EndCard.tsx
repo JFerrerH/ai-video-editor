@@ -2,7 +2,7 @@ import React from "react";
 import { AbsoluteFill, Img, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { clamp, easeOut } from "../anim";
 import { useFrameLayout } from "../layout";
-import { textOn, useBrand } from "../theme";
+import { textPair, useBrand } from "../theme";
 import { BgKind, usePalette } from "./Bg";
 
 const STAGGER = 6; // frames between title, tagline, button and url
@@ -37,8 +37,9 @@ export const EndCard: React.FC<{
     const p = rise(k);
     return { opacity: p, translate: `0px ${(1 - p) * 22}px` };
   };
-  const btnFill = bg === "dark" ? colors.accent : colors.ink;
-  const btnText = textOn(btnFill, colors.ink);
+  const btn = textPair(bg === "dark" ? colors.accent : colors.ink, colors.ink);
+  const btnFill = btn.bg;
+  const btnText = btn.fg;
   const lh = logoHeight ?? (wide ? 150 : portrait ? 190 : 170);
   // the arrow nudges right once everything has landed, then rests
   const nudge = interpolate(frame, [FIRST + 4 * STAGGER + 10, FIRST + 4 * STAGGER + 20, FIRST + 4 * STAGGER + 32], [0, 10, 0], clamp);

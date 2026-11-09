@@ -4,7 +4,7 @@ import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { clamp, easeOut } from "../anim";
 import { useFrameLayout } from "../layout";
 import { BgKind, usePalette } from "../scenes/Bg";
-import { textOn, useBrand } from "../theme";
+import { textPair, useBrand } from "../theme";
 
 /** One narration word as tools/storyboard.py injects it: script text (marks stripped), the time it's
  *  spoken (s from the scene start), whether it's `*emphasised*`, and its headline phrase. */
@@ -59,6 +59,7 @@ export const Headline: React.FC<{ words: HeadWord[]; bg?: BgKind; size?: number;
   const { fps } = useVideoConfig();
   const { fonts, colors } = useBrand();
   const pal = usePalette(bg);
+  const pill = textPair(colors.accent, colors.ink);
   const { safe, innerW, aspect, width, height } = useFrameLayout();
   const f0 = (w: HeadWord) => Math.round(w.t * fps);
   const said = words.filter((w) => f0(w) <= frame);
@@ -131,13 +132,13 @@ export const Headline: React.FC<{ words: HeadWord[]; bg?: BgKind; size?: number;
                   display: "inline-flex",
                   columnGap: GAP * s,
                   padding: `0 ${PILL_X}em 0.06em`,
-                  color: textOn(colors.accent, colors.ink),
+                  color: pill.fg,
                   opacity: frame >= start ? 1 : 0,
                   scale: String(interpolate(pop, [0, 1], [0.6, 1])),
                   transformOrigin: "left center",
                 }}
               >
-                <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: shown + 2 * PILL_X * s, borderRadius: "0.24em", background: colors.accent }} />
+                <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: shown + 2 * PILL_X * s, borderRadius: "0.24em", background: pill.bg }} />
                 {u.words.map((w, wi) => (
                   <span key={wi} style={{ position: "relative" }}>
                     {wordEl(w, wi)}

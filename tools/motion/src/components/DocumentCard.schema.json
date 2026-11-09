@@ -11,7 +11,7 @@
   "properties": {
     "year": {
       "type": "string",
-      "x-text": true,
+      "x-text": "number",
       "maxLength": 6
     },
     "kicker": {

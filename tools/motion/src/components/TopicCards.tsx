@@ -1,8 +1,7 @@
-import { measureText } from "@remotion/layout-utils";
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { enter, exit, sec } from "../anim";
-import { SAFE, readable, useBrand } from "../theme";
+import { SAFE, fitSize, readable, useBrand } from "../theme";
 import { IconKind, LineIcon } from "./icons";
 
 const CARD_W = 236;
@@ -21,8 +20,7 @@ export const TopicCards: React.FC<{ durationInFrames: number; cards: Card[]; top
   const { colors, fonts } = useBrand();
   const out = exit(frame, durationInFrames, 6);
   // the title shrinks (44 → 32 px) to fit its card's width on one line, and wraps by word past that
-  const titleSize = (t: string) =>
-    Math.max(32, Math.min(44, Math.floor((44 * (CARD_W - 36)) / Math.max(1, measureText({ text: t, fontFamily: fonts.serif, fontSize: 44 }).width))));
+  const titleSize = (t: string) => fitSize(t, { fontFamily: fonts.serif, max: 44, min: 32, width: CARD_W - 36 });
   return (
     <AbsoluteFill style={{ alignItems: "center", opacity: out }}>
       <div style={{ position: "absolute", top, display: "flex", gap: 24 }}>

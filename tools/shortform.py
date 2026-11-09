@@ -67,6 +67,10 @@ class Finding(str):
 # legibility probe: an event whose text adds fewer changed pixels than this share of the frame "shows
 # almost no text" (≈ 1,000 px at 1080x1920; a channel must change by more than PROBE_DELTA to count)
 PROBE_SHARE, PROBE_DELTA = 0.0005, 16
+# the share of its measured boxes' area that text which shows lights up. Measured 2026-11-08 on 137 visible texts of
+# every component in the layout matrix: 0.063 (rotated, outlined stickers) to 0.378, median 0.25; text off screen or
+# masked lights none. Half the smallest measured share
+NO_TEXT_SHARE = 0.03
 # text behind the speaker: at least this share of its pixels must stay visible around the cut-out
 HIDDEN_VISIBLE = 0.85
 # text over footage (1080-wide px): WCAG contrast 4.5:1 under LARGE_TEXT px tall, 3:1 from it; nothing under
@@ -81,11 +85,14 @@ SAFE_SIDE = 130  # px from each side edge (tools/motion/src/theme.ts SAFE.side)
 # every drawn box stays inside its card and between PLACE_TOP and SAFE_BOTTOM, with INSIDE_TOL px to spare for
 # rounding and a card's slight rotation
 INSIDE_TOL = 2
+OWN_PLACE = "the device keeps its own place"  # a face finding's fix for a component the engine doesn't move
 # the video ends on a held last frame this many seconds after its cut, and the audio fades out in the silence there.
 # Measured 2026-11-08 on the audio of the twelve approved exports (time from the last speech energy, the 90th
 # percentile of the file's level minus 30 dB, to the end of the file): 0.04 to 0.30 s, the talking-head shorts
 # 0.04, 0.11 and 0.30 s, and the longest of them is the one that reads as a finished ending, not a cut
 END_TAIL = 0.30
+# the air an edge keeps: before an in-point's first word and after an out-point's last (refine_edges, no_air, captions)
+EDGE_PRE, EDGE_POST = 0.10, 0.12
 END_FADE = 0.10  # the longest fade-out at the end; it never reaches into sound: the silence the cut has, 30 ms at least
 # silence is measured against the take's speech (Project._quiet): SPEECH_DROP dB under its 90th percentile,
 # quiet runs QUIET_MERGE s apart or closer merged
@@ -341,7 +348,7 @@ class Project:
             cache[(take, above_floor)] = quiet
         return cache[(take, above_floor)]
 
-    def refine_edges(self, pre: float = 0.10, post: float = 0.12, min_sil: float = 0.06,
+    def refine_edges(self, pre: float | None = None, post: float | None = None, min_sil: float = 0.06,
                      above_floor: float = 9.0, apply: bool = True, joins: list[tuple[int, int]] = (),
                      detail: bool = False):
         """Snap every in/out point to measured silence so no word is clipped.
@@ -359,6 +366,8 @@ class Project:
         the other one stops at it.
         `detail=True` also returns [{"seg", "edge": "in"|"out", "tag", "t", "locked"}] per edge.
         """
+        pre = EDGE_PRE if pre is None else pre
+        post = EDGE_POST if post is None else post
         hop = 0.005
         report, details = [], []
         new: dict[tuple[int, str], tuple[float, str]] = {}
@@ -982,7 +991,13 @@ class Project:
             comp = self._rgba(stage_res[f"{k}_text"][0])[:, :, :3].astype(float)
             comp0 = self._rgba(stage_res[f"{k}_blank"][0])[:, :, :3].astype(float)
             diff = (abs(comp - comp0) > PROBE_DELTA).any(axis=2)
-            if known and O.text_fields(e["type"], props) and diff.sum() < PROBE_SHARE * diff.size:
+            # text off screen or masked lights almost nothing: it must stay under both a share of the frame and a share
+            # of its own boxes. A 2-letter label lights a few hundred pixels but much of its box, and shows; a big word
+            # in nearly the wall's colour lights little of its box but more than the frame share, and goes on to the
+            # contrast probe, which gives it a colour that reads
+            boxed = sum((b[2] - b[0]) * (b[3] - b[1]) for b in (x["box"] for x in texts)) * scale ** 2
+            least = min(PROBE_SHARE * diff.size, NO_TEXT_SHARE * boxed) if boxed else PROBE_SHARE * diff.size
+            if known and O.text_fields(e["type"], props) and diff.sum() < least:
                 warnings.append(Finding(f"{label} shows almost no text at {t:.2f} s ({int(diff.sum())} px of text; "
                                         f"is it off screen, masked, or not in yet?)", "no_text"))
                 continue
@@ -1015,7 +1030,9 @@ class Project:
             if head and not props.get("full") and self.layer_of(e) == "front" \
                     and (over_face := [g["field"] for g in groups if hits(g["box"], head)]):
                 fix = "move it off the face" if "frame" in props else \
-                    'set "full": true, or let the engine place it (it does for floating overlays)'
+                    (f'set "full": true, or use a `corner` or `side` move that makes room ({OWN_PLACE})'
+                     if known and O.schemas()[e["type"]].get("x-place") == "own" else
+                     'set "full": true, or let the engine place it (it does for floating overlays)')
                 warnings.append(Finding(f"{label} text covers the speaker's face at {t:.2f} s ({', '.join(over_face)}); "
                                         f"{fix}", "face"))
         if patches:  # kept for the render: it measures only what it hasn't seen, so it wouldn't place these again
@@ -1252,6 +1269,10 @@ class Project:
                 if any(t == s.take and abs(w["start"] - x) <= 0.02 for t, x in self.caption_skip):
                     continue
                 ov = min(w["end"], s.t_out) - max(w["start"], s.t_in)
+                # a word the cut only grazes, its onset at an out-point or its tail at an in-point (no pause there to cut
+                # in), plays a sound, not the word: no caption for it. The edge refinement's own air sets "grazes"
+                if (w["end"] > s.t_out and s.t_out - w["start"] < EDGE_POST) or (w["start"] < s.t_in and w["end"] - s.t_in < EDGE_PRE):
+                    continue
                 if ov > min(0.06, 0.5 * (w["end"] - w["start"])) and ov > best.get((s.take, j), (0, -1))[0]:
                     best[(s.take, j)] = (ov, i)
         out = []

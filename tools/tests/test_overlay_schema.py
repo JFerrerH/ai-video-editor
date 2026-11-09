@@ -236,6 +236,23 @@ class LimitsTest(unittest.TestCase):
         long = [{"value": 1, "label": "x" * 999, "at": 0.1}]
         self.assertIn("characters, got 999", msgs("AgeBars", {"bars": long})["bars[0].label"])
 
+    def test_a_field_without_letters_declares_its_kind(self):
+        """A text field takes any text unless its schema says `x-text: "number"` or `"symbol"`; a field whose example
+        has no letters must say which, so the layout matrix never reads the kind from the example (overlay-schema
+        "Character kind comes from the schema")."""
+        bad = []
+        for n, s in sorted(O.schemas().items()):
+            for ex in (s.get("examples") or [])[:1]:
+                kinds = dict(O.text_kinds(n, ex))
+                for path, v, _, _ in O.text_fields(n, ex):
+                    kind = kinds[path]
+                    if kind not in (True, "number", "symbol"):
+                        bad.append(f"{n}.{path}: x-text must be true, \"number\" or \"symbol\", got {kind!r}")
+                    elif isinstance(v, str) and v.strip() and not any(c.isalpha() for c in v) and kind is True:
+                        bad.append(f"{n}.{path}: its example {v!r} has no letters; declare it \"number\" or "
+                                   f"\"symbol\" if that is all it takes, or give it an example with words")
+        self.assertEqual(bad, [])
+
     def test_examples_stay_within_limits(self):
         for n, s in O.schemas().items():
             for ex in s.get("examples", []):
@@ -245,3 +262,15 @@ class LimitsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MatrixInputsTest(unittest.TestCase):
+    """The layout matrix tests the characters a field's schema allows, not the ones its example shows."""
+
+    def test_free_text_is_tested_with_letters(self):
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        import layout_matrix as L
+        s = O.schemas()["AgeBars"]["properties"]["bars"]["items"]["properties"]["label"]
+        self.assertTrue(all(c.isalpha() or c == " " for c in L.widest(s["maxLength"], s["x-text"])))
+        self.assertEqual(set(L.widest(4, "number")), {"8"})
+        self.assertEqual(set(L.widest(3, "symbol")), {"€"})

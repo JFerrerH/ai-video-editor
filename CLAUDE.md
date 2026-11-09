@@ -96,6 +96,7 @@ The same tools run on Linux (CPU only) in one image, with the backends chosen at
 Changes to the workspace itself (`tools/`, `tools/motion/`, `.claude/skills/`, `templates/`, this file) go through OpenSpec spec-driven development. Specs live in `openspec/specs/`, and repo-wide rules for proposals, designs and tasks live in `openspec/config.yaml`.
 
 - New capability or behaviour change: `/opsx:explore` (optional) → `/opsx:propose "<idea>"` → **user approves** → `/opsx:apply` → `/opsx:verify` → `/opsx:archive`.
+- Tests run in parallel: `uv run --group test pytest -q -n auto tools/tests` (about 1.5 min) and `uv run tools/layout_matrix.py` (under 5 min). A test run over 10 minutes is a defect to fix, not a wait.
 - Small fixes (a typo, a one-line bug) don't need a change. If one alters behaviour a spec describes, update that spec.
 - Editing a project's video is **not** an OpenSpec change. That work is tracked in `footage/<project>/edit/project.md`.
 - Work on a branch, never directly on `main`.

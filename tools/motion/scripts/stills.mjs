@@ -13,7 +13,7 @@ import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { bundle } from "@remotion/bundler";
-import { renderStill, selectComposition } from "@remotion/renderer";
+import { openBrowser, renderStill, selectComposition } from "@remotion/renderer";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const { publicDir, jobs } = JSON.parse(fs.readFileSync(0, "utf8"));
@@ -28,12 +28,20 @@ const port = await new Promise((resolve, reject) => {
     srv.close(() => resolve(p));
   });
 });
+// one browser per scale, shared by its stills: selectComposition and renderStill would each start their own per call.
+// It opens with the device scale the still's own browser would have, so text rasterises and measures exactly as before
+const browsers = new Map();
+const browserFor = async (scale) => {
+  if (!browsers.has(scale)) browsers.set(scale, await openBrowser("chrome", { logLevel: "error", forceDeviceScaleFactor: scale }));
+  return browsers.get(scale);
+};
 let failed = false;
 for (const job of jobs) {
   const inputProps = JSON.parse(fs.readFileSync(job.props, "utf8"));
   let measure = null;
   try {
-    const composition = await selectComposition({ serveUrl, id: job.composition ?? "Overlay", inputProps, logLevel: "error", port });
+    const browser = await browserFor(job.scale ?? 1);
+    const composition = await selectComposition({ serveUrl, id: job.composition ?? "Overlay", inputProps, logLevel: "error", port, puppeteerInstance: browser });
     await renderStill({
       serveUrl,
       composition,
@@ -42,6 +50,7 @@ for (const job of jobs) {
       output: job.out,
       scale: job.scale ?? 1,
       port,
+      puppeteerInstance: browser,
       logLevel: "error",
       onBrowserLog: (log) => {
         if (log.text.startsWith("MEASURE ")) measure = JSON.parse(log.text.slice("MEASURE ".length));
@@ -53,4 +62,5 @@ for (const job of jobs) {
     process.stdout.write(JSON.stringify({ out: job.out, error: e?.stack ? String(e.stack) : typeof e === "object" ? JSON.stringify(e) : String(e) }) + "\n");
   }
 }
+for (const b of browsers.values()) await b.close({ silent: true });
 process.exit(failed ? 1 : 0);

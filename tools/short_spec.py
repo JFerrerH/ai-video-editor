@@ -72,7 +72,7 @@ from pathlib import Path
 from typing import Any
 
 import overlay_schema
-from shortform import END_TAIL, LOOKS, REPO, SFX_DIR, Finding, Project, Seg, _norm
+from shortform import EDGE_POST, EDGE_PRE, END_TAIL, LOOKS, REPO, SFX_DIR, Finding, Project, Seg, _norm
 
 ASSETS = REPO / "assets"
 BRANDS = REPO / "brands"
@@ -689,8 +689,8 @@ def _gap(p: Project, take: str, words: list[dict], i: int, above_floor: float, p
     return round(out_cut, 3), round(in_cut, 3), round(qe - qs, 3)
 
 
-def word_edge(p: Project, take: str, a: dict, edge: str, above_floor: float, pre: float = 0.10,
-              post: float = 0.12) -> float:
+def word_edge(p: Project, take: str, a: dict, edge: str, above_floor: float, pre: float = EDGE_PRE,
+              post: float = EDGE_POST) -> float:
     """Source seconds of a word-anchored edge: `in` in the pause before the word, `out` in the pause after it
     (`_gap`), with `pre` / `post` s of air; with no pause, the quietest 5 ms point between the word and its
     neighbour, never inside either. Raises ValueError if the word isn't there."""
@@ -1058,7 +1058,7 @@ def load(spec_path: Path, root: Path | None = None, strict: bool = False) -> tup
         raise SpecError(errors)
     settings = spec.get("edges", {})
     above = settings.get("above_floor", 9.0)
-    pre, post = settings.get("pre", 0.10), settings.get("post", 0.12)
+    pre, post = settings.get("pre", EDGE_PRE), settings.get("post", EDGE_POST)
     for i, (s, raw) in enumerate(zip(p.segments, spec["segments"])):
         for edge, key in (("in", "from"), ("out", "to")):
             if key in raw:

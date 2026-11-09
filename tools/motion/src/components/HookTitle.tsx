@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { clamp, enter, exit } from "../anim";
-import { SAFE, accentOn, textOn, useBrand } from "../theme";
+import { SAFE, accentOn, textOn, textPair, useBrand } from "../theme";
 
 type Line = { text: string; emphasis?: string };
 
@@ -52,7 +52,7 @@ export const HookTitle: React.FC<{ durationInFrames: number; lines: Line[] }> = 
               {parts[0]}
               {l.emphasis ? (
                 textOn(colors.accent, colors.ink) === textOn(colors.bg, colors.ink) ? (
-                  <span style={{ background: colors.accent, color: textOn(colors.accent, colors.ink), padding: "0 10px", borderRadius: 8 }}>
+                  <span style={{ background: textPair(colors.accent, colors.ink).bg, color: textPair(colors.accent, colors.ink).fg, padding: "0 10px", borderRadius: 8 }}>
                     {l.emphasis}
                   </span>
                 ) : (

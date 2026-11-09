@@ -3,7 +3,7 @@ import { interpolate, spring } from "remotion";
 import { clamp, easeInOut, easeOut } from "../../anim";
 import { IconKind, LineIcon } from "../../components/icons";
 import { useFrameLayout } from "../../layout";
-import { textOn, useBrand } from "../../theme";
+import { textOn, textPair, useBrand } from "../../theme";
 import { SlotName } from "../slots";
 import { Card, f, MIN_TEXT, useCardColors, useEntrance, WidgetBase } from "./Card";
 
@@ -24,7 +24,8 @@ export const ProductCard: React.FC<
   const locked = frame >= lf;
   const dip = pressed ? interpolate(frame - pf, [0, 3, 8], [1, 0.92, 1], clamp) : 1;
   const lockP = locked ? interpolate(frame - lf, [0, 8], [0, 1], { ...clamp, easing: easeOut }) : 0;
-  const btnBg = pressed ? colors.success : colors.accent;
+  const btn = textPair(pressed ? colors.success : colors.accent, colors.ink);
+  const btnBg = btn.bg;
   const label = pressed ? pressedText : locked ? lockText : button;
   return (
     <Card {...base} maxW={640} pad={34}>
@@ -44,7 +45,7 @@ export const ProductCard: React.FC<
             height: 96,
             borderRadius: 48,
             background: locked && !pressed ? c.track : btnBg,
-            color: locked && !pressed ? c.muted : textOn(btnBg, colors.ink),
+            color: locked && !pressed ? c.muted : btn.fg,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -86,7 +87,7 @@ export const Calendar: React.FC<WidgetBase & { title?: string; pages: { label: s
   return (
     <Card {...base} maxW={560} pad={0}>
       <div style={{ borderRadius: 30, overflow: "hidden" }}>
-        <div style={{ height: 84, background: colors.accent, color: textOn(colors.accent, colors.ink), display: "flex", alignItems: "center", justifyContent: "center", fontFamily: fonts.mono, fontWeight: 600, fontSize: 32, letterSpacing: "0.2em", textTransform: "uppercase" }}>
+        <div style={{ height: 84, background: textPair(colors.accent, colors.ink).bg, color: textPair(colors.accent, colors.ink).fg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: fonts.mono, fontWeight: 600, fontSize: 32, letterSpacing: "0.2em", textTransform: "uppercase" }}>
           {title ?? ""}
         </div>
         <div style={{ perspective: 900, padding: "44px 30px 48px" }}>
@@ -130,7 +131,8 @@ export const Balance: React.FC<
     const e = end(sgn);
     const y = e.y + hang;
     const hi = heavy === sgn;
-    const fill = hi ? colors.accent : c.card;
+    const hiPair = textPair(colors.accent, colors.ink);
+    const fill = hi ? hiPair.bg : c.card;
     return (
       <g key={sgn}>
         <line x1={e.x} y1={e.y} x2={e.x - 70} y2={y} stroke={c.fg} strokeWidth={4} />
@@ -138,7 +140,7 @@ export const Balance: React.FC<
         <path d={`M ${e.x - 90} ${y} Q ${e.x} ${y + 60} ${e.x + 90} ${y} Z`} fill={c.fg} />
         <foreignObject x={e.x - 150} y={y + 46} width={300} height={90}>
           <div style={{ display: "flex", justifyContent: "center" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 24px", borderRadius: 999, background: fill, color: hi ? textOn(colors.accent, colors.ink) : c.fg, fontFamily: fonts.sans, fontWeight: 700, fontSize: 40, boxShadow: c.shadow, whiteSpace: "nowrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 24px", borderRadius: 999, background: fill, color: hi ? hiPair.fg : c.fg, fontFamily: fonts.sans, fontWeight: 700, fontSize: 40, boxShadow: c.shadow, whiteSpace: "nowrap" }}>
               {icon ? <LineIcon kind={icon} size={40} color={hi ? textOn(colors.accent, colors.ink) : c.fg} stroke={2.2} /> : null}
               {label}
             </div>

@@ -465,7 +465,8 @@ update the schema in the same change:
   src/<dir>/<Name>.schema.json`, then annotate it (format in `tools/overlay_schema.py`):
   `x-layout: "full"` (draws across the safe area: scenes) or `"float"`; `x-time: "event"` on every prop that is
   seconds from the event's start, `"duration"` for a length in seconds, `"frames"` for frames; `x-text: true` on
-  every string the viewer reads; `x-cues` for entrances (the default cue times and entrance length, copied from
+  every string the viewer reads (`"number"` when it only takes digits, a year or an amount; `"symbol"` for a
+  currency or unit prefix: the layout matrix tests each kind, never the example's characters); `x-cues` for entrances (the default cue times and entrance length, copied from
   the component's own defaults); ranges and `default`s where the component has them.
 - `uv run python -m unittest tools.tests.test_overlay_schema` fails, naming the component and key, when a
   declared prop is missing from the schema or the schema has a key the component doesn't declare, and when a
@@ -530,3 +531,11 @@ Add a row to the table above, then check stills in 9:16 **and** 16:9.
   Set `locale` on `Counter`/`FunnelBars` to match (`"es-ES"`: 12.000, and no separator under 10 000).
 - Languages: en (US), en-gb, es, fr, it, pt-br, hi (`uv run tools/gen/voice.py --list`). Spanish (`es` = Latin America, `es-es` = Spain) has
   three voices (`em_alex`, the default, `ef_dora`, and `em_santa`, a novelty voice); for a better Spanish read, record and use `narration_audio`.
+
+### Text that fits any input
+
+Components size text with the theme, not their own numbers: `fitSize(text, {fontFamily, max, width})` shrinks a
+line to its box down to `MIN_TEXT` (30 px, over the engine's 28) and `FIT_WRAP` wraps it by words past that; a card
+grows with its content up to `SAFE_WIDTH`. Text colours are taken for the surface the text sits on: `readable` /
+`accentOn(colors, fill)` (4.5:1 by default, since a floating card can be scaled down to fit above the head).
+`uv run tools/layout_matrix.py <Name>` checks a component at its limits and on random inputs.

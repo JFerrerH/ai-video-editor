@@ -16,7 +16,9 @@ JSON Schema subset: `type` (or a list of types), `enum`, `minimum`/`maximum`, `m
                         a word or segment anchor, resolved before rendering (short_spec.load).
     x-time: "duration"  number field: a length in seconds (never resolved).
     x-time: "frames"    number field: a length in frames (never resolved).
-    x-text: true        string field (or list of strings) shown to the viewer as text.
+    x-text: true        string field (or list of strings) shown to the viewer as text, any text.
+    x-text: "number"    the same, for digits only (a year, an amount, with its currency sign).
+    x-text: "symbol"    the same, for a symbol only (a currency or unit prefix).
     x-layout            top level: "full" (a scene drawn across the safe area) or "float" (an element).
     x-still-before      top level: a cue at which the text leaves (a card dropping into a drawer): the still and the
                         layout measurements stay before it, `x-still-lead` s before it (default 0.1).
@@ -242,6 +244,18 @@ def text_fields(type_: str, props: dict) -> list[tuple[str, Any, Any, Any]]:
             out.append((p, v, par, k))
         elif s.get("x-text") and isinstance(v, list):
             out += [(_join(p, i), x, v, i) for i, x in enumerate(v) if isinstance(x, str)]
+    return out
+
+
+def text_kinds(type_: str, props: dict) -> list[tuple[str, Any]]:
+    """[(path, kind)] for every string shown to the viewer: its `x-text` value, `True` for any text, or "number" /
+    "symbol" for a field that only takes those. The kind comes from the schema, never from the value."""
+    out = []
+    for p, s, v, _, _ in _walk(schema(type_), props, "", None, None):
+        if s.get("x-text") and isinstance(v, str):
+            out.append((p, s["x-text"]))
+        elif s.get("x-text") and isinstance(v, list):
+            out += [(_join(p, i), s["x-text"]) for i, x in enumerate(v) if isinstance(x, str)]
     return out
 
 

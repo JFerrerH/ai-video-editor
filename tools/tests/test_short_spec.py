@@ -995,6 +995,14 @@ class StillsTest(Fixture):
         p.measure_events(warnings=warnings)
         self.assertEqual(warnings, [])
 
+    def test_probe_short_text_that_shows(self):
+        """Two letters on screen are few pixels, but most of their own box: the probe reads them as shown."""
+        p, _ = S.load(self.write(self.one({"type": "KineticType", "start": 0, "duration": 2.0,
+                                           "props": {"lines": [{"text": "MW", "at": 0.2}]}})), self.root)
+        warnings = []
+        p.measure_events(warnings=warnings)
+        self.assertFalse([w for w in warnings if "almost no text" in w], warnings)
+
     def test_captions_clear_scene_text(self):
         stat = {"type": "StatScene", "start": 0, "duration": 2.4,
                 "props": {"value": 42, "size": 440, "full": True, "label": "a label\nthat runs\nthree lines"}}

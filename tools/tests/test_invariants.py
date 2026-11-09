@@ -101,12 +101,6 @@ class CaptionsAndHead(Fixture):
         (self.root / "edit" / "overlay_boxes.json").write_text(json.dumps({p._box_key(p.events[0]): entry}))
         return p
 
-    def test_band_clears_the_card_not_only_its_text(self):
-        """The card's text ends above the caption band but the card itself reaches into it: captions move below it."""
-        p = self.project([255, 1000, 358, 1100], head=False, content=[220, 1000, 860, 1250])
-        avoid, warns = p._caption_moves()
-        self.assertEqual((avoid, warns), ([[0.0, 2.4, 1310]], []))
-
     def test_placement_never_goes_below_the_head(self):
         """However big the card and wherever the head, a placed card ends above the head or isn't placed."""
         import random

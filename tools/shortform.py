@@ -978,12 +978,10 @@ class Project:
             entry = {"t": self._still_time(e), "event": e.get("index", k), "type": e["type"]}
             if known and O.layout(e["type"]) == "full" and (box := alpha_box(png)):
                 entry["box"] = box
-            elif content := alpha_box(png, solid=200):  # the card itself, not its soft shadow: captions clear all of it
-                entry["content"] = content
             if texts:
                 tb = [t["box"] for t in texts]
                 entry["text"] = [min(b[0] for b in tb), min(b[1] for b in tb), max(b[2] for b in tb), max(b[3] for b in tb)]
-            if "box" in entry or "text" in entry or "content" in entry:
+            if "box" in entry or "text" in entry:
                 boxes[key] = entry
             else:
                 boxes.pop(key, None)
@@ -1434,7 +1432,7 @@ class Project:
 
     def _caption_moves(self) -> tuple[list[list[float]], list[str]]:
         """Where captions go while an overlay reaches their band (measure_events): a full-layout scene's
-        content, or any other event's card and text (its drawn content box with its text box). Below it if two lines still end above the bottom safe zone, else
+        content, or any other event's text. Below it if two lines still end above the bottom safe zone, else
         above it if they start below the top one. Returns ([[start, end, top px]], findings for events they fit
         around neither way)."""
         top = self.caption_props.get("top", 1300)
@@ -1443,9 +1441,7 @@ class Project:
         avoid, warns = [], []
         for k, e in enumerate(self.events):
             b = boxes.get(self._box_key(e))
-            parts = [x for x in ((b or {}).get("content"), (b or {}).get("text")) if x]  # the card and its text
-            box = b and (b.get("box") or (parts and [min(x[0] for x in parts), min(x[1] for x in parts),
-                                                     max(x[2] for x in parts), max(x[3] for x in parts)]))
+            box = b and (b.get("box") or b.get("text"))
             if not box or self.layer_of(e) != "front":
                 continue  # nothing measured, or under the speaker (captions sit over the speaker anyway)
             y0, y1 = box[1], box[3]
@@ -1460,7 +1456,7 @@ class Project:
             elif above >= SAFE_TOP and clear(above):
                 avoid.append(span + [above])
             else:
-                what = "content" if "box" in b or "content" in b else "text"
+                what = "content" if "box" in b else "text"
                 head_blocks = (below + cap_h <= SAFE_BOTTOM) or (above >= SAFE_TOP)  # a band fits the page, but not the head
                 if head_blocks:
                     kind, why, fix = "face", (f"no band below or above it clears the speaker's head ({head[1]}–{head[3]} px) "

@@ -2,14 +2,8 @@ import React from "react";
 import { AbsoluteFill, Easing } from "remotion";
 import { Doc, type DocProps } from "./Doc";
 import { ramp, span, useEventTime } from "../fx";
-import { SAFE } from "../../theme";
 
-/** A card falls into a drawer at the bottom of the frame, which shuts at `shutAt`. The card rests with its bottom
- *  edge REST px above the safe text limit and grows upward with its text, so no title length or font takes its text
- *  below the limit; it enters and drops by moving, not by its anchor. */
-const CLIP = 1600; // the drawer's mouth: the card is cut off below it as it drops in
-const REST = 16;
-
+/** A card falls into a drawer at the bottom of the frame, which shuts at `shutAt`. */
 export const StageDrawer: React.FC<{ durationInFrames: number; card: DocProps; dropAt: number; shutAt: number }> = ({ durationInFrames, card, dropAt, shutAt }) => {
   const { t, d } = useEventTime(durationInFrames);
   const vis = span(t, 0, d, 0.45, 0.35);
@@ -20,16 +14,8 @@ export const StageDrawer: React.FC<{ durationInFrames: number; card: DocProps; d
   return (
     <AbsoluteFill style={{ opacity: vis, transform: `translateY(${(1 - vis) * 120}px)` }}>
       <div style={{ position: "absolute", left: 160, top: 1560 + th, width: 760, height: 300, background: "#2B2F35", borderRadius: 18 }} />
-      <div style={{ position: "absolute", left: 0, top: 0, width: 1080, height: CLIP + th, overflow: "hidden" }}>
-        <div
-          style={{
-            position: "absolute",
-            left: 220,
-            bottom: CLIP - (SAFE.textBottom - REST),
-            opacity: cardIn,
-            transform: `translateY(${(1 - cardIn) * 80 + drop * 420}px) rotate(${-2 + drop * 4}deg)`,
-          }}
-        >
+      <div style={{ position: "absolute", left: 0, top: 0, width: 1080, height: 1600 + th, overflow: "hidden" }}>
+        <div style={{ position: "absolute", left: 220, top: 1140 + (1 - cardIn) * 80 + drop * 420, opacity: cardIn, transform: `rotate(${-2 + drop * 4}deg)` }}>
           <Doc p={card} t={t} />
         </div>
       </div>

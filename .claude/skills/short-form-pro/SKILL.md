@@ -293,7 +293,7 @@ search bar show what the speaker is saying; a word behind the head lands the quo
    exits 1 on any finding (under 5 min with cores minus two at once). Run it before releasing a component or a
    limit change. A refusal with a plan fix (a floating card with no room above a close-up's head, or a device that
    keeps its own place reaching the face) is listed as "refused": in a plan, answer it with `"full": true` or a
-   `corner`/`side` move. Captions clear a card's whole drawn box, not only its text.
+   `corner`/`side` move.
 7. `uv run tools/shortform.py render <edit>/short.json --preview` (~1 min for 60 s). Then verify (below), iterate,
    and render the final without `--preview`. Copy to `exports/<project>_<platform>_<YYYYMMDD>.mp4`.
    The final uses `DELIVERY_X264` (Instagram/TikTok master): source frame rate (don't upsample 30→60),

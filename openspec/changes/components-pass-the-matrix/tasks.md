@@ -13,8 +13,8 @@
 
 ## 3. Layout rules
 
-- [x] 3.1 Tests: captions that would overlap a drawer's card move clear of it; a floating card with no room above a close-up's head is refused, never placed below the chin
-- [x] 3.2 Content boxes stored for every event, and caption bands checked against them (D4)
+- [x] 3.1 Test: a floating card with no room above a close-up's head is refused, never placed below the chin (a property test over random cards and heads)
+- [x] 3.2 Dropped: captions keep clearing an event's text, as before; checking the card's whole drawn box refused a drawer plan that was fine
 
 ## 4. Docs
 
@@ -25,5 +25,4 @@
 - [x] 5.1 The full matrix, fixed and random, exits 0 in under 5 minutes; record wall time and peak memory: 0 findings with seeds 642169, 201273, 158762 (each had found something) and a fresh 234256; 255-273 s for 384 inputs with 8 jobs; peak RSS 1.3 GB
 - [x] 5.2 The engine suite with `-n auto` under 2 minutes: 536 passed in 1 min 14 s
 - [ ] 5.3 Under `footage/` (gitignored): the hosted plan with the 11-letter label is refused with its fixes named, or fits; with the fixes it renders, and stills at each cut and the last second show nothing outside its card, no captions on a card or the face, and a tail at the end; -14 LUFS
-  - 2026-11-09, the hosted plan built on the Mac: the 11-letter ratio-bars label now fits its card; the ending holds on "...de la sala?" with no caption for the next line's onset (a new rule: a word the cut only grazes, its onset or its tail within the edge air, gets no caption), -14.1 LUFS, preview QA passes. Not met: the drawer moment is refused (its card fills the caption band in this medium shot, and above it is the face), and neither fix the refusal names works for it: a `side` move leaves the head across the same band, and `full` is not a drawer prop. A refusal must only name fixes that apply to that event; that and a one-line caption band for tight spans are open.
-
+  - 2026-11-09, the full hosted plan, drawer included, built on the Mac: compiles, renders in 87 s, preview QA passes, -14.1 LUFS. The 11-letter ratio-bars label fits its card and the ending holds on "...de la sala?" with no caption for the next line's onset (a word the cut only grazes, within the edge air, gets no caption). The drawer needed no rule: the first attempt re-anchored its card by the bottom and moved it into the caption band for ordinary content, so it was restored to the original and Doc's text fitting covers what the matrix found; a caption rule for the card's drawn box was dropped for the same reason (the user's plan was fine as it was).

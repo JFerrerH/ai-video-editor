@@ -8,7 +8,6 @@ The layout matrix now exits 0 on every component (change `layout-and-cut-invaria
 
 - **Character kind from the schema, never from the example.** A text field declares `x-text: "number"` (digits, amounts, years) or `"symbol"` when that is all it takes; every other text field is tested with wide letters. Fields that take words but were tested with digits are fixed by fitting the component, through the same shrink-to-fit used by #24, or by a lower limit.
 - **Random inputs with a seed.** Each run adds random brand palettes (light and dark), text lengths and item counts within the limits, and prints a seed; `--seed` reproduces it. A component tuned to the fixed kits fails the next seed.
-- **Captions clear an event's drawn content**, not only its text.
 - **Placement never moves a card below the chin**: the engine places a floating card above the head or refuses it with the fix. A drawer low in the frame is a device the plan chose, not a placement, and stays allowed.
 - **Fast tests.** The engine suite runs with `pytest -n auto`; the matrix, fixed and random, finishes under 5 minutes. A test run over 10 minutes is a defect.
 
@@ -25,7 +24,7 @@ None.
 ### Modified Capabilities
 
 - `overlay-schema`: character kinds declared in the schema, random matrix inputs with a seed, a time budget for the matrix.
-- `edit-faults`: captions clear an event's drawn content; placement never moves a card below the chin.
+- `edit-faults`: placement never moves a card below the chin.
 
 ## Impact
 

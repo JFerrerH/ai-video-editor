@@ -3,7 +3,7 @@ import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { clamp, easeOut, sec } from "../anim";
 import { useFrameLayout } from "../layout";
-import { useBrand } from "../theme";
+import { fitSize, lineCount, useBrand } from "../theme";
 import { BgKind, usePalette } from "./Bg";
 
 type Bar = { label: string; value: number; highlight?: boolean };
@@ -32,7 +32,7 @@ export const BarChart: React.FC<{
   const { fps } = useVideoConfig();
   const { fonts } = useBrand();
   const pal = usePalette(bg);
-  const { safe, aspect, innerW } = useFrameLayout();
+  const { safe, aspect, innerW, innerH } = useFrameLayout();
   const wide = aspect === "16:9";
   const top = Math.max(...bars.map((b) => b.value), max ?? 0) || 1;
   const labelW = wide ? 340 : 0; // wide: labels in a left column; tall: labels above each bar
@@ -49,8 +49,21 @@ export const BarChart: React.FC<{
     ),
   );
   const valueW = Math.min(Math.round(innerW * 0.45), Math.max(wide ? 190 : 170, Math.ceil(widestValue) + 20 + 8));
+  // a value too wide for its column shrinks to the minimum size instead of wrapping onto a second line, which would
+  // make its row taller than the rest
+  const valueSize = (text: string, bold: boolean) =>
+    fitSize(text, { fontFamily: fonts.sans, fontWeight: bold ? 700 : 500, max: valueFs, width: valueW - 28 });
   const trackW = Math.min(innerW, wide ? 1500 : 900) - labelW - valueW;
   const barH = wide ? 50 : 60;
+  // the block (kicker, title, bars) is centred in the safe box: when its height, from the real font's line counts, is
+  // more than that box (a long title, more bars), it shrinks as a whole so nothing leaves the safe area
+  const blockW = labelW + trackW + valueW;
+  const titleFs = wide ? 72 : 84;
+  const titleH = title ? lineCount(title, { fontFamily: fonts.serif, fontSize: titleFs, width: blockW, letterSpacing: "-0.02em" }) * titleFs * 1.05 + 56 : 0;
+  const rowH = wide ? Math.max(34 * 1.25, barH) : 42 * 1.25 + 10 + barH;
+  const gap = wide ? 26 : 34;
+  const contentH = (kicker ? 32 * 1.25 + 14 : 0) + titleH + bars.length * rowH + Math.max(0, bars.length - 1) * gap;
+  const fit = Math.min(1, innerH / (contentH * 1.04));
   const head = interpolate(frame, [0, 10], [0, 1], { ...clamp, easing: easeOut });
   return (
     <AbsoluteFill>
@@ -67,7 +80,7 @@ export const BarChart: React.FC<{
           alignItems: "center",
         }}
       >
-        <div style={{ width: labelW + trackW + valueW }}>
+        <div style={{ width: blockW, scale: String(fit) }}>
           {kicker ? (
             <div style={{ fontFamily: fonts.sans, fontSize: 32, fontWeight: 600, letterSpacing: "0.2em", textTransform: "uppercase", color: pal.accentSmall, marginBottom: 14, opacity: head }}>
               {kicker}
@@ -115,7 +128,8 @@ export const BarChart: React.FC<{
                         paddingLeft: 20,
                         boxSizing: "border-box",
                         fontFamily: fonts.sans,
-                        fontSize: valueFs,
+                        fontSize: valueSize(`${prefix}${b.value.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}${unit}`, !!b.highlight),
+                        whiteSpace: "nowrap",
                         fontWeight: b.highlight ? 700 : 500,
                         color: b.highlight ? pal.fg : pal.muted,
                         fontVariantNumeric: "tabular-nums",

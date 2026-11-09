@@ -13,7 +13,7 @@
     "suffix": {"type": "string", "maxLength": 13},
     "decimals": {"type": "integer", "minimum": 0, "maximum": 6, "default": 0},
     "locale": {"type": "string", "maxLength": 11, "default": "en-US", "description": "BCP 47 tag, e.g. es-ES for 400.000"},
-    "kicker": {"type": "string", "x-text": true, "maxLength": 15},
+    "kicker": {"type": "string", "x-text": true, "maxLength": 25},
     "label": {"type": "string", "x-text": true, "maxLength": 86},
     "max": {"type": "number", "description": "draws a bar under the number filled to value/max"},
     "countStart": {"type": "number", "x-time": "event", "minimum": 0, "default": 0.15, "description": "s from the event's start"},

@@ -20,7 +20,7 @@
           "text": {
             "type": "string",
             "x-text": true,
-            "maxLength": 20
+            "maxLength": 26
           },
           "emphasis": {
             "type": "string",

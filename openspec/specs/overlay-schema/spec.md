@@ -154,3 +154,17 @@ A face finding that is the engine refusing a floating card with its fix (no room
 
 - **WHEN** a ratio-bars card with labels at their limit fits above a close-up's head only under the minimum text size
 - **THEN** the matrix lists it as refused with its fix and exits 0 if nothing else is found
+
+### Requirement: Limits are never under real use
+
+No text field's `maxLength` and no list's `maxItems` SHALL be lower than the most real plans and specs used for it. The repository SHALL keep those maxima as a table of numbers per component field, and a test SHALL fail naming the field when a limit is under its floor. A limit raised to its floor SHALL pass the layout matrix at the new value; a component that overflows there SHALL be fixed through the shared text fitting, not by lowering the limit.
+
+#### Scenario: A limit under its floor
+
+- **WHEN** a schema lowers a card kicker's `maxLength` under the 22 characters real plans used
+- **THEN** the schema test fails naming the component, the field, the limit and the floor
+
+#### Scenario: A component at the floor
+
+- **WHEN** the layout matrix draws every component with each field at its limit, including the raised ones
+- **THEN** it reports no finding

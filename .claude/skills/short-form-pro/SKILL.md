@@ -281,8 +281,11 @@ search bar show what the speaker is saying; a word behind the head lands the quo
      frame (text between 100 and 1536 px vertically), measured at the finish of every entrance, not only at the
      still. Shorten the text or lower the list; the schema limits (`maxLength`, `maxItems`) refuse the worst cases
      before any still.
-   - `face` for captions: when captions move off a graphic, the new band must also clear the head; if no band does
-     it is a finding (fewer words, `"full": true`, or a `corner`/`side` move), never captions over the eyes.
+   - `caption_head` (a warning, never an error): when captions move off a graphic they prefer a band that also
+     clears the head; when only a head-crossing band clears the graphic (a drawer in a medium shot) they take it and
+     this says so. Fewer words, `"full": true` or a `corner`/`side` move avoid it if it is not wanted.
+   - Schema limits are never under what real plans used (`tools/tests/real_use_floors.json`, numbers only): a field
+     over its limit is refused with the limit, and the layout matrix checks every component at its limits.
    - `no_air`: a cut with less silence than the edge refinement's air (0.10 s before an in-point, 0.12 s after an
      out-point). In plans it names the sentence: keep the neighbouring sentence, or start/end at another one.
    - The video ends with a tail: the last clip holds its picture `END_TAIL` (0.30 s, `tools/shortform.py`) and

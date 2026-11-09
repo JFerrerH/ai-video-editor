@@ -29,6 +29,41 @@ def bars(*labels, at=(0.2, 0.5, 0.8)):
             "props": {"bars": [{"value": 60 - 10 * i, "label": w, "at": at[i]} for i, w in enumerate(labels)]}}
 
 
+class Containment(Fixture):
+    """`_outside` on boxes written by hand: the rule itself, with no component needed to be broken."""
+
+    def check(self, *measured):
+        spec = self.on("bright", {"in": 0.45, "out": 3.05})
+        spec["events"] = [bars("You", "Managers", "Clients")]
+        p, _ = S.load(self.write(spec), self.root)
+        return p._outside(p.events[0], "events[0] (AgeBars)", list(measured))
+
+    @staticmethod
+    def text(box, card=(200, 300, 880, 700)):
+        return {"text": "Extraordinary", "box": list(box), "size": 44, "card": list(card)}
+
+    def test_text_past_its_card(self):
+        out = self.check((1.5, [self.text((560, 320, 900, 380))], []))
+        self.assertTrue(out and "card's right edge" in out[0] and "20 px" in out[0], out)
+
+    def test_reported_at_the_first_time_it_shows(self):
+        out = self.check((1.0, [self.text((300, 320, 600, 380))], []), (1.5, [self.text((560, 320, 900, 380))], []),
+                         (2.0, [self.text((560, 320, 900, 380))], []))
+        self.assertEqual(len(out), 1)
+        self.assertIn("at 1.50 s", out[0])
+
+    def test_text_below_the_safe_band(self):
+        out = self.check((1.0, [self.text((300, 1500, 600, 1560), card=(200, 1400, 880, 1600))], []))
+        self.assertTrue(out and "bottom limit" in out[0], out)
+
+    def test_everything_inside(self):
+        self.assertEqual(self.check((1.0, [self.text((300, 320, 600, 380))], [])), [])
+
+    def test_strict_makes_it_an_error(self):
+        errors, _ = S.strict_split(self.check((1.5, [self.text((560, 320, 900, 380))], [])))
+        self.assertTrue(errors)
+
+
 @unittest.skipUnless(REMOTION, "needs tools/motion deps")
 class Geometry(Fixture):
     def findings(self, event: dict) -> list:
@@ -40,27 +75,16 @@ class Geometry(Fixture):
         p.measure_events(warnings=warnings)
         return [w for w in warnings if getattr(w, "kind", None) == "outside"]
 
-    def test_label_wider_than_its_column(self):
-        out = self.findings(bars("18–24", "25–34", "Extraordinary"))
-        self.assertTrue(out, "a 13-letter label in a 120 px column runs past the card")
-        self.assertIn("card's right edge", " ".join(out))
-        self.assertTrue(any("bars[2].label" in w for w in out), out)
+    def test_a_long_label_stays_inside(self):
+        """The ratio-bars column grows with its label up to the safe width, then the label shrinks and wraps."""
+        self.assertEqual(self.findings(bars("You", "Managers", "Extraordinary")), [])
+        self.assertEqual(self.findings(bars("You", "Managers", "Extraordinarily long")), [])
 
-    def test_late_item_is_measured_when_it_arrives(self):
-        ev = bars("18–24", "25–34", "Extraordinary", at=(0.2, 0.5, 1.0))
+    def test_late_items_are_measured_when_they_arrive(self):
         spec = self.on("bright", {"in": 0.45, "out": 3.05})
-        spec["events"] = [ev]
+        spec["events"] = [bars("You", "Managers", "Clients", at=(0.2, 0.5, 1.0))]
         p, _ = S.load(self.write(spec), self.root)
         self.assertEqual(p._measure_times(p.events[0]), [0.7, 1.0])  # the first two bars' finishes; the still time is the third's
-        out = self.findings(ev)
-        self.assertTrue(out and all("at 1.50 s" in w for w in out), out)
-
-    def test_everything_inside(self):
-        self.assertEqual(self.findings(bars("18–24", "25–34", "35–44")), [])
-
-    def test_strict_makes_it_an_error(self):
-        errors, _ = S.strict_split(self.findings(bars("a", "b", "Extraordinary")))
-        self.assertTrue(errors)
 
 
 class CaptionsAndHead(Fixture):

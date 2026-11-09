@@ -1,8 +1,7 @@
-import { measureText } from "@remotion/layout-utils";
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { clamp, easeInOut, enter, exit, sec } from "../anim";
-import { SAFE, useBrand } from "../theme";
+import { SAFE, fitSize, useBrand } from "../theme";
 import { LineIcon } from "./icons";
 
 /** Progress as dots on a white card, floating above the head.
@@ -92,9 +91,7 @@ export const DotTrack: React.FC<{
   }
   const filled = interpolate(frame, [sec(fillStart, fps), sec(fillEnd, fps)], [0, count], { ...clamp, easing: easeInOut });
   // the value shrinks (110 px down) to keep its column within 420 px: the card has to fit above the head with the dots
-  const valueSize = value
-    ? Math.min(110, Math.floor((110 * 420) / Math.max(1, measureText({ text: value, fontFamily: fonts.serif, fontSize: 110, letterSpacing: "-3px" }).width)))
-    : 110;
+  const valueSize = value ? fitSize(value, { fontFamily: fonts.serif, max: 110, width: 420, letterSpacing: "-3px" }) : 110;
   const cols = Math.ceil(count / 2);
   return (
     <AbsoluteFill style={{ alignItems: "center", opacity: out }}>

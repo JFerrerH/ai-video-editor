@@ -36,3 +36,12 @@ A full matrix run, fixed and random, SHALL finish in under 5 minutes on a 10-cor
 
 - **WHEN** the matrix runs every component on every fixture and the random sample
 - **THEN** it prints a wall time under 5 minutes
+
+### Requirement: Refusals with a plan fix are not defects
+
+A face finding that is the engine refusing a floating card with its fix (no room above the head at a readable size in that framing) SHALL be listed apart with the face finding that goes with it, and SHALL NOT fail the run, whatever the text. Text placed over the face without that refusal SHALL still fail it.
+
+#### Scenario: A close-up with no room
+
+- **WHEN** a ratio-bars card with labels at their limit fits above a close-up's head only under the minimum text size
+- **THEN** the matrix lists it as refused with its fix and exits 0 if nothing else is found

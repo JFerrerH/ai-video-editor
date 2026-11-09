@@ -1,3 +1,4 @@
+import { measureText } from "@remotion/layout-utils";
 import { createContext, useContext } from "react";
 
 export type FontFile = {
@@ -141,4 +142,26 @@ export const SAFE = {
   captionTop: 1170, // caption band ~1170–1300
   right: 160,
   side: 130, // min margin from the left/right edges for cards and pills (IG crops ~30 px a side on phones)
+  textBottom: 1536, // no text below this (tools/shortform.py SAFE_BOTTOM): the bottom UI and the caption shade
 };
+
+// The smallest text a component draws: the engine refuses text under 28 px (tools/shortform.py MIN_TEXT); 2 px more
+// so rounding and a card's slight rotation never take it under.
+export const MIN_TEXT = 30;
+// the widest a card may be: the frame between the safe sides
+export const SAFE_WIDTH = 1080 - 2 * SAFE.side;
+
+/** The font size at which `text` fits `width` on one line, from `max` down to `min` (MIN_TEXT by default). Past
+ *  `min` it stays at `min` and wraps by words (FIT_WRAP), so text never shrinks under what the engine accepts and
+ *  never leaves its box sideways. Every component that sizes text to a box uses this, not its own numbers. */
+export const fitSize = (
+  text: string,
+  o: { fontFamily: string; max: number; width: number; min?: number; fontWeight?: number | string; letterSpacing?: string },
+) => {
+  const min = Math.min(o.max, o.min ?? MIN_TEXT);
+  const w = measureText({ text, fontFamily: o.fontFamily, fontSize: o.max, fontWeight: String(o.fontWeight ?? 400), letterSpacing: o.letterSpacing }).width;
+  return Math.max(min, Math.min(o.max, Math.floor((o.max * o.width) / Math.max(1, w))));
+};
+
+/** Wrap by words, and break a word only when it alone is wider than its box: text stays inside it either way. */
+export const FIT_WRAP = { overflowWrap: "anywhere", wordBreak: "normal" } as const;

@@ -40,6 +40,7 @@ import short_spec as S  # noqa: E402
 
 FIXTURES = Path(__file__).resolve().parent / "tests" / "fixtures"
 KINDS = {"outside", "small_text", "contrast", "face", "no_text", "hidden"}
+REFUSAL = "fits above the speaker's head only at"  # shortform.measure_events' refusal with its fix
 DURATION = 4.0
 # wide capitals, cycled: about 0.75 em a letter against ~0.5 em for ordinary text, so a component that fits them fits
 # any real text of that length with room to spare (all "W", ~0.95 em, would refuse what renders fine today)
@@ -268,8 +269,11 @@ def run(types: list[str], brands: list[str], framings: list[str], jobs: int = 1,
             faced = sorted({f["component"] for f in here if f["kind"] == "face"})
             base = {f["component"] for f in (_measure(root, faced, brand, framing, example)[0] if faced else [])
                     if f["kind"] == "face"}
-            return ([f for f in here if not (f["kind"] == "face" and f["component"] in base)],
-                    [f for f in here if f["kind"] == "face" and f["component"] in base])
+            # the engine refusing a floating card with its fix (no room above this head at a readable size) is the rule
+            # working, whatever the text: that refusal and the face finding that goes with it are listed apart
+            refused = {f["component"] for f in here if f["kind"] == "face" and REFUSAL in f["message"]} | base
+            return ([f for f in here if not (f["kind"] == "face" and f["component"] in refused)],
+                    [f for f in here if f["kind"] == "face" and f["component"] in refused])
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
@@ -310,7 +314,7 @@ def main(argv: list[str] | None = None) -> int:
     if a.json:
         Path(a.json).write_text(json.dumps(found, indent=1, ensure_ascii=False))
     for c, b, fr in sorted({(f["component"], f["brand"], f["framing"]) for f in no_room}):
-        print(f"{c:<14} {b:<8} {fr:<9} no room   its own example doesn't fit above this head either (not a limit)")
+        print(f"{c:<14} {b:<8} {fr:<9} no room   refused with its fix: no room above this head at a readable size")
     for f in found:
         print(f"{f['component']:<14} {f['brand']:<8} {f['framing']:<9} {f['kind']:<10} {f['message']}")
     n = len(types) * (len(brands) * len(framings) + a.random)

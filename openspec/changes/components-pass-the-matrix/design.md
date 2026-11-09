@@ -20,6 +20,8 @@ Non-goals: new devices; camera rules.
 
 **D4. Content boxes for captions and the chest.** Both use the content box `measure_events` already computes (the card's solid pixels). The chest region runs from the head box's bottom to the frame's bottom, 2.5 head widths wide around the head.
 
+**D4b. A refusal with its fix is the rule working.** When the engine refuses a floating card because no readable size fits above that head ("fits above the speaker's head only at …"), the plan's answer is the fix it names (`full`, a `corner` or `side` move). The matrix lists that refusal and its face finding apart for any text, not only when the component's own example fails too; a component that covers the face without that refusal still fails. Measured: the ratio-bars card at its limits doesn't fit above a close-up's head even with 4-letter captions and 6-letter labels, while lowering limits under real use would not change that.
+
 **D5. Speed.** The matrix splits its jobs by component as well as by fixture, so the random sample doesn't lengthen the slowest worker; workers = `cpu_count - 2`. pytest-xdist goes in the dev group and the docs' test command.
 
 ## Risks / Trade-offs

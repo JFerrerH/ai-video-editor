@@ -16,7 +16,7 @@ Every component schema field whose text is rendered SHALL declare `maxLength`, a
 
 ### Requirement: Layout matrix
 
-`tools/layout_matrix.py` SHALL render every component in measure mode with generated props: every text field at its `maxLength` with the widest letters of the brand's font, every list at `maxItems`, on three brand fixtures (neutral, dark, pale accent) and two head boxes (close-up, medium shot). It SHALL report each geometry, size, contrast and face finding with the component, the props and the fixture, and exit 1 when there is any.
+`tools/layout_matrix.py` SHALL render every component in measure mode on generated props: each text field at its `maxLength` in wide capitals, each list at `maxItems`, on three brand fixtures (neutral, dark, pale accent) and two head boxes (close-up, medium shot). It SHALL report each geometry, size, contrast and face finding with the component, the props and the fixture, and exit 1 when there is any.
 
 #### Scenario: A component that overflows at its own limit
 

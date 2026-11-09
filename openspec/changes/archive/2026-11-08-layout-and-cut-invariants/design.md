@@ -30,10 +30,11 @@ Non-goals: new devices, camera-move rules, speed (stills and renders: separate c
 
 **D6. Limits in the schema, enforced at validation.** `maxLength` / `maxItems` per field, checked by `overlay_schema` validation that `validate_plan` and spec validation already call. The matrix (D7) sets them: the largest value that passes on every fixture.
 
-**D7. The matrix renders measure-only stills.** For each component: props from the schema's defaults with every text field at `maxLength` in its font's widest letters ("W" for Latin, plus accented capitals), lists at `maxItems`, times at their defaults. Fixtures: `_template` (neutral), a dark kit and a pale-accent kit under `tools/tests/fixtures/`, and two synthetic head boxes. It reuses `measure_events`' findings, so the matrix and a real build can't disagree.
+**D7. The matrix renders measure-only stills.** For each component: props from the schema's first example with every text field at `maxLength` in wide capitals (in words, as text is), lists at `maxItems`, on neutral, dark and pale-accent kits and two head boxes (close-up, medium shot). `--examples` keeps each example's own text. It reuses `measure_events`' findings, so the matrix and a real build can't disagree. Fixing what it finds, random inputs and computed limits are the change `components-pass-the-matrix`.
 
 ## Risks / Trade-offs
 
+- **A matrix run is long.** 17.6 min for 288 inputs, sequential (measured 2026-11-08). The fixtures run in parallel processes.
 - **Longer builds.** One measure render per entrance instead of per event. Measured in 4.2; if it adds more than 20 % to `plan_build`, the measure-only renders run at a smaller scale (boxes don't depend on it).
 - **Limits refuse plans that rendered before.** Intended: those were the ones at risk. Errors name the limit.
 - **A freeze at the end can land on a blink.** Accepted for now; the tail is short. A later change can pick the nearest open-eyes frame.

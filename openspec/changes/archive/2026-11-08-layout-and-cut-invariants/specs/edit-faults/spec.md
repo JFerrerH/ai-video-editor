@@ -2,7 +2,7 @@
 
 ### Requirement: Graphics stay inside their card and the frame
 
-In measure mode, every visible text node and every element that draws a background, border or image SHALL be measured with its box. Each SHALL sit inside the box of its card (the nearest ancestor that draws a background) and inside the frame, with 2 px of tolerance; text SHALL also keep between the top limit (100 px) and the bottom safe limit (1536 px), while a shape (a drawer at the bottom of the frame) is held only to the frame. An element that breaks either SHALL be a finding of kind `outside` naming the event, the field or element, the box and the edge it crosses. In strict mode it SHALL be an error.
+In measure mode, every visible text node and every element that draws a background, border or image SHALL be measured with its box. Each SHALL sit inside its card (the nearest ancestor that draws a background) and inside the frame, with 2 px of tolerance. A break SHALL be a finding of kind `outside` naming the event, the element, its box and the edge it crosses, and an error in strict mode.
 
 #### Scenario: Label wider than its column
 
@@ -18,6 +18,15 @@ In measure mode, every visible text node and every element that draws a backgrou
 
 - **WHEN** every text node and shape of an event sits inside its card and the safe area
 - **THEN** no `outside` finding is reported for it
+
+### Requirement: Text keeps to the safe band
+
+Text SHALL also keep between the top limit (100 px) and the bottom safe limit (1536 px); a shape (a drawer at the bottom of the frame) SHALL be held only to the frame. A break SHALL be an `outside` finding.
+
+#### Scenario: Text below the safe limit
+
+- **WHEN** a title's last line ends at 1790 px
+- **THEN** an `outside` finding names that text and the bottom limit
 
 ### Requirement: Layout is measured at every entrance
 

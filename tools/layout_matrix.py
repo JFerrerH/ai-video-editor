@@ -67,12 +67,13 @@ def widest(n: int) -> str:
     return out[:n].rstrip() + WIDE * (n - len(out[:n].rstrip()))
 
 
-def generate(type_: str) -> dict:
+def generate(type_: str, examples: bool = False) -> dict:
     """Props for `type_` at the limits of its schema: the first example, every text field at its maxLength, every list
-    at its maxItems (items repeated from the example's, their entrance times spread over the first half)."""
+    at its maxItems (items repeated from the example's, their entrance times spread over the first half). With
+    `examples`, the first example as it is: what the component draws with ordinary text."""
     s = O.schemas()[type_]
     props = copy.deepcopy((s.get("examples") or [{}])[0])
-    return _fill(s, props, top=True)
+    return props if examples else _fill(s, props, top=True)
 
 
 def _fill(node: dict, value, top: bool = False):
@@ -123,10 +124,10 @@ def project_root(tmp: Path) -> Path:
     return root
 
 
-def spec_for(types: list[str], head: list[int], brand: str) -> dict:
+def spec_for(types: list[str], head: list[int], brand: str, examples: bool = False) -> dict:
     events = []
     for t in types:
-        layer, props = O.layers(t)[0], generate(t)
+        layer, props = O.layers(t)[0], generate(t, examples)
         if O.layout(t) == "full":
             props["full"] = True  # a full-layout scene is a cutaway on the brand's backdrop, as a plan draws it
         events.append({"type": t, "start": 0.0, "duration": DURATION, "props": props, "layer": layer})
@@ -138,7 +139,7 @@ def spec_for(types: list[str], head: list[int], brand: str) -> dict:
                              **{n: n for n in FONT_FILES if any(f["url"] == n for f in BRANDS[brand]["fontFiles"])}}}
 
 
-def run(types: list[str], brands: list[str], framings: list[str]) -> list[dict]:
+def run(types: list[str], brands: list[str], framings: list[str], examples: bool = False) -> list[dict]:
     """[{component, brand, framing, kind, message, props}] for every finding."""
     found: list[dict] = []
     tmp = Path(tempfile.mkdtemp())
@@ -147,7 +148,7 @@ def run(types: list[str], brands: list[str], framings: list[str]) -> list[dict]:
         for brand in brands:
             for framing in framings:
                 names = list(types)
-                spec = spec_for(names, FRAMINGS[framing], brand)
+                spec = spec_for(names, FRAMINGS[framing], brand, examples)
                 path = root / "edit" / "short.json"
                 while True:  # a generated input the spec refuses is a finding too: drop that event and go on
                     path.write_text(json.dumps(spec))
@@ -185,13 +186,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--brand", choices=list(BRANDS), action="append", help="default: all three")
     ap.add_argument("--framing", choices=list(FRAMINGS), action="append", help="default: both")
     ap.add_argument("--json", help="write every finding with its props to this file")
+    ap.add_argument("--examples", action="store_true", help="each schema's first example as it is, not at its limits")
     a = ap.parse_args(argv)
     types = a.components or sorted(c for c in O.COMPONENTS if c in O.schemas())
     if unknown := [t for t in types if t not in O.schemas()]:
         sys.exit(f"no schema for: {', '.join(unknown)}")
     brands, framings = a.brand or list(BRANDS), a.framing or list(FRAMINGS)
     t0 = time.time()
-    found = run(types, brands, framings)
+    found = run(types, brands, framings, a.examples)
     if a.json:
         Path(a.json).write_text(json.dumps(found, indent=1, ensure_ascii=False))
     for f in found:

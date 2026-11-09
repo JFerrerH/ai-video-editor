@@ -7,6 +7,7 @@ compares what is heard with the words the edit keeps, and measures the sound at 
 It reports, each with the output time, the segment and the fix:
 
     unexpected speech   heard words (more than three letters each) the edit doesn't contain: a stumble the transcript hid
+                        (not after the last kept word: the end tail leaves nothing but Whisper's own additions there)
     clipped word        a kept word that is cut short at a cut
     repeat              a 3-word run that plays more often than the takes say it
     restart             a false start heard in the preview
@@ -134,6 +135,8 @@ def compare(p: Any, root: Path, heard: list[dict]) -> tuple[list[dict], dict]:
     faults: list[dict] = []
     sm = difflib.SequenceMatcher(a=e, b=g, autojunk=False)
     for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == "insert" and i1 >= len(e):
+            continue  # after the last kept word: the end tail stops the audio before the next source word, so this is Whisper
         if tag in ("insert", "replace"):
             extra = [(heard[j]["start"], g[j]) for j in range(j1, j2)]
             run = [x for _, x in extra if len(x) > SHORT_WORD]

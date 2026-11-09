@@ -91,6 +91,23 @@ class Words(Preview):
         self.assertIn("conversemos", f["message"])
         self.assertIn("segment", f["fix"])
 
+    def test_a_word_after_the_last_kept_word_is_not_speech(self):
+        """specs/preview-qa "Nothing after the last kept word is unexpected speech": Whisper adds words to the end."""
+        exp, _ = Q.expected(self.p, self.root)
+        res = self.qa(self.heard(extra=[("paris", exp[-1]["t"] + 0.5)]))
+        self.assertEqual([f for f in res["errors"] if f["kind"] == "unexpected_speech"], [])
+
+    def test_several_words_after_the_last_kept_word_are_not_speech_either(self):
+        exp, _ = Q.expected(self.p, self.root)
+        t = exp[-1]["t"] + 0.5
+        res = self.qa(self.heard(extra=[("gracias", t), ("amigos", t + 0.5)]))
+        self.assertEqual([f for f in res["errors"] if f["kind"] == "unexpected_speech"], [])
+
+    def test_a_stumble_just_before_the_last_word_is_still_reported(self):
+        exp, _ = Q.expected(self.p, self.root)
+        res = self.qa(self.heard(extra=[("conversemos", exp[-1]["t"] - 0.4)]))
+        self.assertEqual(len([f for f in res["errors"] if f["kind"] == "unexpected_speech"]), 1)
+
     def test_short_function_words_are_not_unexpected_speech(self):
         res = self.qa(self.heard(extra=[("y", 3.0), ("el", 3.4), ("la", 3.8)]))
         self.assertTrue(res["ok"], res["errors"])

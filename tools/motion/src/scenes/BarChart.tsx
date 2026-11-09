@@ -1,3 +1,4 @@
+import { measureText } from "@remotion/layout-utils";
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { clamp, easeOut, sec } from "../anim";
@@ -35,7 +36,19 @@ export const BarChart: React.FC<{
   const wide = aspect === "16:9";
   const top = Math.max(...bars.map((b) => b.value), max ?? 0) || 1;
   const labelW = wide ? 340 : 0; // wide: labels in a left column; tall: labels above each bar
-  const valueW = wide ? 190 : 170;
+  const valueFs = wide ? 36 : 44;
+  // the value column fits the widest value it draws (prefix, number, unit, bold), and the track gives up the room
+  const widestValue = Math.max(
+    ...bars.map((b) =>
+      measureText({
+        text: `${prefix}${b.value.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}${unit}`,
+        fontFamily: fonts.sans,
+        fontSize: valueFs,
+        fontWeight: "700",
+      }).width,
+    ),
+  );
+  const valueW = Math.min(Math.round(innerW * 0.45), Math.max(wide ? 190 : 170, Math.ceil(widestValue) + 20 + 8));
   const trackW = Math.min(innerW, wide ? 1500 : 900) - labelW - valueW;
   const barH = wide ? 50 : 60;
   const head = interpolate(frame, [0, 10], [0, 1], { ...clamp, easing: easeOut });
@@ -102,7 +115,7 @@ export const BarChart: React.FC<{
                         paddingLeft: 20,
                         boxSizing: "border-box",
                         fontFamily: fonts.sans,
-                        fontSize: wide ? 36 : 44,
+                        fontSize: valueFs,
                         fontWeight: b.highlight ? 700 : 500,
                         color: b.highlight ? pal.fg : pal.muted,
                         fontVariantNumeric: "tabular-nums",

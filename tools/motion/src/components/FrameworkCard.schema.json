@@ -11,11 +11,11 @@
     "kicker": {
       "type": "string",
       "x-text": true,
-      "maxLength": 24
+      "maxLength": 21
     },
     "steps": {
       "type": "array",
-      "maxItems": 6,
+      "maxItems": 3,
       "items": {
         "type": "object",
         "required": [
@@ -26,14 +26,14 @@
           "title": {
             "type": "string",
             "x-text": true,
-            "maxLength": 40
+            "maxLength": 15
           },
           "lines": {
             "type": "array",
-            "maxItems": 6,
+            "maxItems": 3,
             "items": {
               "type": "string",
-              "maxLength": 40
+              "maxLength": 20
             },
             "x-text": true
           }

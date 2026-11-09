@@ -287,8 +287,10 @@ search bar show what the speaker is saying; a word behind the head lands the quo
      out-point). In plans it names the sentence: keep the neighbouring sentence, or start/end at another one.
    - The video ends with a tail: the last clip holds its picture `END_TAIL` (0.30 s, `tools/shortform.py`) and
      the audio fades out in the silence there, so it never stops on a syllable.
-   `uv run tools/layout_matrix.py` draws every component at its schema limits (widest letters) on three brand
-   fixtures and two framings and exits 1 on any finding: run it before releasing a component or a limit change.
+   `uv run tools/layout_matrix.py` draws every component at its schema limits (wide capitals, lists full) on three
+   brand fixtures and two framings and exits 1 on any finding (~6 min, `--jobs 6`): run it before releasing a
+   component or a limit change. A floating card too big for a close-up is listed as "no room": in a plan, answer
+   it with `"full": true` or a `corner` move.
 7. `uv run tools/shortform.py render <edit>/short.json --preview` (~1 min for 60 s). Then verify (below), iterate,
    and render the final without `--preview`. Copy to `exports/<project>_<platform>_<YYYYMMDD>.mp4`.
    The final uses `DELIVERY_X264` (Instagram/TikTok master): source frame rate (don't upsample 30→60),

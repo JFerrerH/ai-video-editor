@@ -27,5 +27,7 @@
       }
     }
   ],
-  "x-still-before": "closeAt"
+  "x-still-before": "closeAt",
+  "x-still-before": "closeAt",
+  "x-still-lead": 0.6
 }

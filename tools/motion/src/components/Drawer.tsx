@@ -13,7 +13,8 @@ export const Drawer: React.FC<{ durationInFrames: number; docTitle: string; clos
   const { fps } = useVideoConfig();
   const { colors, fonts } = useBrand();
   const out = exit(frame, durationInFrames, 5);
-  const drop = interpolate(frame, [2, sec(closeAt, fps) - 4], [0, 1], { ...clamp, easing: easeInOut });
+  // the document hangs where it can be read, then falls in during the last 12 frames before the drawer slams
+  const drop = interpolate(frame, [Math.max(2, sec(closeAt, fps) - 16), sec(closeAt, fps) - 4], [0, 1], { ...clamp, easing: easeInOut });
   const close = enter(frame, fps, sec(closeAt, fps) - 5, 12);
   const shake = frame >= sec(closeAt, fps) && frame < sec(closeAt, fps) + 6 ? Math.sin(frame * 3) * 6 : 0;
   const drawerTop = 860;

@@ -56,8 +56,19 @@ def ink_on_light(colors: dict) -> dict:
     """Cards are light and take `ink` for their text, so `ink` is the dark colour of the pair whatever a kit calls
     them: a dark-mode kit (cream ink on a dark background) would write cream on white. A dark backdrop is `dark`."""
     if _luminance(colors["ink"]) > _luminance(colors["bg"]):
-        return {**colors, "ink": colors["bg"], "bg": colors["ink"]}
+        out = {**colors, "ink": colors["bg"], "bg": colors["ink"]}
+        # its tints were made for the dark background: on the light one they'd draw dark glows behind the text
+        for k in ("tint1", "tint2"):
+            if k in out and _luminance(out[k]) < _luminance(out["bg"]) - 0.3:
+                out[k] = _mix(out[k], out["bg"], 0.85)
+        return out
     return colors
+
+
+def _mix(a: str, b: str, t: float) -> str:
+    """`a` moved `t` of the way to `b` (hex colours)."""
+    ca, cb = ([int(h[i:i + 2], 16) for i in (1, 3, 5)] for h in (a, b))
+    return "#" + "".join(f"{round(x + (y - x) * t):02X}" for x, y in zip(ca, cb))
 
 
 def load_brand(slug: str | None) -> BrandKit:

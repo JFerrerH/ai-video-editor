@@ -17,7 +17,7 @@
     },
     "words": {
       "type": "array",
-      "maxItems": 40,
+      "maxItems": 12,
       "items": {
         "type": "object",
         "required": [
@@ -30,7 +30,7 @@
           "text": {
             "type": "string",
             "x-text": true,
-            "maxLength": 60
+            "maxLength": 27
           },
           "t": {
             "type": "number",
@@ -79,7 +79,7 @@
         },
         "poses": {
           "type": "array",
-          "maxItems": 12,
+          "maxItems": 4,
           "items": {
             "type": "object",
             "required": [
@@ -148,7 +148,7 @@
         },
         "moves": {
           "type": "array",
-          "maxItems": 12,
+          "maxItems": 3,
           "items": {
             "type": "object",
             "required": [
@@ -174,7 +174,7 @@
     },
     "widgets": {
       "type": "array",
-      "maxItems": 6,
+      "maxItems": 4,
       "items": {
         "type": "object",
         "additionalProperties": true

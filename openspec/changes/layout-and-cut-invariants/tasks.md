@@ -20,8 +20,8 @@
 ## 4. Limits and the matrix
 
 - [x] 4.1 Schema test: every rendered text field has `maxLength`, every list `maxItems`; validation refuses values over them
-- [ ] 4.2 `tools/layout_matrix.py` (D7) with the three brand fixtures and two head boxes; record its run time and the added `plan_build` time on a 50 s plan
-- [ ] 4.3 Run the matrix; fix each flagged component (fit its content) or lower its limit, until it exits 0
+- [x] 4.2 `tools/layout_matrix.py` (D7) with the three brand fixtures and two head boxes; record its run time and the added `plan_build` time on a 50 s plan (matrix: 336 s for 288 inputs with 6 jobs; `plan_build` on a 64 s plan: 91 s on main, 99 s here, +9 %)
+- [x] 4.3 Run the matrix; fix each flagged component (fit its content) or lower its limit, until it exits 0
 
 ## 5. Docs
 
@@ -29,5 +29,5 @@
 
 ## 6. Verification
 
-- [ ] 6.1 Full engine test suite and the matrix
+- [x] 6.1 Full engine test suite and the matrix
 - [ ] 6.2 Under `footage/` (gitignored): the hosted plan that showed the overflow is refused with `outside` and `face` errors; with the fixes, it renders, and stills at each cut and the last second show nothing outside its card, no captions on the face, and a tail at the end; -14 LUFS

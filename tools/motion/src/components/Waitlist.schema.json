@@ -16,27 +16,27 @@
     "title": {
       "type": "string",
       "x-text": true,
-      "maxLength": 40
+      "maxLength": 22
     },
     "placeholder": {
       "type": "string",
       "x-text": true,
-      "maxLength": 40
+      "maxLength": 22
     },
     "email": {
       "type": "string",
       "x-text": true,
-      "maxLength": 40
+      "maxLength": 22
     },
     "button": {
       "type": "string",
       "x-text": true,
-      "maxLength": 20
+      "maxLength": 11
     },
     "success": {
       "type": "string",
       "x-text": true,
-      "maxLength": 40
+      "maxLength": 22
     },
     "typeStart": {
       "type": "number",

@@ -55,10 +55,11 @@ export const ImageScene: React.FC<{
       {darken > 0 ? <AbsoluteFill style={{ background: `rgba(0,0,0,${darken})` }} /> : null}
       {title ? (
         <>
-          <AbsoluteFill style={{ background: "linear-gradient(to top, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0) 45%)" }} />
+          <AbsoluteFill style={{ background: "linear-gradient(to top, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.5) 30%, rgba(0,0,0,0) 60%)" }} />
           <div style={{ position: "absolute", left: safe.left, right: safe.right, bottom: safe.bottom + (aspect === "9:16" ? 120 : 0), opacity: lt, translate: `0px ${(1 - lt) * 20}px` }}>
             {kicker ? (
-              <div style={{ fontFamily: fonts.sans, fontSize: 32, fontWeight: 600, letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(255,255,255,0.85)", marginBottom: 12 }}>
+              <div style={{ fontFamily: fonts.sans, fontSize: 32, fontWeight: 600, letterSpacing: "0.2em", textTransform: "uppercase", color: "#FFFFFF", marginBottom: 12,
+                display: "inline-block", background: "rgba(0,0,0,0.55)", padding: "4px 14px", borderRadius: 8 }}>
                 {kicker}
               </div>
             ) : null}

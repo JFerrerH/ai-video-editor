@@ -10,7 +10,7 @@
 import React from "react";
 import { AbsoluteFill, Img, OffthreadVideo, Sequence, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { HIDE_TEXT, MeasureText, OverlayLayer, useBrandFonts, type OverlayEvent } from "../Overlay";
-import { BrandContext, type Brand } from "../theme";
+import { BrandContext, readableKit, type Brand } from "../theme";
 import { camStyle, camera, type CamMove } from "./camera";
 
 export type Layer = "front" | "behind" | "panel";
@@ -42,7 +42,7 @@ export const Stage: React.FC<StageProps> = ({ brand, base, baseImage, persons, p
   const bg = cam.bg === "ink" ? c.ink : `radial-gradient(120% 80% at 20% 10%, ${c.tint1}, ${c.bg} 55%, ${c.tint2})`;
   const on = (layer: Layer) => events.filter((e) => layerOf(e) === layer);
   return (
-    <BrandContext.Provider value={brand}>
+    <BrandContext.Provider value={readableKit(brand)}>
       <AbsoluteFill style={{ background: bg, fontFamily: brand.fonts.sans }}>
         {hideText ? <style>{HIDE_TEXT}</style> : null}
         {ready ? <OverlayLayer events={on("panel")} measure={measure} /> : null}

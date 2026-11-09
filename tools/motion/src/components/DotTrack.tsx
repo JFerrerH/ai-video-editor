@@ -1,3 +1,4 @@
+import { measureText } from "@remotion/layout-utils";
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { clamp, easeInOut, enter, exit, sec } from "../anim";
@@ -90,14 +91,18 @@ export const DotTrack: React.FC<{
     );
   }
   const filled = interpolate(frame, [sec(fillStart, fps), sec(fillEnd, fps)], [0, count], { ...clamp, easing: easeInOut });
+  // the value shrinks (110 px down) to keep its column within 420 px: the card has to fit above the head with the dots
+  const valueSize = value
+    ? Math.min(110, Math.floor((110 * 420) / Math.max(1, measureText({ text: value, fontFamily: fonts.serif, fontSize: 110, letterSpacing: "-3px" }).width)))
+    : 110;
   const cols = Math.ceil(count / 2);
   return (
     <AbsoluteFill style={{ alignItems: "center", opacity: out }}>
       <div style={{ ...card, padding: "30px 40px", display: "flex", alignItems: "center", gap: 36 }}>
         {value ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-            <div style={{ fontFamily: fonts.serif, fontSize: 110, lineHeight: 0.9, color: colors.ink, letterSpacing: -3 }}>{value}</div>
-            {unit ? <div style={{ fontFamily: fonts.mono, fontSize: 22, letterSpacing: 6, color: colors.muted, marginTop: 8 }}>{unit}</div> : null}
+            <div style={{ fontFamily: fonts.serif, fontSize: valueSize, lineHeight: 0.9, color: colors.ink, letterSpacing: -3, whiteSpace: "nowrap" }}>{value}</div>
+            {unit ? <div style={{ fontFamily: fonts.mono, fontSize: 28, letterSpacing: 6, color: colors.muted, marginTop: 8 }}>{unit}</div> : null}
           </div>
         ) : null}
         <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 46px)`, gap: 10 }}>

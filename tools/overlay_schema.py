@@ -18,6 +18,8 @@ JSON Schema subset: `type` (or a list of types), `enum`, `minimum`/`maximum`, `m
     x-time: "frames"    number field: a length in frames (never resolved).
     x-text: true        string field (or list of strings) shown to the viewer as text.
     x-layout            top level: "full" (a scene drawn across the safe area) or "float" (an element).
+    x-still-before      top level: a cue at which the text leaves (a card dropping into a drawer): the still and the
+                        layout measurements stay before it, `x-still-lead` s before it (default 0.1).
     x-cues              top level: entrances that start on a time and how long they take:
         {"path": "items[].at" | "stops[]" | "countEnd",   per item (its field, or the item itself) or one prop
          "when": {"style": ["rise", …]},              optional: only while these props hold these values

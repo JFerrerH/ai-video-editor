@@ -1,8 +1,11 @@
+import { measureText } from "@remotion/layout-utils";
 import React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { enter, exit, sec } from "../anim";
 import { SAFE, readable, useBrand } from "../theme";
 import { IconKind, LineIcon } from "./icons";
+
+const CARD_W = 236;
 
 type Card = { icon: IconKind; kicker?: string; title: string; at: number };
 
@@ -17,6 +20,9 @@ export const TopicCards: React.FC<{ durationInFrames: number; cards: Card[]; top
   const { fps } = useVideoConfig();
   const { colors, fonts } = useBrand();
   const out = exit(frame, durationInFrames, 6);
+  // the title shrinks (44 → 32 px) to fit its card's width on one line, and wraps by word past that
+  const titleSize = (t: string) =>
+    Math.max(32, Math.min(44, Math.floor((44 * (CARD_W - 36)) / Math.max(1, measureText({ text: t, fontFamily: fonts.serif, fontSize: 44 }).width))));
   return (
     <AbsoluteFill style={{ alignItems: "center", opacity: out }}>
       <div style={{ position: "absolute", top, display: "flex", gap: 24 }}>
@@ -27,7 +33,7 @@ export const TopicCards: React.FC<{ durationInFrames: number; cards: Card[]; top
             <div
               key={i}
               style={{
-                width: 236,
+                width: CARD_W,
                 padding: "26px 18px 24px",
                 boxSizing: "border-box",
                 background: "white",
@@ -49,7 +55,8 @@ export const TopicCards: React.FC<{ durationInFrames: number; cards: Card[]; top
               {c.kicker ? (
                 <div style={{ fontFamily: fonts.mono, fontSize: 28, fontWeight: 600, letterSpacing: 4, color: readable(colors.muted, "#FFFFFF", colors.ink), marginTop: 4 }}>{c.kicker}</div>
               ) : null}
-              <div style={{ fontFamily: fonts.serif, fontSize: 44, lineHeight: 1, color: colors.ink, letterSpacing: -0.5, whiteSpace: "nowrap" }}>
+              <div style={{ fontFamily: fonts.serif, fontSize: titleSize(c.title), lineHeight: 1.05, color: colors.ink, letterSpacing: -0.5,
+                textAlign: "center", overflowWrap: "anywhere", maxWidth: CARD_W - 36 }}>
                 {c.title}
               </div>
             </div>

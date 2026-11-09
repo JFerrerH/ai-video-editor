@@ -106,8 +106,8 @@ export const Milestones: React.FC<{ durationInFrames: number; items: Item[]; top
               <Glyph kind={it.icon} color={colors.ink} />
             </div>
             {it.label ? (
-              <div style={{ marginTop: 14, fontFamily: fonts.mono, fontSize: 28, letterSpacing: 4, color: onBackdrop(colors, backdrop, "white"),
-                textShadow: backdrop.full ? undefined : "0 2px 10px rgba(0,0,0,0.5)" }}>
+              <div style={{ marginTop: 14, fontFamily: fonts.mono, fontSize: 30, letterSpacing: 4, color: onBackdrop(colors, backdrop, "white"),
+                ...(backdrop.full ? {} : { background: "rgba(20,22,26,0.72)", padding: "4px 12px", borderRadius: 10 }) }}>
                 {it.label}
               </div>
             ) : null}

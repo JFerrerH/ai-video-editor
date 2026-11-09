@@ -11,7 +11,7 @@
     "kicker": {
       "type": "string",
       "x-text": true,
-      "maxLength": 24
+      "maxLength": 28
     },
     "handle": {
       "type": "string",

@@ -122,6 +122,15 @@ export const useBackdrop = () => useContext(BackdropContext);
 export const BrandContext = createContext<Brand>(defaultBrand);
 export const useBrand = () => useContext(BrandContext);
 
+/** The kit with its `muted` colour made to read (4.5:1) on the white cards and on the kit's own background: muted text
+ *  (kickers, notes, line numbers) is still text a viewer reads. The kit's hue is kept; only its lightness moves. */
+export const readableKit = (brand: Brand): Brand => {
+  const c = brand.colors;
+  const muted = readable(readable(c.muted, "#FFFFFF", c.ink), c.bg, c.ink);
+  const tinted = readable(muted, c.tint1, c.ink);
+  return muted === c.muted && tinted === c.muted ? brand : { ...brand, colors: { ...c, muted: tinted } };
+};
+
 // Safe zones for 1080x1920 Reels/TikTok: keep content out of the top tabs,
 // the bottom ~20% UI, the right-side buttons, and the caption band.
 // top: Instagram blurs/overlays its header over the top ~14–15% (measured on a real Reels

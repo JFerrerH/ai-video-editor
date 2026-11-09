@@ -63,7 +63,7 @@ export const ListScene: React.FC<{
             {items.map((it, i) => {
               const p = interpolate(frame, [cues[i], cues[i] + 14], [0, 1], { ...clamp, easing: easeOut });
               const pop = spring({ frame: frame - cues[i] - 3, fps, config: { damping: 11, stiffness: 220, mass: 0.6 } });
-              const dim = dimPrevious && i < latest ? 0.8 : 1; // dimmer, still readable
+              const dim = dimPrevious && i < latest ? 0.9 : 1; // dimmer, still readable (0.8 took small accent numbers under 4.5:1)
               const markerEl =
                 marker === "number" ? (
                   <span style={{ fontFamily: fonts.sans, fontSize: fs * 0.62, fontWeight: 700, color: pal.accentSmall, fontVariantNumeric: "tabular-nums" }}>

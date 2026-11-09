@@ -7,16 +7,16 @@
   "required": ["items"],
   "properties": {
     "bg": {"type": "string", "enum": ["light", "dark", "accent", "none"]},
-    "kicker": {"type": "string", "x-text": true, "maxLength": 80},
-    "title": {"type": "string", "x-text": true, "maxLength": 200},
+    "kicker": {"type": "string", "x-text": true, "maxLength": 16},
+    "title": {"type": "string", "x-text": true, "maxLength": 21},
     "items": {
       "type": "array",
-      "maxItems": 12,
+      "maxItems": 4,
       "items": {
         "type": "object",
         "required": ["text"],
         "properties": {
-          "text": {"type": "string", "x-text": true, "maxLength": 200},
+          "text": {"type": "string", "x-text": true, "maxLength": 19},
           "icon": {"type": "string", "description": "line icon name (components/icons.tsx), used with marker \"icon\""},
           "at": {"type": "number", "x-time": "event", "minimum": 0, "description": "s from the event's start when the item enters"}
         }

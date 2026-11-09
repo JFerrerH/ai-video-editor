@@ -3,7 +3,7 @@ import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } fr
 import { clamp, easeInOut, easeOut } from "../anim";
 import { IconKind, LineIcon } from "../components/icons";
 import { useFrameLayout } from "../layout";
-import { textOn, useBrand } from "../theme";
+import { readable, textOn, useBrand } from "../theme";
 import { BgKind, usePalette } from "./Bg";
 import { SceneHeader, useHeaderSize } from "./header";
 import { NODE_COLORS } from "./NetworkScene";
@@ -291,7 +291,10 @@ export const IsoOffice: React.FC<{
           const [x, y] = P(s.p[0], s.p[1]);
           return (
             <div key={`l${s.a.id}`} style={{ position: "absolute", left: x - 200, top: y + th * 0.3 * K, width: 400, display: "flex", justifyContent: "center", opacity: interpolate(s.pop, [0.3, 1], [0, 1], clamp) }}>
-              <span style={{ fontFamily: fonts.mono, fontSize: LABEL_FS, fontWeight: 700, lineHeight: 1.25, padding: "2px 12px", borderRadius: 8, background: s.color, color: textOn(s.color, colors.ink), whiteSpace: "nowrap" }}>
+              <span style={{ fontFamily: fonts.mono, fontSize: LABEL_FS, fontWeight: 700, lineHeight: 1.25, padding: "2px 12px", borderRadius: 8,
+                // white on the agent's colour unless ink reads better; the pill's colour moves until that text reads at 6:1
+                background: readable(s.color, textOn(s.color, colors.ink), colors.ink, 6),
+                color: textOn(s.color, colors.ink), whiteSpace: "nowrap" }}>
                 {s.a.label}
               </span>
             </div>

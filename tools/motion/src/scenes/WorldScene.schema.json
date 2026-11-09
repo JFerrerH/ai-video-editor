@@ -13,7 +13,7 @@
     },
     "words": {
       "type": "array",
-      "maxItems": 40,
+      "maxItems": 12,
       "items": {
         "type": "object",
         "required": [
@@ -69,7 +69,7 @@
         },
         "objects": {
           "type": "array",
-          "maxItems": 24,
+          "maxItems": 12,
           "items": {
             "type": "object"
           }
@@ -80,7 +80,7 @@
     },
     "actions": {
       "type": "array",
-      "maxItems": 24,
+      "maxItems": 12,
       "items": {
         "type": "object",
         "required": [

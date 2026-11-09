@@ -39,6 +39,11 @@ class LoadBrand(unittest.TestCase):
         self.assertEqual((out["ink"], out["bg"], out["accent"]), ("#16150F", "#F2F0E9", "#E8FD5A"))
         self.assertEqual(B.ink_on_light(out), out)
 
+    def test_a_dark_kits_tints_turn_light_with_it(self):
+        out = B.ink_on_light({"ink": "#F2F0E9", "bg": "#16150F", "tint1": "#1E252C", "tint2": "#E4E4E0"})
+        self.assertGreater(B._luminance(out["tint1"]), 0.7)  # was a near-black glow on the light backdrop
+        self.assertEqual(out["tint2"], "#E4E4E0")  # already light: kept
+
     def test_weights_become_strings(self):
         k = self.kit({"fontFiles": [{"family": "Brand Sans", "file": "A.ttf", "weight": 300},
                                     {"family": "Brand Sans", "file": "B.ttf", "style": "italic"}]})

@@ -1131,7 +1131,7 @@ class ProbeTest(Fixture):
 
     def test_captions_on_overlay_text(self):
         tall = {"type": "NameTitle", "start": 0, "duration": 2.4,
-                "props": {"lines": [{"text": t} for t in ("one", "two", "three", "four", "five")], "top": 400}}
+                "props": {"lines": [{"text": t} for t in ("one", "two", "three")], "size": 330, "top": 400}}
         _, ws = self.probe("take1", tall, captions={"top": 830})
         (w,) = self.kinds(ws)["captions_on_text"]
         self.assertTrue(w.startswith("captions cover events[0] (NameTitle) text at "), w)

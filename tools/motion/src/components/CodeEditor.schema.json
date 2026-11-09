@@ -16,7 +16,7 @@
     },
     "lines": {
       "type": "array",
-      "maxItems": 6,
+      "maxItems": 3,
       "items": {
         "type": "string",
         "maxLength": 40

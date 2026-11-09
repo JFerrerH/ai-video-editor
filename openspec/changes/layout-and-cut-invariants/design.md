@@ -30,7 +30,19 @@ Non-goals: new devices, camera-move rules, speed (stills and renders: separate c
 
 **D6. Limits in the schema, enforced at validation.** `maxLength` / `maxItems` per field, checked by `overlay_schema` validation that `validate_plan` and spec validation already call. The matrix (D7) sets them: the largest value that passes on every fixture.
 
-**D7. The matrix renders measure-only stills.** For each component: props from the schema's defaults with every text field at `maxLength` in its font's widest letters ("W" for Latin, plus accented capitals), lists at `maxItems`, times at their defaults. Fixtures: `_template` (neutral), a dark kit and a pale-accent kit under `tools/tests/fixtures/`, and two synthetic head boxes. It reuses `measure_events`' findings, so the matrix and a real build can't disagree.
+**D7. The matrix renders measure-only stills.** For each component: props from the schema's defaults with every text field at `maxLength` in wide capitals (M W O Q D H N U cycled), lists at `maxItems`, times at their defaults. All-"W" text (about 0.95 em a letter, twice ordinary text) was tried first and drove limits under what real plans use (a kinetic line to 12 characters where plans use 27); wide capitals keep a 1.5x margin over real text. Limits never go under real use (skill examples, fixtures, project plans); where a component couldn't fit that, the component was changed (shrink-to-fit titles and values, wrapping stickers, a notice inside the safe area). A card whose own example has no room above a close-up's head is reported as "no room", not as a limit to lower. Fixtures: `_template` (neutral), a dark kit and a pale-accent kit under `tools/tests/fixtures/`, and two synthetic head boxes. It reuses `measure_events`' findings, so the matrix and a real build can't disagree.
+
+**D8. What the matrix found outside the components.** The first full run (1,376 findings) also exposed the checks:
+- The legibility probe took the median of a glyph's changed pixels; on thin or small text most are anti-aliased edges,
+  so it read 2.8-3.9:1 for colours that are 5:1 and would refuse readable cards in real builds. It now takes the far
+  end of them (10th/90th percentile), the glyph's core, against the median of what is behind. Every never-list
+  contrast fixture still fails.
+- Boxes are cut to what `overflow: hidden` parents let show, text counts its own pill as its card, and an element
+  marked `data-overhang` (a stamp across a card's edge) is held to the frame only.
+- A dark-mode kit keeps its dark tints after `ink_on_light` swaps ink and background: they're blended toward the new
+  light background. Short-form compositions make the kit's `muted` readable (4.5:1) on white and on its background,
+  and small accent text aims at 5:1 against the backdrop's darkest glow.
+- `stills.mjs` takes a free port of its own: two at once raced for Remotion's 3000.
 
 ## Risks / Trade-offs
 

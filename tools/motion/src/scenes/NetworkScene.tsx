@@ -323,7 +323,7 @@ export const NetworkScene: React.FC<{
               scale: String(s),
               transformOrigin: "0% 100%",
               fontFamily: fonts.mono,
-              fontSize: 28,
+              fontSize: 30,
               fontWeight: 700,
               lineHeight: 1.2,
               padding: "4px 14px",

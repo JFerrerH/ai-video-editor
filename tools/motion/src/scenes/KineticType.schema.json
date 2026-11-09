@@ -9,12 +9,12 @@
     "bg": {"type": "string", "enum": ["light", "dark", "accent", "none"]},
     "lines": {
       "type": "array",
-      "maxItems": 6,
+      "maxItems": 3,
       "items": {
         "type": "object",
         "required": ["text"],
         "properties": {
-          "text": {"type": "string", "x-text": true, "maxLength": 400},
+          "text": {"type": "string", "x-text": true, "maxLength": 27},
           "at": {"type": "number", "x-time": "event", "minimum": 0, "description": "s from the event's start when the line starts entering"},
           "emphasis": {"type": "string", "description": "substring of text set in the accent colour"},
           "size": {"type": "number", "minimum": 8, "maximum": 600, "description": "px"}

@@ -49,7 +49,7 @@ export const CodeEditor: React.FC<{
           {["#ff5f57", "#febc2e", "#28c840"].map((c) => (
             <div key={c} style={{ width: 20, height: 20, borderRadius: 10, background: c }} />
           ))}
-          <div style={{ fontFamily: fonts.mono, fontSize: 24, color: "#9aa0a6", marginLeft: 20 }}>{file}</div>
+          <div style={{ fontFamily: fonts.mono, fontSize: 28, color: "#9aa0a6", marginLeft: 20 }}>{file}</div>
         </div>
         <div style={{ padding: "36px 40px", fontFamily: fonts.mono, fontSize: 31, lineHeight: 1.6, color: "#e6e6e6" }}>
           {lines.map((l, i) => {

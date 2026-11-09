@@ -39,7 +39,7 @@
         "title": {
           "type": "string",
           "x-text": true,
-          "maxLength": 80
+          "maxLength": 24
         },
         "italic": {
           "type": "string",

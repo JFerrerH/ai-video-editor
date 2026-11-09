@@ -1565,14 +1565,16 @@ def still_time(type_: str, props: dict, duration: float, fps: int = 30) -> float
         cues = [end for path, _, end in fin if path != before]
         t = max([t] + [end + 1 / fps for end in cues if end < duration])
         if before and (gone := next((c for path, c, _ in fin if path == before), None)) is not None:
-            t = max(min(t, gone - 0.1), max([e for p_, _, e in fin if p_ != before and e < gone] or [0.0]) + 1 / fps)
+            lead = O.schemas()[type_].get("x-still-lead", 0.1)  # how long before that cue the text is last whole
+            t = max(min(t, gone - lead), max([e for p_, _, e in fin if p_ != before and e < gone] or [0.0]) + 1 / fps)
     return min(t, duration - 1 / fps)
 
 
 def low_contrast(comp, comp0, diff, groups: list[dict], need: float | None = None) -> list[tuple[float, float, str]]:
     """Text groups (Project._text_groups) under their WCAG contrast: [(ratio, minimum, field)]. `comp` is the
     frame with the text, `comp0` the same frame without its glyphs, `diff` where they differ; each group is
-    measured over its own changed pixels (median luminance of each frame there). The minimum is 4.5:1 under
+    measured over its own changed pixels: the text by the far end of them (its glyphs' core, not their anti-aliased
+    edges), what is behind it by the median of the frame without them. The minimum is 4.5:1 under
     LARGE_TEXT px, else 3:1, unless `need` is given."""
     import numpy as np
     f, out = comp.shape[1] / 1080, []
@@ -1581,7 +1583,11 @@ def low_contrast(comp, comp0, diff, groups: list[dict], need: float | None = Non
         m = diff[y0:y1, x0:x1]
         if m.sum() < 12:
             continue
-        lt, lb = (float(np.median(_luminance(c[y0:y1, x0:x1][m]))) for c in (comp, comp0))
+        text, behind = (_luminance(c[y0:y1, x0:x1][m]) for c in (comp, comp0))
+        lb = float(np.median(behind))
+        # the glyph's own colour: on thin or small text most changed pixels are anti-aliased edges, half glyph and half
+        # background, and their median reads far lower than the text a viewer sees. Its core is the far end of them
+        lt = float(np.percentile(text, 10 if np.median(text) < lb else 90))
         r = (max(lt, lb) + 0.05) / (min(lt, lb) + 0.05)
         least = need or (4.5 if g["size"] < LARGE_TEXT else 3.0)
         if r < least:

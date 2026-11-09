@@ -27,7 +27,7 @@
   "properties": {
     "items": {
       "type": "array",
-      "maxItems": 12,
+      "maxItems": 3,
       "items": {
         "type": "object",
         "required": [
@@ -40,7 +40,7 @@
           "text": {
             "type": "string",
             "x-text": true,
-            "maxLength": 40
+            "maxLength": 24
           },
           "at": {
             "type": "number",

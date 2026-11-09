@@ -3,7 +3,7 @@
  "kind": "captions_on_text",
  "stage": "stills",
  "take": "take1",
- "note": "five lines of title text from 400 px, captions at 830: no room above or below",
+ "note": "three lines of title text at 330 px from 400 px, captions at 830: no room above or below",
  "segments": [
   {
    "take": "take1",
@@ -31,15 +31,10 @@
      },
      {
       "text": "three"
-     },
-     {
-      "text": "four"
-     },
-     {
-      "text": "five"
      }
     ],
-    "top": 400
+    "top": 400,
+    "size": 330
    }
   }
  ]

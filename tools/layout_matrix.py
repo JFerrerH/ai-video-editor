@@ -23,6 +23,8 @@ import os
 import copy
 import re
 import json
+import math
+import random
 import shutil
 import subprocess
 import sys
@@ -119,6 +121,65 @@ def make_take(path: Path) -> None:
                     "-shortest", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "pcm_s16le", str(path)], check=True)
 
 
+def _hex(l: float, c: float, h: float) -> str:
+    """An OKLCH colour as sRGB hex, clipped to the gamut."""
+    a, b = c * math.cos(math.radians(h)), c * math.sin(math.radians(h))
+    l_, m_, s_ = (l + 0.3963377774 * a + 0.2158037573 * b) ** 3, (l - 0.1055613458 * a - 0.0638541728 * b) ** 3, \
+        (l - 0.0894841775 * a - 1.2914855480 * b) ** 3
+    rgb = (4.0767416621 * l_ - 3.3077115913 * m_ + 0.2309699292 * s_,
+           -1.2684380046 * l_ + 2.6097574011 * m_ - 0.3413193965 * s_,
+           -0.0041960863 * l_ - 0.7034186147 * m_ + 1.7076147010 * s_)
+    enc = [12.92 * v if v <= 0.0031308 else 1.055 * v ** (1 / 2.4) - 0.055 for v in (min(1.0, max(0.0, x)) for x in rgb)]
+    return "#" + "".join(f"{round(v * 255):02X}" for v in enc)
+
+
+def random_brand(rng: random.Random) -> dict:
+    """A kit a real brand could ship: a background anywhere from near black to near white, ink on the far side of it,
+    and muted, accent, tints and success drawn freely, so nothing is picked to suit the components. Fonts from one of
+    the fixed kits."""
+    hue, light = rng.uniform(0, 360), rng.random() < 0.6
+    bg_l = rng.uniform(0.86, 0.98) if light else rng.uniform(0.12, 0.3)
+    ink_l = rng.uniform(0.12, 0.3) if light else rng.uniform(0.88, 0.98)
+    colors = {"bg": _hex(bg_l, rng.uniform(0, 0.04), hue), "ink": _hex(ink_l, rng.uniform(0, 0.03), hue),
+              "tint1": _hex(bg_l + (-0.06 if light else 0.06), rng.uniform(0, 0.06), hue),
+              "tint2": _hex(bg_l + (-0.1 if light else 0.1), rng.uniform(0, 0.06), rng.uniform(0, 360)),
+              "muted": _hex(rng.uniform(0.35, 0.75), rng.uniform(0, 0.05), hue),
+              "accent": _hex(rng.uniform(0.45, 0.95), rng.uniform(0.05, 0.2), rng.uniform(0, 360)),
+              "success": _hex(rng.uniform(0.45, 0.8), rng.uniform(0.08, 0.18), rng.uniform(120, 170))}
+    base = BRANDS[rng.choice(["neutral", "dark", "pale"])]
+    return {"colors": colors, "fonts": dict(base["fonts"]), "fontFiles": list(base["fontFiles"])}
+
+
+def random_props(type_: str, rng: random.Random) -> dict:
+    """The first example with every text field at a random length up to its maxLength (in the characters its kind
+    allows) and every list at a random count up to its maxItems."""
+    s = O.schemas()[type_]
+    return _fill_random(s, copy.deepcopy((s.get("examples") or [{}])[0]), rng)
+
+
+def _fill_random(node: dict, value, rng: random.Random):
+    if node.get("x-text") and node.get("type") == "string" and "maxLength" in node:
+        return widest(rng.randint(1, node["maxLength"]), node.get("x-text"))
+    if node.get("type") == "array" and isinstance(value, list) and value:
+        item = node.get("items", {})
+        n = rng.randint(max(1, node.get("minItems", 1)), node.get("maxItems", len(value)))
+        if node.get("x-text") and item.get("type") == "string" and "maxLength" in item:
+            return [widest(rng.randint(1, item["maxLength"]), node.get("x-text")) for _ in range(n)]
+        out = [_fill_random(item, copy.deepcopy(value[i % len(value)]), rng) for i in range(n)]
+        if item.get("type") == "object":
+            for key, sub in item.get("properties", {}).items():
+                if sub.get("x-time") == "event" and all(isinstance(o, dict) and key in o for o in out):
+                    for i, o in enumerate(out):
+                        o[key] = round(i * min(0.5, DURATION / 2 / max(1, n)), 2)
+        return out
+    if isinstance(value, dict) and node.get("properties"):
+        for key, sub in node["properties"].items():
+            if key in value:
+                value[key] = _fill_random(sub, value[key], rng)
+        return value
+    return value
+
+
 def project_root(tmp: Path) -> Path:
     root = tmp / "matrix"
     (root / "edit" / "transcripts").mkdir(parents=True)
@@ -189,7 +250,8 @@ def _measure(root: Path, names: list[str], brand: str, framing: str, props_of) -
     return found, spec["events"]
 
 
-def run(types: list[str], brands: list[str], framings: list[str], jobs: int = 1) -> tuple[list[dict], list[dict]]:
+def run(types: list[str], brands: list[str], framings: list[str], jobs: int = 1, samples: int = 0,
+        seed: int = 0) -> tuple[list[dict], list[dict]]:
     """(findings, no room): every finding [{component, brand, framing, kind, message, props}], and apart from them the
     `face` findings of components whose own first example (lists at their maxItems, its own text) has them too in that
     framing: a floating card that size has
@@ -198,11 +260,11 @@ def run(types: list[str], brands: list[str], framings: list[str], jobs: int = 1)
     the wall time; `jobs` units run at once, each in its own project."""
     from concurrent.futures import ThreadPoolExecutor
 
-    def one(brand: str, framing: str, names: list[str]) -> tuple[list[dict], list[dict]]:
+    def one(brand: str, framing: str, names: list[str], props_of) -> tuple[list[dict], list[dict]]:
         tmp = Path(tempfile.mkdtemp())
         try:
             root = project_root(tmp)
-            here, _ = _measure(root, names, brand, framing, generate)
+            here, _ = _measure(root, names, brand, framing, props_of)
             faced = sorted({f["component"] for f in here if f["kind"] == "face"})
             base = {f["component"] for f in (_measure(root, faced, brand, framing, example)[0] if faced else [])
                     if f["kind"] == "face"}
@@ -211,10 +273,16 @@ def run(types: list[str], brands: list[str], framings: list[str], jobs: int = 1)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
-    pairs = [(b, f) for b in brands for f in framings]
+    pairs = [(b, f, generate) for b in brands for f in framings]
+    for r in range(samples):  # random inputs: a brand, a framing and props per component, all from (seed, r)
+        rng = random.Random(f"{seed}/{r}")
+        name = f"random-{r}"
+        BRANDS[name] = random_brand(rng)
+        framing = rng.choice(sorted(FRAMINGS))
+        pairs.append((name, framing, lambda t, r=r: random_props(t, random.Random(f"{seed}/{r}/{t}"))))
     slices = max(1, min(len(types), -(-2 * max(1, jobs) // len(pairs))))  # about two units per worker
     names = list(types)
-    units = [(b, f, names[i::slices]) for b, f in pairs for i in range(slices) if names[i::slices]]
+    units = [(b, f, names[i::slices], g) for b, f, g in pairs for i in range(slices) if names[i::slices]]
     with ThreadPoolExecutor(max(1, jobs)) as pool:  # each unit renders in its own node process: threads are enough
         results = list(pool.map(lambda u: one(*u), units))
     return [f for r in results for f in r[0]], [f for r in results for f in r[1]]
@@ -228,22 +296,26 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--json", help="write every finding with its props to this file")
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 4) - 2),
                     help="units measured at once (default: cores minus two)")
+    ap.add_argument("--random", type=int, default=2, help="random inputs per component: each a random brand, framing and props")
+    ap.add_argument("--seed", type=int, help="reproduce a run (default: a new seed, printed)")
     a = ap.parse_args(argv)
+    seed = a.seed if a.seed is not None else random.SystemRandom().randrange(10 ** 6)
+    print(f"seed {seed} (reproduce: --seed {seed})", file=sys.stderr, flush=True)
     types = a.components or sorted(c for c in O.COMPONENTS if c in O.schemas())
     if unknown := [t for t in types if t not in O.schemas()]:
         sys.exit(f"no schema for: {', '.join(unknown)}")
     brands, framings = a.brand or list(BRANDS), a.framing or list(FRAMINGS)
     t0 = time.time()
-    found, no_room = run(types, brands, framings, a.jobs)
+    found, no_room = run(types, brands, framings, a.jobs, a.random, seed)
     if a.json:
         Path(a.json).write_text(json.dumps(found, indent=1, ensure_ascii=False))
     for c, b, fr in sorted({(f["component"], f["brand"], f["framing"]) for f in no_room}):
         print(f"{c:<14} {b:<8} {fr:<9} no room   its own example doesn't fit above this head either (not a limit)")
     for f in found:
         print(f"{f['component']:<14} {f['brand']:<8} {f['framing']:<9} {f['kind']:<10} {f['message']}")
-    n = len(types) * len(brands) * len(framings)
-    print(f"{len(types)} components, {len(brands)} brands, {len(framings)} framings = {n} inputs, "
-          f"{len(found)} findings, wall time {time.time() - t0:.0f} s ({a.jobs} jobs)", file=sys.stderr)
+    n = len(types) * (len(brands) * len(framings) + a.random)
+    print(f"{len(types)} components x ({len(brands)} brands x {len(framings)} framings + {a.random} random) = {n} inputs, "
+          f"{len(found)} findings, wall time {time.time() - t0:.0f} s ({a.jobs} jobs, seed {seed})", file=sys.stderr)
     return 1 if found else 0
 
 

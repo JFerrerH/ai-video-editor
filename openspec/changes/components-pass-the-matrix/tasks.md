@@ -8,7 +8,7 @@
 ## 2. Inputs
 
 - [x] 2.1 Character kinds (D1): schema values, the schema test, `widest()` reading the kind; with a test that a field whose example is "18–24" is tested with letters
-- [ ] 2.2 Random inputs with `--seed` (D3)
+- [x] 2.2 Random inputs with `--seed` (D3): two per component by default; the same seed gives the same findings; a full run is 295 s for 384 inputs, and the random sample found three components the fixed kits pass (two with no text showing, one contrast)
 - [ ] 2.3 Fix what letters and random inputs flag (D2)
 
 ## 3. Layout rules

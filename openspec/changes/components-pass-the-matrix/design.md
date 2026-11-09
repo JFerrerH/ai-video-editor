@@ -16,7 +16,7 @@ Non-goals: new devices; camera rules.
 
 **D2. Fixing what the letters flag.** Components flagged under letters use the shrink-to-fit #24 added (TopicCards, DotTrack): text shrinks to the minimum size, then wraps by words, inside its card. A limit drops only when that still can't fit, and never under real use (skill examples, fixtures, plans).
 
-**D3. Random inputs.** A seeded generator draws palettes in OKLCH (hue random, lightness 0.15–0.97, chroma 0–0.2), lengths and counts uniform within the limits; eight per component per run. They join the same job pool as the fixed pairs.
+**D3. Random inputs.** A seeded generator draws palettes in OKLCH (hue random, lightness 0.15–0.97, chroma 0–0.2), lengths and counts uniform within the limits. Two per component per run by default (`--random`): each is a random brand and framing with random props for every component, so a full run stays in the time budget (295 s for 384 inputs with 8 jobs). Every input depends only on the seed, the sample and the component, so a seed reproduces a run however the work is split. They join the same job pool as the fixed pairs.
 
 **D4. Content boxes for captions and the chest.** Both use the content box `measure_events` already computes (the card's solid pixels). The chest region runs from the head box's bottom to the frame's bottom, 2.5 head widths wide around the head.
 

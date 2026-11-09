@@ -7,7 +7,7 @@
 
 ## 2. Inputs
 
-- [ ] 2.1 Character kinds (D1): schema values, the schema test, `widest()` reading the kind; with a test that a field whose example is "18–24" is tested with letters
+- [x] 2.1 Character kinds (D1): schema values, the schema test, `widest()` reading the kind; with a test that a field whose example is "18–24" is tested with letters
 - [ ] 2.2 Random inputs with `--seed` (D3)
 - [ ] 2.3 Fix what letters and random inputs flag (D2)
 

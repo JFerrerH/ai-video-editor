@@ -68,15 +68,13 @@ FONT_FILES = {"Outfit-VF.ttf": "outfit/Outfit-VF.ttf", "RedHatMono-VF.ttf": "red
 FRAMINGS = {"close-up": [300, 520, 780, 1180], "medium": [400, 700, 680, 1040]}
 
 
-def widest(n: int, like: object = None) -> str:
-    """n wide capitals (WIDE, cycled) in words of CHUNK letters. A field whose example has no letters (a year, an amount,
-    a currency sign) gets its own kind of character: the widest digit, or the example's first symbol."""
-    letters = WIDE
-    if isinstance(like, str) and like.strip() and not any(c.isalpha() for c in like):
-        letters = "8" if any(c.isdigit() for c in like) else like.strip()[0]
+def widest(n: int, kind: object = True) -> str:
+    """n wide capitals (WIDE, cycled) in words of CHUNK letters. The kind comes from the field's schema (`x-text`),
+    never from its example: "number" gets the widest digit, "symbol" a wide currency sign, anything else letters."""
+    letters = {"number": "8", "symbol": "€"}.get(kind, WIDE) if isinstance(kind, str) else WIDE
     out = []
     for i in range(n):
-        out.append(" " if (i + 1) % (CHUNK + 1) == 0 and i < n - 1 else letters[i % len(letters)])
+        out.append(" " if (i + 1) % (CHUNK + 1) == 0 and i < n - 1 and letters == WIDE else letters[i % len(letters)])
     return "".join(out)
 
 
@@ -90,11 +88,11 @@ def generate(type_: str) -> dict:
 
 def _fill(node: dict, value, top: bool = False, text: bool = True):
     if node.get("x-text") and node.get("type") == "string" and "maxLength" in node:
-        return widest(node["maxLength"], value) if text else value
+        return widest(node["maxLength"], node.get("x-text")) if text else value
     if node.get("type") == "array" and isinstance(value, list) and value:
         item = node.get("items", {})
         if node.get("x-text") and item.get("type") == "string":
-            return [widest(item.get("maxLength", len(v)), v) if "maxLength" in item and text else v for v in value[:1]] * \
+            return [widest(item.get("maxLength", len(v)), node.get("x-text")) if "maxLength" in item and text else v for v in value[:1]] * \
                 node.get("maxItems", len(value))
         n = node.get("maxItems", len(value))
         out = [_fill(item, copy.deepcopy(value[i % len(value)]), text=text) for i in range(n)]
@@ -109,7 +107,7 @@ def _fill(node: dict, value, top: bool = False, text: bool = True):
             if key in value:
                 value[key] = _fill(sub, value[key], text=text)
             elif sub.get("x-text") and sub.get("type") == "string" and "maxLength" in sub and top and text:
-                value[key] = widest(sub["maxLength"])
+                value[key] = widest(sub["maxLength"], sub.get("x-text"))
         return value
     return value
 

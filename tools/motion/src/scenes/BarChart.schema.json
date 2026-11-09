@@ -58,7 +58,7 @@
     },
     "prefix": {
       "type": "string",
-      "x-text": true,
+      "x-text": "symbol",
       "maxLength": 6
     },
     "decimals": {

@@ -224,7 +224,8 @@ Changes to the workspace itself (tools, skills, templates, CLAUDE.md) go through
 Checks before a commit:
 
 ```sh
-uv run --with pytest pytest -q tools/tests   # narration timing
+uv run --group test pytest -q -n auto tools/tests   # every tool test, in parallel (~1.5 min)
+uv run tools/layout_matrix.py                       # every component at its limits, in parallel (under 5 min)
 cd tools/motion && npx tsc --noEmit && npm run lint
 ```
 

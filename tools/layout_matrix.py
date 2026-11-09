@@ -19,6 +19,7 @@ answers with `"full": true` or a `corner` move, as the finding says); it is list
 from __future__ import annotations
 
 import argparse
+import os
 import copy
 import re
 import json
@@ -180,7 +181,7 @@ def _measure(root: Path, names: list[str], brand: str, framing: str, props_of) -
             spec["events"] = [e for i, e in enumerate(spec["events"]) if i not in bad]
     p.brand = {**BRANDS[brand], "colors": ink_on_light(BRANDS[brand]["colors"])}  # as brand.load_brand does
     warnings: list = []
-    p.measure_events(warnings=warnings)
+    p.measure_events(scale=1, warnings=warnings)  # the scale a build's stills measure at, so the two can't disagree
     for w in warnings:
         kind = getattr(w, "kind", None)
         if kind in KINDS:
@@ -195,14 +196,15 @@ def run(types: list[str], brands: list[str], framings: list[str], jobs: int = 1)
     `face` findings of components whose own first example (lists at their maxItems, its own text) has them too in that
     framing: a floating card that size has
     no room above that head whatever its text, and a plan answers it as the finding says (`full`, a `corner` move).
-    `jobs` brand x framing pairs are measured at once, each in its own project."""
+    The work is split into brand x framing x slice-of-components units, about two per worker, so no single pair sets
+    the wall time; `jobs` units run at once, each in its own project."""
     from concurrent.futures import ThreadPoolExecutor
 
-    def one(brand: str, framing: str) -> tuple[list[dict], list[dict]]:
+    def one(brand: str, framing: str, names: list[str]) -> tuple[list[dict], list[dict]]:
         tmp = Path(tempfile.mkdtemp())
         try:
             root = project_root(tmp)
-            here, _ = _measure(root, list(types), brand, framing, generate)
+            here, _ = _measure(root, names, brand, framing, generate)
             faced = sorted({f["component"] for f in here if f["kind"] == "face"})
             base = {f["component"] for f in (_measure(root, faced, brand, framing, example)[0] if faced else [])
                     if f["kind"] == "face"}
@@ -212,8 +214,11 @@ def run(types: list[str], brands: list[str], framings: list[str], jobs: int = 1)
             shutil.rmtree(tmp, ignore_errors=True)
 
     pairs = [(b, f) for b in brands for f in framings]
-    with ThreadPoolExecutor(max(1, jobs)) as pool:  # each pair renders in its own node process: threads are enough
-        results = list(pool.map(lambda bf: one(*bf), pairs))
+    slices = max(1, min(len(types), -(-2 * max(1, jobs) // len(pairs))))  # about two units per worker
+    names = list(types)
+    units = [(b, f, names[i::slices]) for b, f in pairs for i in range(slices) if names[i::slices]]
+    with ThreadPoolExecutor(max(1, jobs)) as pool:  # each unit renders in its own node process: threads are enough
+        results = list(pool.map(lambda u: one(*u), units))
     return [f for r in results for f in r[0]], [f for r in results for f in r[1]]
 
 
@@ -223,7 +228,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--brand", choices=list(BRANDS), action="append", help="default: all three")
     ap.add_argument("--framing", choices=list(FRAMINGS), action="append", help="default: both")
     ap.add_argument("--json", help="write every finding with its props to this file")
-    ap.add_argument("--jobs", type=int, default=6, help="brand x framing pairs measured at once (default 6: all)")
+    ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 4) - 2),
+                    help="units measured at once (default: cores minus two)")
     a = ap.parse_args(argv)
     types = a.components or sorted(c for c in O.COMPONENTS if c in O.schemas())
     if unknown := [t for t in types if t not in O.schemas()]:
@@ -239,7 +245,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{f['component']:<14} {f['brand']:<8} {f['framing']:<9} {f['kind']:<10} {f['message']}")
     n = len(types) * len(brands) * len(framings)
     print(f"{len(types)} components, {len(brands)} brands, {len(framings)} framings = {n} inputs, "
-          f"{len(found)} findings in {time.time() - t0:.0f} s", file=sys.stderr)
+          f"{len(found)} findings, wall time {time.time() - t0:.0f} s ({a.jobs} jobs)", file=sys.stderr)
     return 1 if found else 0
 
 

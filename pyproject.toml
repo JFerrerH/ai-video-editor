@@ -47,6 +47,11 @@ cloud = [
 asr = [
     "faster-whisper==1.2.1; sys_platform == 'linux'",
 ]
+# tests, in parallel: `uv run --group test pytest -q -n auto tools/tests` (1.5 min on a 10-core Mac, 4 min sequential)
+test = [
+    "pytest>=8.3",
+    "pytest-xdist>=3.6",
+]
 # person matte for tools/person_matte.py off macOS (MediaPipe selfie segmenter)
 matte = [
     "mediapipe==1.2.0; sys_platform == 'linux'",

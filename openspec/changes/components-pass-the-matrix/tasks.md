@@ -2,8 +2,8 @@
 
 ## 1. Faster tests first
 
-- [ ] 1.1 pytest-xdist in the dev group; `-n auto` in CLAUDE.md's test command (1 min 32 s measured, against 4 min 07 s)
-- [ ] 1.2 Matrix jobs split by component and fixture (D5); print the wall time
+- [x] 1.1 pytest-xdist in the dev group; `-n auto` in CLAUDE.md's test command (1 min 32 s measured, against 4 min 07 s)
+- [x] 1.2 Matrix jobs split by component and fixture (D5); print the wall time. 233 s for 288 inputs with 8 jobs (336 s before), peak RSS 1.2 GB. `stills.mjs` now shares one browser per scale (163 s to 121 s for one pair, same boxes), and the matrix measures at scale 1 as a build's stills do: at 0.5 it missed a drawer title 11 px past the bottom limit that a build reports
 
 ## 2. Inputs
 

@@ -31,3 +31,4 @@
 
 - [x] 6.1 Full engine test suite and the matrix
 - [ ] 6.2 Under `footage/` (gitignored): the hosted plan that showed the overflow is refused with `outside` and `face` errors; with the fixes, it renders, and stills at each cut and the last second show nothing outside its card, no captions on the face, and a tail at the end; -14 LUFS
+  - 2026-11-08, on the Mac at main 0329ca5 with the hosted plan (sentence IDs mapped by text): refused before the preview with one `outside` error, the ratio-bars third label (an 11-letter word) 23 px past its card's right edge. The matrix had passed that component because it tests a field whose example has no letters with digits only, while the field takes any text. Not met: no caption `face` error in this layout, and the drawer still shows captions over its card's bottom edge and the card resting on the speaker's chest, which no rule covers. All three go to `components-pass-the-matrix`, with the render that closes this task.
